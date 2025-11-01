@@ -4,7 +4,8 @@ import { AnimatePresence } from "framer-motion";
 import Sidebar from "./components/ui/Sidebar.jsx";
 import Topbar from "./components/ui/Topbar.jsx";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary.jsx";
-import ToastDock from "./components/ui/ToastDock.jsx";
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 export default function App() {
   const location = useLocation();
   return (
@@ -20,7 +21,7 @@ export default function App() {
           </ErrorBoundary>
         </main>
       </div>
-      <ToastDock />
+      <ToastContainer />
     </div>
   );
 }

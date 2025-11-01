@@ -1,3 +1,8 @@
+// src/data/patients.js
+// ===============================================
+// Mock Patients Store + Helpers for the demo app
+// ===============================================
+
 // ====== TRẠNG THÁI CHUẨN ======
 export const STATUSES = {
   WAIT_INTAKE: "Chờ tiếp nhận",
@@ -10,7 +15,14 @@ export const STATUSES = {
 
 // ====== STORE & EVENT BUS ======
 const listeners = new Set();
-const emit = () => listeners.forEach((fn) => fn(getAll()));
+const emit = () => {
+     // gọi các subscriber trong SPA
+     listeners.forEach((fn) => fn(getAll()));
+     // bắn sự kiện global cho mọi màn hình/route khác
+     try {
+       window.dispatchEvent(new CustomEvent("patients:changed"));
+     } catch {}
+   };
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
 // ====== DỮ LIỆU MẪU ======
@@ -170,184 +182,150 @@ export const PATIENTS = [
     status: STATUSES.SCHEDULED_APPT,
   },
 ];
+
 /* ===================== DEMO BỔ SUNG (đủ mọi trạng thái) ===================== */
-// Quy ước:
-// - Các BN1xx chỉ dành cho demo luồng UI / queue.
-// - Có cả case dịch vụ: chờ tiếp nhận(dịch vụ), chờ khám(dịch vụ), chờ xử lý(dịch vụ)
+// Quy ước: Các BN1xx chỉ dành cho demo luồng UI / queue.
+// Có cả case dịch vụ: chờ tiếp nhận(dịch vụ), chờ khám(dịch vụ), chờ xử lý(dịch vụ)
 PATIENTS.push(
-    // 1) Chờ tiếp nhận (thường) → test "Lập phiếu khám"
-    { id:"BN101", name:"Đinh Lan A", dob:"1993-01-10", gender:"Nữ", phone:"0911000001",
-      email:"a.lan@example.com", address:"1 Lê Lợi, Q.1", insurance:"Có",
-      status: STATUSES.WAIT_INTAKE, allergies:"Penicillin", chronicConditions:"Viêm mũi dị ứng", currentMedications:"Cetirizine 10mg" },
-  
-    // 2) Hẹn khám → test “Lập phiếu khám” từ lịch hẹn
-    { id:"BN102", name:"Phạm Quốc B", dob:"1986-05-12", gender:"Nam", phone:"0911000002",
-      email:"b.quoc@example.com", address:"2 Hai Bà Trưng, Q.1", insurance:"Không",
-      status: STATUSES.SCHEDULED_APPT },
-  
-    // 3) Hẹn tái khám → tab Lập phiếu tái khám (miễn phí, fill bác sĩ/khoa từ hold)
-    { id:"BN103", name:"Trương Minh C", dob:"1979-08-21", gender:"Nam", phone:"0911000003",
-      email:"c.minh@example.com", address:"3 Pasteur, Q.1", insurance:"Có",
-      status: STATUSES.SCHEDULED_FUP },
-  
-    // 4) Chờ khám (thường) — vào queue rồi
-    { id:"BN104", name:"Ngô Mỹ D", dob:"1992-12-09", gender:"Nữ", phone:"0911000004",
-      email:"d.my@example.com", address:"4 Trần Hưng Đạo, Q.1", insurance:"Có",
-      status: STATUSES.WAIT_EXAM },
-  
-    // 5) Chờ xử lý (thường) — test nút “Xử lý & chẩn đoán”
-    { id:"BN105", name:"Hoàng Gia E", dob:"1988-03-03", gender:"Nam", phone:"0911000005",
-      email:"e.gia@example.com", address:"5 Nguyễn Huệ, Q.1", insurance:"Không",
-      status: STATUSES.WAIT_PROC,
-      // Cho tab VIEW hiển thị mục "Chỉ định dịch vụ cần thực hiện" (nếu muốn)
-      pendingProcess: {
-        services: ["X-Quang phổi thẳng", "Xét nghiệm máu tổng quát"],
-        dx: {
-          dxPrimary: "Viêm phế quản cấp",
-          icd10: "J20",
-          dxSecondary: "—",
-          summary: "Ho khan, đau ngực nhẹ 3 ngày, không sốt.",
-          orders: "Thuốc ho  CLS nếu không cải thiện",
-          advice: "Uống nước ấm, theo dõi sốt",
-          followup: "Cho thuốc về",
-          followupDate: "",
-          followupTime: ""
-        }
-      }
-    },
-  
-    // 6) Hoàn thành — test nút “Lập phiếu khám” lại sau khi đã kết thúc
-    { id:"BN106", name:"Đoàn Thảo F", dob:"1995-10-01", gender:"Nữ", phone:"0911000006",
-      email:"f.thao@example.com", address:"6 CMT8, Q.3", insurance:"Có",
-      status: STATUSES.DONE },
-  
-    // 7) Chờ tiếp nhận (dịch vụ) — test Lập phiếu khám dịch vụ & thu phí
-    { id:"BN107", name:"Bùi Tuấn G", dob:"1990-04-18", gender:"Nam", phone:"0911000007",
-      email:"g.tuan@example.com", address:"7 Điện Biên Phủ, Q.3", insurance:"Có",
-      status: "Chờ tiếp nhận (dịch vụ)",
-      serviceOrder: {
-        items: ["T-KHAM-DV", "X-Quang phổi thẳng", "Siêu âm bụng tổng quát"],
-        note: "Chỉ định từ phòng Nội tổng quát",
-        fromDoctor: "BS. Trần Văn Nam",
-        dispatched: false
-      }
-    },
-  
-    // 8) Chờ khám (dịch vụ) — đã đẩy sang khu dịch vụ (đã thu phí)
-    { id:"BN108", name:"Trần Hà H", dob:"1987-07-22", gender:"Nữ", phone:"0911000008",
-      email:"h.ha@example.com", address:"8 Võ Thị Sáu, Q.3", insurance:"Không",
-      status: "Chờ khám (dịch vụ)",
-      serviceOrder: {
-        items: ["Xét nghiệm máu tổng quát"],
-        note: "Theo dõi lipid",
-        fromDoctor: "BS. Lê Văn Hùng",
-        dispatched: true
-      }
-    },
-  
-    // 9) Chờ xử lý (dịch vụ) — dịch vụ đã có kết quả, chờ đẩy về BS
-    { id:"BN109", name:"Vũ Minh I", dob:"1983-11-30", gender:"Nam", phone:"0911000009",
-      email:"i.minh@example.com", address:"9 Hoàng Sa, Q.1", insurance:"Có",
-      status: "Chờ xử lý (dịch vụ)",
-      serviceOrder: {
-        items: ["Siêu âm bụng tổng quát"],
-        note: "Nghi sỏi túi mật",
-        fromDoctor: "BS. Phạm Thu Lan",
-        dispatched: true
+  // 1) Chờ tiếp nhận (thường) → test "Lập phiếu khám"
+  { id:"BN101", name:"Đinh Lan A", dob:"1993-01-10", gender:"Nữ", phone:"0911000001",
+    email:"a.lan@example.com", address:"1 Lê Lợi, Q.1", insurance:"Có",
+    status: STATUSES.WAIT_INTAKE, allergies:"Penicillin", chronicConditions:"Viêm mũi dị ứng", currentMedications:"Cetirizine 10mg" },
+
+  // 2) Hẹn khám
+  { id:"BN102", name:"Phạm Quốc B", dob:"1986-05-12", gender:"Nam", phone:"0911000002",
+    email:"b.quoc@example.com", address:"2 Hai Bà Trưng, Q.1", insurance:"Không",
+    status: STATUSES.SCHEDULED_APPT },
+
+  // 3) Hẹn tái khám
+  { id:"BN103", name:"Trương Minh C", dob:"1979-08-21", gender:"Nam", phone:"0911000003",
+    email:"c.minh@example.com", address:"3 Pasteur, Q.1", insurance:"Có",
+    status: STATUSES.SCHEDULED_FUP },
+
+  // 4) Chờ khám (thường)
+  { id:"BN104", name:"Ngô Mỹ D", dob:"1992-12-09", gender:"Nữ", phone:"0911000004",
+    email:"d.my@example.com", address:"4 Trần Hưng Đạo, Q.1", insurance:"Có",
+    status: STATUSES.WAIT_EXAM },
+
+  // 5) Chờ xử lý (thường)
+  { id:"BN105", name:"Hoàng Gia E", dob:"1988-03-03", gender:"Nam", phone:"0911000005",
+    email:"e.gia@example.com", address:"5 Nguyễn Huệ, Q.1", insurance:"Không",
+    status: STATUSES.WAIT_PROC,
+    pendingProcess: {
+      services: ["X-Quang phổi thẳng", "Xét nghiệm máu tổng quát"],
+      dx: {
+        dxPrimary: "Viêm phế quản cấp",
+        icd10: "J20",
+        dxSecondary: "—",
+        summary: "Ho khan, đau ngực nhẹ 3 ngày, không sốt.",
+        orders: "Thuốc ho  CLS nếu không cải thiện",
+        advice: "Uống nước ấm, theo dõi sốt",
+        followup: "Cho thuốc về",
+        followupDate: "",
+        followupTime: ""
       }
     }
-  );
+  },
+
+  // 6) Hoàn thành
+  { id:"BN106", name:"Đoàn Thảo F", dob:"1995-10-01", gender:"Nữ", phone:"0911000006",
+    email:"f.thao@example.com", address:"6 CMT8, Q.3", insurance:"Có",
+    status: STATUSES.DONE },
+
+  // 7) Chờ tiếp nhận (dịch vụ) — có dịch vụ & chưa dispatch
+  { id:"BN107", name:"Bùi Tuấn G", dob:"1990-04-18", gender:"Nam", phone:"0911000007",
+    email:"g.tuan@example.com", address:"7 Điện Biên Phủ, Q.3", insurance:"Có",
+    status: "Chờ tiếp nhận (dịch vụ)",
+    serviceOrder: {
+      items: ["T-KHAM-DV", "X-Quang phổi thẳng", "Siêu âm bụng tổng quát"],
+      note: "Chỉ định từ phòng Nội tổng quát",
+      fromDoctor: "BS. Trần Văn Nam",
+      dispatched: false
+    }
+  },
+
+  // 8) Chờ khám (dịch vụ) — đã đẩy sang khu dịch vụ (đã thu phí)
+  { id:"BN108", name:"Trần Hà H", dob:"1987-07-22", gender:"Nữ", phone:"0911000008",
+    email:"h.ha@example.com", address:"8 Võ Thị Sáu, Q.3", insurance:"Không",
+    status: "Chờ khám (dịch vụ)",
+    serviceOrder: {
+      items: ["Xét nghiệm máu tổng quát"],
+      note: "Theo dõi lipid",
+      fromDoctor: "BS. Lê Văn Hùng",
+      dispatched: true
+    }
+  },
+
+  // 9) Chờ xử lý (dịch vụ) — có kết quả dịch vụ để test "chỉ xem"
+  { id:"BN109", name:"Vũ Minh I", dob:"1983-11-30", gender:"Nam", phone:"0911000009",
+    email:"i.minh@example.com", address:"9 Hoàng Sa, Q.1", insurance:"Có",
+    status: "Chờ xử lý (dịch vụ)",
+    serviceOrder: {
+      items: ["Siêu âm bụng tổng quát"],
+      note: "Nghi sỏi túi mật",
+      fromDoctor: "BS. Phạm Thu Lan",
+      dispatched: true
+    },
+    // 👉 dữ liệu mẫu để ExamDetail/Patient modal hiển thị "Kết quả dịch vụ (chỉ xem)"
+    pendingServiceResults: [
+      {
+        id: "ultrasound",
+        name: "Siêu âm bụng tổng quát",
+        status: "Hoàn tất",
+        result: "Gan kích thước bình thường, túi mật có sỏi 6mm. Không ứ dịch.",
+        note: "Nhịn ăn trước 6 giờ.",
+        files: [
+          { url: "/mock/ultrasound-report.pdf", name: "Báo cáo siêu âm (PDF)" }
+        ]
+      },
+      {
+        id: "blood",
+        name: "Xét nghiệm máu tổng quát",
+        status: "Chưa có kết quả",
+        result: "",
+        note: ""
+      }
+    ]
+  }
+);
+
+// ====== LỊCH SỬ KHÁM (VISITS) ======
 export const VISITS = {
   BN001: [
-    {
-      date: "2025-10-15",
-      dept: "Nội tổng quát",
-      doctor: "BS. Trần Văn Nam",
-      note: "Khám ban đầu: Cao huyết áp độ I. Kê đơn Amlodipine 5mg/ngày.",
-      by: "Bác sĩ",
-      type: "Khám lần đầu",
-    },
-    {
-      date: "2025-10-22",
-      dept: "Nội tổng quát",
-      doctor: "BS. Trần Văn Nam",
-      note: "Tái khám: Huyết áp ổn định. Tiếp tục điều trị.",
-      by: "Bác sĩ",
-      type: "Tái khám",
-    },
+    { date: "2025-10-15", dept: "Nội tổng quát", doctor: "BS. Trần Văn Nam", note: "Khám ban đầu: Cao huyết áp độ I. Kê đơn Amlodipine 5mg/ngày.", by: "Bác sĩ", type: "Khám lần đầu" },
+    { date: "2025-10-22", dept: "Nội tổng quát", doctor: "BS. Trần Văn Nam", note: "Tái khám: Huyết áp ổn định. Tiếp tục điều trị.", by: "Bác sĩ", type: "Tái khám" },
   ],
   BN002: [
-    {
-      date: "2025-10-20",
-      dept: "Sản phụ khoa",
-      doctor: "BS. Nguyễn Thị Mai",
-      note: "Khám thai 8 tuần. Tình trạng ổn. Dặn tái khám sau 2 tuần.",
-      by: "Bác sĩ",
-      type: "Khám thai định kỳ",
-    },
+    { date: "2025-10-20", dept: "Sản phụ khoa", doctor: "BS. Nguyễn Thị Mai", note: "Khám thai 8 tuần. Tình trạng ổn. Dặn tái khám sau 2 tuần.", by: "Bác sĩ", type: "Khám thai định kỳ" },
   ],
   BN003: [
-    {
-      date: "2025-10-18",
-      dept: "Nội tiết",
-      doctor: "BS. Hồ Minh Tâm",
-      note: "ĐK: T2 ổn. Kế hoạch: Tái khám sau 7 ngày (2025-10-25) cùng BS.",
-      by: "Bác sĩ",
-      type: "Kết luận",
-    },
-    {
-      date: "2025-10-12",
-      dept: "Nội tiết",
-      doctor: "BS. Hồ Minh Tâm",
-      note: "Khám định kỳ: Đường huyết ổn. Chỉnh liều Metformin.",
-      by: "Bác sĩ",
-      type: "Tái khám",
-    },
+    { date: "2025-10-18", dept: "Nội tiết", doctor: "BS. Hồ Minh Tâm", note: "ĐK: T2 ổn. Kế hoạch: Tái khám sau 7 ngày (2025-10-25) cùng BS.", by: "Bác sĩ", type: "Kết luận" },
+    { date: "2025-10-12", dept: "Nội tiết", doctor: "BS. Hồ Minh Tâm", note: "Khám định kỳ: Đường huyết ổn. Chỉnh liều Metformin.", by: "Bác sĩ", type: "Tái khám" },
   ],
   BN004: [
-    {
-      date: "2025-10-24",
-      dept: "Nội tổng quát",
-      doctor: "BS. Lê Văn Hùng",
-      note: "Triệu chứng: Sốt, ho, đau đầu. Chẩn đoán: Cảm cúm. Kê đơn thuốc.",
-      by: "Bác sĩ",
-      type: "Khám ban đầu",
-    },
+    { date: "2025-10-24", dept: "Nội tổng quát", doctor: "BS. Lê Văn Hùng", note: "Triệu chứng: Sốt, ho, đau đầu. Chẩn đoán: Cảm cúm. Kê đơn thuốc.", by: "Bác sĩ", type: "Khám ban đầu" },
   ],
-
-  // Bổ sung để test Completed / Service flow / CLS
   BN009: [
-    {
-      date: "2025-10-28",
-      dept: "Tim mạch",
-      doctor: "BS. Phạm Dũng",
-      note: "Tái khám tim mạch, đã hoàn thành.",
-      by: "Bác sĩ",
-      type: "Tái khám",
-    },
+    { date: "2025-10-28", dept: "Tim mạch", doctor: "BS. Phạm Dũng", note: "Tái khám tim mạch, đã hoàn thành.", by: "Bác sĩ", type: "Tái khám" },
   ],
-    BN105: [
-        { date:"2025-10-28", dept:"Nội tổng quát", doctor:"BS. Trần Văn Nam",
-          note:"Tiếp nhận • Khám thường • Triệu chứng: ho khan 3 ngày", by:"Lễ tân", type:"Walk-in" }
-      ],
-      BN106: [
-        { date:"2025-10-20", dept:"Nội tiết", doctor:"BS. Hồ Minh Tâm",
-          note:"Kết thúc khám: ĐTĐ type 2 ổn định", by:"Bác sĩ", type:"Kết thúc khám" }
-      ],
-      BN107: [
-        { date:"2025-10-29", dept:"Phòng khám", doctor:"BS. Trần Văn Nam",
-          note:"Chỉ định khám dịch vụ trước", by:"Bác sĩ", type:"Chỉ định dịch vụ" }
-      ],
-      BN108: [
-        { date:"2025-10-29", dept:"Cận lâm sàng", doctor:"Khu dịch vụ",
-          note:"Đã thu phí, chờ lấy mẫu xét nghiệm", by:"Điều dưỡng CLS", type:"Dịch vụ" }
-      ],
-      BN109: [
-        { date:"2025-10-29", dept:"Cận lâm sàng", doctor:"Khu dịch vụ",
-          note:"Có kết quả siêu âm bụng", by:"Điều dưỡng CLS", type:"Dịch vụ hoàn tất" }
-      ]
+  BN105: [
+    { date:"2025-10-28", dept:"Nội tổng quát", doctor:"BS. Trần Văn Nam", note:"Tiếp nhận • Khám thường • Triệu chứng: ho khan 3 ngày", by:"Lễ tân", type:"Walk-in" }
+  ],
+  BN106: [
+    { date:"2025-10-20", dept:"Nội tiết", doctor:"BS. Hồ Minh Tâm", note:"Kết thúc khám: ĐTĐ type 2 ổn định", by:"Bác sĩ", type:"Kết thúc khám" }
+  ],
+  BN107: [
+    { date:"2025-10-29", dept:"Phòng khám", doctor:"BS. Trần Văn Nam", note:"Chỉ định khám dịch vụ trước", by:"Bác sĩ", type:"Chỉ định dịch vụ" }
+  ],
+  BN108: [
+    { date:"2025-10-29", dept:"Cận lâm sàng", doctor:"Khu dịch vụ", note:"Đã thu phí, chờ lấy mẫu xét nghiệm", by:"Điều dưỡng CLS", type:"Dịch vụ" }
+  ],
+  BN109: [
+    { date:"2025-10-29", dept:"Cận lâm sàng", doctor:"Khu dịch vụ", note:"Có kết quả siêu âm bụng", by:"Điều dưỡng CLS", type:"Dịch vụ hoàn tất" }
+  ]
 };
 
+// ====== GIAO DỊCH (TRANSACTIONS) ======
 export const TRANSACTIONS = {
   BN001: [
     { date: "2025-10-15", item: "Phí khám (Khám thường)", amount: 35000, status: "Đã thu", ref: "WI-15-1" },
@@ -367,9 +345,9 @@ export const TRANSACTIONS = {
   BN009: [
     { date: "2025-10-28", item: "Phí khám (Tái khám Tim mạch)", amount: 200000, status: "Đã thu", ref: "FU-28-1" },
   ],
-    BN108: [
-        { date:"2025-10-29", item:"Phí dịch vụ (1 hạng mục)", amount:350000, status:"Đã thu", ref:"SV-108-1" }
-      ]
+  BN108: [
+    { date:"2025-10-29", item:"Phí dịch vụ (1 hạng mục)", amount:350000, status:"Đã thu", ref:"SV-108-1" }
+  ]
 };
 
 // ====== GIỮ CHỖ/LỊCH HẸN LIÊN QUAN BỆNH NHÂN ======
@@ -380,34 +358,33 @@ function ymd(offset = 0) {
 }
 
 const _APPOINTMENT_HOLDS = [
-  // Từ yêu cầu cũ
+  // Hẹn khám BN002
   {
     id: "HOLD-APPT-1",
     pid: "BN002",
     patient: "Trần Thị Bình",
     type: "appointment",
-    date: ymd(-2 + 3), // 2025-10-27 theo mẫu cũ → giữ nguyên logic: hôm nay là 2025-10-29
+    date: ymd(1), // ví dụ
     time: "15:30",
     dept: "Nội tổng quát",
     doctor: "BS. Phạm Thu Lan",
     note: "Quá tải ngày 26 → chuyển 27",
     status: "scheduled",
   },
+  // Hẹn tái khám BN003
   {
     id: "HOLD-FUP-1",
     pid: "BN003",
     patient: "Lê Quốc Cường",
     type: "followup",
-    date: ymd(-2 + 3),
+    date: ymd(1),
     time: "09:00",
     dept: "Nội tiết",
     doctor: "BS. Hồ Minh Tâm",
     note: "Tái khám sau chỉnh liều",
     status: "scheduled",
   },
-
-  // Thêm hold để bắn vào queue test sớm/trễ
-  // Late (>10' nhưng <=30') — liên kết appointment a11 (BN011)
+  // Late — BN011
   {
     id: "HOLD-LATE-BN011",
     pid: "BN011",
@@ -420,7 +397,7 @@ const _APPOINTMENT_HOLDS = [
     note: "Có dấu hiệu đến trễ.",
     status: "scheduled",
   },
-  // Very late (>30') coi như walk-in — liên kết appointment a12 (BN012)
+  // Very late — BN012
   {
     id: "HOLD-VLATE-BN012",
     pid: "BN012",
@@ -433,7 +410,7 @@ const _APPOINTMENT_HOLDS = [
     note: "Rất trễ → xử lý như walk-in.",
     status: "scheduled",
   },
-  // Early (>20' sớm) — liên kết appointment a8 (BN008) ngày mai
+  // Early — BN008
   {
     id: "HOLD-EARLY-BN008",
     pid: "BN008",
@@ -448,27 +425,18 @@ const _APPOINTMENT_HOLDS = [
   },
   // Hẹn khám cho BN102
   { id:"HOLD-APPT-BN102", pid:"BN102", patient:"Phạm Quốc B", type:"appointment",
-      date: ymd(0), time:"10:00", dept:"Nội tổng quát", doctor:"BS. Lê Văn Hùng",
-      note:"Đến đúng giờ", status:"scheduled" },
-    // Hẹn tái khám cho BN103
-    { id:"HOLD-FUP-BN103", pid:"BN103", patient:"Trương Minh C", type:"followup",
-      date: ymd(1), time:"09:00", dept:"Nội tiết", doctor:"BS. Hồ Minh Tâm",
-      note:"Tái khám định kỳ", status:"scheduled" }
+    date: ymd(0), time:"10:00", dept:"Nội tổng quát", doctor:"BS. Lê Văn Hùng",
+    note:"Đến đúng giờ", status:"scheduled" },
+  // Hẹn tái khám cho BN103
+  { id:"HOLD-FUP-BN103", pid:"BN103", patient:"Trương Minh C", type:"followup",
+    date: ymd(1), time:"09:00", dept:"Nội tiết", doctor:"BS. Hồ Minh Tâm",
+    note:"Tái khám định kỳ", status:"scheduled" }
 ];
 
 // ====== CRUD / HELPERS ======
 export function getAll() { return PATIENTS.map((p) => ({ ...p })); }
-// Tìm 1 BN theo mã
-export function findById(pid) {
-  const p = PATIENTS.find((x) => x.id === pid);
-  return p ? { ...p } : null;
-}
-
-// (tuỳ nơi dùng) tìm index để patch thủ công
-export function indexOf(pid) {
-  return PATIENTS.findIndex((x) => x.id === pid);
-}
-// ✔ Alias tương thích trang cũ
+export function findById(pid) { const p = PATIENTS.find((x) => x.id === pid); return p ? { ...p } : null; }
+export function indexOf(pid) { return PATIENTS.findIndex((x) => x.id === pid); }
 export function listPatients() { return getAll(); }
 export const listAllPatients = listPatients;
 
@@ -482,8 +450,8 @@ export function updateOne(pid, patch) {
   emit();
 }
 
-export function addVisit(pid, v) { (VISITS[pid] ||= []).push({ ...v }); }
-export function addTransaction(pid, t) { (TRANSACTIONS[pid] ||= []).push({ ...t }); }
+export function addVisit(pid, v) { (VISITS[pid] ||= []).push({ ...v }); emit(); }
+export function addTransaction(pid, t) { (TRANSACTIONS[pid] ||= []).push({ ...t }); emit(); }
 
 export function addAppointmentHold({ pid, patient, date, time, dept, doctor, type = "appointment", note = "" }) {
   const id = `HOLD-${Math.random().toString(36).slice(2)}`;

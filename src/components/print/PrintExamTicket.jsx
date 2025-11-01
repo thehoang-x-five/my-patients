@@ -6,19 +6,17 @@ import React, { useEffect } from "react";
  *
  * Props:
  *  - show: boolean
- *  - printedBy?: string               -> tên người in, hiển thị ở chân phiếu
  *  - patient: {id, name, gender, dob, phone, address}
  *  - exam:   { type, dept, room, symptoms, note }
  *  - booking:{ date, time, price, doctor, dept }
  *  - isServiceIntake: boolean
  *  - totalServiceFee: number
- *  - services?: Array<string|{name:string, room?:string, price?:number}>
+ *  - services?: Array<string | {name:string, room?:string, price?:number, note?:string}>
  *  - feePaid?: boolean   -> nếu undefined và price=0 thì ẩn toàn bộ dòng phí
  *  - onAfterPrint?: () => void
  */
 export default function PrintExamTicket({
   show = false,
-  printedBy = (window?.APP_USER && (window.APP_USER.fullName || window.APP_USER.name)) || "—",
   patient = {},
   exam = {},
   booking = {},
@@ -31,18 +29,25 @@ export default function PrintExamTicket({
   useEffect(() => {
     if (!show) return;
 
-    const nfmt = (n) => (Number(n || 0) || 0).toLocaleString("vi-VN");
+    const fmt = (n) => (Number(n || 0) || 0).toLocaleString("vi-VN");
     const ds = new Date().toLocaleString("vi-VN");
+
+    // Chuẩn hóa dịch vụ: cho phép truyền string hoặc object
+    const normServices = (Array.isArray(services) ? services : []).map((it) => {
+      if (typeof it === "string") {
+        return { name: it, room: `Phòng ${it}`, price: 0, note: "" };
+      }
+      return {
+        name: it?.name ?? "",
+        room: it?.room ?? (it?.name ? `Phòng ${it.name}` : ""),
+        price: Number(it?.price || 0),
+        note: it?.note || "",
+      };
+    });
 
     const feeLabel = isServiceIntake ? "Tổng phí dịch vụ" : "Phí khám";
     const feeAmount = isServiceIntake ? totalServiceFee : (booking?.price || 0);
     const showFeeRow = feeAmount > 0 && feePaid !== undefined;
-
-    // Chuẩn hóa services thành {name, room, price}
-    const rows = (services || []).map((s) => {
-      if (typeof s === "string") return { name: s, room: "", price: undefined };
-      return { name: s?.name || "", room: s?.room || "", price: s?.price };
-    });
 
     const html = `<!doctype html>
 <html>
@@ -54,7 +59,6 @@ export default function PrintExamTicket({
       html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color: var(--c-text); }
       .wrap{ padding:24px; }
       .title{ text-align:center; color:var(--c-main); font-weight:800; font-size:20px; margin:0 0 8px; }
-      .subtitle{ text-align:center; color:#475569; font-weight:600; margin:0 0 12px; }
       .meta{ text-align:right; color:#64748b; font-size:12px; margin-bottom:12px; }
       table{ width:100%; border-collapse:collapse; font-size:14px; }
       th,td{ border:1px solid #000; padding:8px; vertical-align:top; }
@@ -63,19 +67,19 @@ export default function PrintExamTicket({
       .badge{ display:inline-block; border:1px solid #a7f3d0; background:#ecfdf5; color:#064e3b; padding:2px 8px; border-radius:999px; font-weight:700; font-size:12px; }
       .fee{ color:#065f46; font-weight:800; }
       .muted{ color:#6b7280; }
-      .footer{ display:flex; justify-content:space-between; align-items:flex-end; margin-top:24px; }
-      .sign{ text-align:center; color:#334155; flex:0 0 260px; }
+      .signline{ margin-top:28px; font-weight:600; color:#334155; }
+      .dots{ display:inline-block; vertical-align:middle; border-bottom:1px dotted #334155; min-width:280px; height:0; margin-left:8px; }
+      .chk{ display:inline-block; width:14px; height:14px; border:1px solid #000; margin-left:8px; vertical-align:middle; }
       @page { margin: 16mm; }
     </style>
   </head>
   <body>
     <div class="wrap">
       <div class="meta">In lúc: ${ds}</div>
-      <h1 class="title">${isServiceIntake ? "PHIẾU KHÁM DỊCH VỤ" : "PHIẾU TIẾP NHẬN KHÁM"}</h1>
-      <h2 class="subtitle">HealthCare Clinic</h2>
+      <h1 class="title ">${isServiceIntake ? "PHIẾU KHÁM DỊCH VỤ" : "PHIẾU TIẾP NHẬN KHÁM"}</h1>
 
-      <!-- Thông tin bệnh nhân -->
-      <table>
+      <!-- Thông tin BN -->
+      <table class="margin-top: 6px;">
         <tbody>
           <tr>
             <th style="width:22%">Họ và tên</th>
@@ -98,7 +102,7 @@ export default function PrintExamTicket({
         </tbody>
       </table>
 
-      <!-- Thông tin chung -->
+      <!-- Khối thông tin phiếu -->
       <div class="block">
         <table>
           <tbody>
@@ -111,26 +115,27 @@ export default function PrintExamTicket({
             ${
               isServiceIntake
                 ? `
-                <!-- DỊCH VỤ: thay Khoa/Phòng/Bác sĩ bằng Tổng phí + Trạng thái phí -->
-                <tr>
-                  <th>Tổng phí</th>
-                  <td><span class="fee">${nfmt(feeAmount)}đ</span></td>
-                  <th>Trạng thái phí</th>
-                  <td>${feeAmount > 0 ? '<span class="badge">ĐÃ THU</span>' : '<span class="muted">Không thu</span>'}</td>
-                </tr>`
+                  <tr>
+                    <th>Tổng phí</th>
+                    <td><span class="fee">${fmt(feeAmount)}đ</span></td>
+                    <th>Trạng thái phí</th>
+                    <td>${feeAmount > 0 ? '<span class="badge">ĐÃ THU</span>' : '<span class="muted">Không thu</span>'}</td>
+                  </tr>
+                `
                 : `
-                <tr>
-                  <th>Khoa</th>
-                  <td>${safe(exam?.dept || booking?.dept || "-")}</td>
-                  <th>Phòng</th>
-                  <td>${safe(exam?.room || "-")}</td>
-                </tr>
-                <tr>
-                  <th>Bác sĩ</th>
-                  <td>${safe(booking?.doctor || "-")}</td>
-                  <th>Trạng thái phí</th>
-                  <td>${feeAmount > 0 ? '<span class="badge">ĐÃ THU</span>' : '<span class="muted">Không thu</span>'}</td>
-                </tr>`
+                  <tr>
+                    <th>Khoa</th>
+                    <td>${safe(exam?.dept || booking?.dept || "-")}</td>
+                    <th>Phòng</th>
+                    <td>${safe(exam?.room || "-")}</td>
+                  </tr>
+                  <tr>
+                    <th>Bác sĩ</th>
+                    <td>${safe(booking?.doctor || "-")}</td>
+                    <th>Trạng thái phí</th>
+                    <td>${feeAmount > 0 ? '<span class="badge">ĐÃ THU</span>' : '<span class="muted">Không thu</span>'}</td>
+                  </tr>
+                `
             }
           </tbody>
         </table>
@@ -139,84 +144,82 @@ export default function PrintExamTicket({
       ${
         isServiceIntake
           ? `
-      <!-- Bảng dịch vụ: thêm Phòng (mặc định "Phòng + tên dịch vụ") và Phí từng loại -->
+      <!-- Bảng dịch vụ (có cột Phòng, Phí từng DV) -->
       <div class="block">
         <table>
           <thead>
             <tr>
-              <th style="width:46%">Dịch vụ</th>
+              <th style="width:41%">Dịch vụ</th>
               <th style="width:24%">Phòng</th>
-              <th style="width:30%">Ghi chú / Khác</th>
+              <th style="width:30%">Ghi chú / Phí</th>
+              <th style="width:5%"></th>
             </tr>
           </thead>
           <tbody>
             ${
-              rows.length
-                ? rows
-                    .map((r) => {
-                      const room = r.room && r.room.trim() ? r.room : ("Phòng " + (r.name || "").trim());
-                      const price = (r.price != null) ? ` • Phí: <b class="fee">${nfmt(r.price)}đ</b>` : "";
-                      return `<tr>
-                        <td>${safe(r.name)}${price}</td>
-                        <td>${safe(room)}</td>
-                        <td></td>
-                      </tr>`;
-                    })
-                    .join("")
+              normServices.length
+                ? normServices.map((s) =>
+                    `<tr>
+                       <td>${safe(s.name)}${s.price ? ` • Phí: <b> ${fmt(s.price)} đ</b>` : ""}</td>
+                       <td>${safe(s.room || '')}</td>
+                       <td>${safe(s.note || '')}</td>
+                       <td><span class="chk "></span></td>
+                     </tr>`
+                     
+                  ).join("")
                 : `<tr><td colspan="3" class="muted">Không có dịch vụ</td></tr>`
             }
           </tbody>
         </table>
-      </div>`
-          : ""
-      }
+      </div>
 
-      ${
-        !isServiceIntake
-          ? `
       <div class="block">
         <table>
           <tbody>
             <tr>
-              <th style="width:22%">${/tái khám/i.test(exam?.type || "") ? "Ghi chú" : "Triệu chứng"}</th>
-              <td>${safe(/tái khám/i.test(exam?.type || "") ? (exam?.note || "—") : (exam?.symptoms || "—"))}</td>
+              <th style="width:22%">Ghi chú</th>
+              <td>${safe(exam?.note || "—")}</td>
             </tr>
           </tbody>
         </table>
-      </div>`
-          : ""
-      }
-
-      ${
-        showFeeRow
-          ? `
+      </div>
+      `
+          : `
       <div class="block">
-        <table>
-          <tbody>
-            <tr>
-              <th style="width:22%">${feeLabel}</th>
-              <td><span class="fee">${nfmt(feeAmount)}đ</span> ${feePaid ? '<span class="badge" style="margin-left:8px">ĐÃ THU</span>' : ''}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>`
-          : ""
+        <table><tbody>
+          <tr>
+            <th style="width:22%">${/tái khám/i.test(exam?.type || "") ? "Ghi chú" : "Triệu chứng"}</th>
+            <td>${
+              /tái khám/i.test(exam?.type || "")
+                ? safe(exam?.note || "—")
+                : safe(exam?.symptoms || "—")
+            }</td>
+          </tr>
+        </tbody></table>
+      </div>
+
+      ${ showFeeRow
+        ? `<div class="block">
+             <table><tbody>
+               <tr>
+                 <th style="width:22%">${feeLabel}</th>
+                 <td><span class="fee">${fmt(feeAmount)}đ</span></td>
+               </tr>
+             </tbody></table>
+           </div>`
+        : "" }
+      `
       }
 
-      <!-- Footer: chỉ Người lập phiếu + Người in -->
-      <div class="footer">
-        <div class="sign">
-          <div class="muted">Người lập phiếu</div>
-          <div style="height:64px"></div>
-          <div>.......................................</div>
-        </div>
-        <div class="muted">Người in: <b>${safe(printedBy)}</b></div>
+      <!-- Chữ ký -->
+      <div class="signline">
+        Người lập phiếu:<span class="dots"></span>
       </div>
     </div>
   </body>
 </html>`;
 
-    // In bằng iframe ẩn (đảm bảo chỉ in nội dung phiếu)
+    // tạo iframe ẩn & in
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";
     iframe.style.right = "0";
@@ -235,7 +238,10 @@ export default function PrintExamTicket({
       setTimeout(() => {
         const w = iframe.contentWindow;
         if (!w) return destroy();
-        const after = () => { w.removeEventListener?.("afterprint", after); destroy(); };
+        const after = () => {
+          w.removeEventListener?.("afterprint", after);
+          destroy();
+        };
         w.addEventListener?.("afterprint", after);
         w.focus();
         w.print();
@@ -243,20 +249,18 @@ export default function PrintExamTicket({
       }, 50);
     };
 
+    // gán onload trước rồi nạp nội dung
     iframe.onload = onLoad;
     iframe.srcdoc = html;
 
     return () => { try { document.body.removeChild(iframe); } catch {} };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [show, printedBy, isServiceIntake, patient, exam, booking, totalServiceFee, services, feePaid, onAfterPrint]);
+  }, [show]);
 
   return null;
 }
 
 function safe(v) {
   if (v == null) return "";
-  return String(v)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

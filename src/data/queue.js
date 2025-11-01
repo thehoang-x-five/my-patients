@@ -1,10 +1,10 @@
-// === HÀNG CHỜ (queue) — chỉ chứa logic queue, KHÔNG dính dữ liệu bệnh nhân ===
-import {  STATUSES } from "./patients.js";
+import { STATUSES } from "./patients.js";
 import { SERVICE_STATUSES } from "./patientFlow.js";
+
 export const QUEUE_RULES = {
-  GRACE_MIN: 10,      // <=10' trễ vẫn coi đúng hẹn
-  EARLY_WIN_MIN: 20,  // đến sớm >20' xếp nhóm early
-  VERY_LATE_MIN: 30,  // >30' coi walk-in
+  GRACE_MIN: 10,
+  EARLY_WIN_MIN: 20,
+  VERY_LATE_MIN: 30,
 };
 
 const listeners = new Set();
@@ -19,7 +19,6 @@ export const subscribe = addListener;
 export function getQueue() { return _QUEUE.map((x) => ({ ...x })); }
 export function clearQueue() { _QUEUE.length = 0; emit(); }
 
-// Ưu tiên: emergency(0) < followup(1) < appointment(2) < service(2.5) < ontime(3) < late(4) < walkin(5) < early(6)
 function rank(it) {
   if (it.priority === "emergency") return 0;
   if (it.tag === "followup") return 1;
@@ -28,7 +27,7 @@ function rank(it) {
   if (it.late) return 4;
   if (it.source === "walkin") return 5;
   if (it.early) return 6;
-  return 3; // ontime
+  return 3;
 }
 
 function parseDT(d, t) { return new Date(`${d}T${t || "00:00"}:00`); }
@@ -74,7 +73,6 @@ export function enqueueFromAppointment(hold, opts = {}) {
   const st = parseDT(hold.date, hold.time);
   const diffMin = Math.round((now - st) / 60000);
 
-  // phân loại đến sớm/trễ/rất trễ
   let src = "appt";
   let early = false, late = false, lateFlag = "";
   if (diffMin <= -QUEUE_RULES.EARLY_WIN_MIN) {
@@ -138,7 +136,7 @@ export function enqueueService({ pid, name, services = [], note = "", dept = "C�
     time: "",
     note: [services.join(", "), note].filter(Boolean).join(" • "),
     symptoms: "",
-    status: SERVICE_STATUSES.WAIT_EXAM_SVC,
+    status: SERVICE_STATUSES?.WAIT_EXAM_SVC || "Chờ khám (dịch vụ)",
   });
   _QUEUE.push(item);
   _QUEUE.sort(sortQueue);
@@ -146,7 +144,7 @@ export function enqueueService({ pid, name, services = [], note = "", dept = "C�
   return item;
 }
 
-/** Trả bệnh nhân về BÁC SĨ ban đầu sau khi xong dịch vụ */
+/** Trả bệnh nhân về BÁC SĨ sau khi xong dịch vụ */
 export function enqueueReturnToDoctor({ pid, name, dept = "Phòng khám", doctor, note = "Đã có kết quả dịch vụ" }) {
   const item = _makeItem({
     source: "walkin",

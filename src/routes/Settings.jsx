@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Button from "../components/ui/Button.jsx";
 import { useUI } from "../context/UIContext.jsx";
-import { pushToast } from "../components/ui/ToastDock.jsx";
-
+import { toast } from 'react-toastify';
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -48,17 +47,13 @@ export default function Settings() {
   function doSave() {
     const pack = { ...form, theme, lang };
     saveSettings(pack);
-    pushToast({ tone: "ok", title: "Đã lưu", message: "Cài đặt đã được lưu." });
+    toast.success("Cài đặt đã được lưu." );
   }
   function doReset() {
     setForm(DEFAULT_SETTINGS);
     setTheme(DEFAULT_SETTINGS.theme);
     setLang(DEFAULT_SETTINGS.lang);
-    pushToast({
-      tone: "warn",
-      title: "Đã đặt lại",
-      message: "Cài đặt quay về mặc định.",
-    });
+    toast.warn("Cài đặt quay về mặc định.");
   }
 
   return (

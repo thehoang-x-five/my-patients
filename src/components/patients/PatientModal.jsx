@@ -444,38 +444,21 @@ export default function PatientModal({
       markServiceDispatched(pid);
       onMutatePatient?.(pid, { status: "Chờ khám (dịch vụ)" });
 
-      // MỞ IN: phiếu dịch vụ
       openPrint({
         type: "service",
-        printedBy: currentUser,
-        patient: {
-          id: pid,
-          name,
-          gender: form?.gender,
-          dob: form?.dob,
-          phone: form?.phone,
-          address: form?.address,
-        },
-        booking: {
-          date: booking.date,
-          time: booking.time,
-          price: totalServiceFee,
-          doctor: "Khu dịch vụ",
-          dept: "Cận lâm sàng",
-        },
-        examInfo: {
-          type: exam.type || tpl?.title || "Khám dịch vụ",
-          dept: "Cận lâm sàng",
-          room: "",
-        },
-        feeInfo: { total: totalServiceFee, paid: totalServiceFee > 0, showFee: totalServiceFee > 0 },
-        services: (services || []).map((sv, i) => ({
+        patient: { id: pid, name, gender: form?.gender, dob: form?.dob, phone: form?.phone, address: form?.address },
+        booking: { date: booking.date, time: booking.time, price: totalServiceFee, doctor: "Khu dịch vụ", dept: "Cận lâm sàng" },
+        examInfo: { type: exam.type || tpl?.title || "Khám dịch vụ", note: exam.note || "" },
+        isServiceIntake: true,
+        totalServiceFee,
+        feePaid: totalServiceFee > 0,            // để hiện "ĐÃ THU"
+        services: (serviceItems || []).map((sv, i) => ({
           name: sv,
-          room: serviceRooms[i] || "",
+          room: serviceRooms[i] || `Phòng ${sv}`,
           price: priceOfService(sv),
+          note: serviceNotes[i] || ""
         })),
       });
-
       
       return;
     }
@@ -534,27 +517,13 @@ export default function PatientModal({
     // In phiếu khám thường
     openPrint({
       type: "walkin",
-      printedBy: currentUser,
-      patient: {
-        id: pid,
-        name,
-        gender: form?.gender,
-        dob: form?.dob,
-        phone: form?.phone,
-        address: form?.address,
-      },
+      patient: { id: pid, name, gender: form?.gender, dob: form?.dob, phone: form?.phone, address: form?.address },
       booking: { date: booking.date, time: booking.time, price: fee, doctor, dept },
-      examInfo: {
-        type: exam.type || tpl?.title || "Khám",
-        dept,
-        room,
-        symptoms: exam.symptoms,
-        note: exam.note,
-      },
-      feeInfo: { total: fee, paid: fee > 0, showFee: fee > 0 },
+      examInfo: { type: exam.type || tpl?.title || "Khám", dept, room },
+      isServiceIntake: false,
+      totalServiceFee: 0,
+      feePaid: fee > 0,
     });
-
-
     
   }
 
@@ -2000,32 +1969,48 @@ export default function PatientModal({
             )}
           </motion.div>
 
-           {/* PRINT OVERLAY */}
-           {print.show && (
-            <PrintExamTicket
-              show={print.show}
-              printedBy={print.payload?.printedBy || currentUser}
-              patient={print.payload?.patient}
-              exam={{
-                type: print.payload?.examInfo?.type,
-                dept: print.payload?.examInfo?.dept || print.payload?.patient?.dept || "",
-                room: print.payload?.examInfo?.room || "",
-                symptoms: print.payload?.examInfo?.symptoms,
-                note: print.payload?.examInfo?.note,
-              }}
-              booking={print.payload?.booking}
-              isServiceIntake={print.payload?.type === "service"}
-              totalServiceFee={
-                (print.payload?.feeInfo && Number(print.payload.feeInfo.total)) ||
-                Number(print.payload?.totalServiceFee || 0)
-              }
-              services={Array.isArray(print.payload?.services) ? print.payload.services : []}
-              feePaid={
-                print.payload?.feeInfo?.showFee ? !!print.payload?.feeInfo?.paid : undefined
-              }
-              onAfterPrint={closePrint}
-            />
-          )}
+         {/* PRINT OVERLAY */}
+<PrintExamTicket
+  show={print.show}
+  onAfterPrint={closePrint}
+  // dữ liệu chung
+  patient={{
+    id: form?.id,
+    name: form?.name,
+    gender: form?.gender,
+    dob: form?.dob,
+    phone: form?.phone,
+    address: form?.address,
+  }}
+  exam={{
+    type: exam.type,
+    dept: exam.dept,
+    room: exam.room,
+    symptoms: exam.symptoms,
+    note: exam.note,
+  }}
+  booking={{
+    date: booking.date,
+    time: booking.time,
+    price: isServiceIntake ? totalServiceFee : booking.price,
+    doctor: booking.doctor,
+    dept: booking.dept,
+  }}
+  isServiceIntake={isServiceIntake}
+  totalServiceFee={totalServiceFee}
+  services={(serviceItems || []).map((sv, i) => ({
+    name: sv,
+    room: serviceRooms[i] || `Phòng ${sv}`,
+    price: priceOfService(sv),
+    note: serviceNotes[i] || "",
+  }))}
+  // miễn phí tái khám: bạn không truyền feePaid -> ẩn dòng phí
+  feePaid={
+    isServiceIntake
+      ? totalServiceFee > 0
+      : (booking.price || 0) > 0
+  }
+/>
         </>
       )}
     </AnimatePresence>

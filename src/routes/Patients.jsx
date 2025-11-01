@@ -11,6 +11,7 @@ import {
   listPatients,
   addOne,
   updateOne,
+  subscribe,
   STATUSES,
   findById,
 } from "../data/patients.js";
@@ -41,8 +42,20 @@ export default function Patients() {
   // highlight row
   const [highlightPid, setHighlightPid] = useState(null);
 
-  // Load data
-  useEffect(() => { setItems(listPatients()); }, []);
+   // Load data + sync realtime từ store và global event
+   useEffect(() => {
+     // nạp lần đầu
+     setItems(listPatients());
+     // lắng nghe mọi thay đổi trong cùng phiên SPA
+     const off = subscribe(() => setItems(listPatients()));
+     // lắng nghe cả global event (phòng khi thay đổi phát sinh từ màn khác)
+     const onChanged = () => setItems(listPatients());
+     window.addEventListener("patients:changed", onChanged);
+     return () => {
+       off?.();
+       window.removeEventListener("patients:changed", onChanged);
+     };
+   }, []);
 
   // Search/Filter
   const filtered = useMemo(() => {

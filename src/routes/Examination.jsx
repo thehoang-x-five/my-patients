@@ -18,7 +18,9 @@ export default function Examination() {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(null);
   const [inProgress, setInProgress] = useState(() => new Set());
+
   const pickId = (p) => p?.id ?? p?.pid;
+
   useEffect(() => {
     setPatients(getQueue());
     const off = addListener((q) => setPatients(q));
@@ -28,39 +30,28 @@ export default function Examination() {
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return patients;
-        return patients.filter((p) => {
-          const bag = [
-            p.name,
-            p.pid,
-            p.id,
-            p.doctor,
-            p.dept,
-          ].filter(Boolean).join(" ").toLowerCase();
-          return bag.includes(term);
-        });
+    return patients.filter((p) => {
+      const bag = [p.name, p.pid, p.id, p.doctor, p.dept].filter(Boolean).join(" ").toLowerCase();
+      return bag.includes(term);
+    });
   }, [patients, q]);
 
   function handleStart(p) {
     const key = pickId(p);
-        if (!key) return;
-        setInProgress((prev) => {
-          const s = new Set(prev);
-          s.add(key);
-          return s;
-      });
-      startExam(key);
+    if (!key) return;
+    setInProgress((prev) => { const s = new Set(prev); s.add(key); return s; });
+    startExam(key);
     setActive(p);
   }
-  function handleBack() {
 
-    setActive(null);
-  }
+  function handleBack() { setActive(null); }
 
-  // Xuất phiếu khám (in) → set “Chờ khám dịch vụ”
+  // Xuất phiếu khám → CHỜ TIẾP NHẬN (DỊCH VỤ) + ghi serviceOrder & pendingServiceResults
   function handleExportOrder(patient, payload) {
     if (!patient) return;
     const key = pickId(patient);
     if (!key) return;
+
     finishAndRemove(key);
     setInProgress((prev) => { const s = new Set(prev); s.delete(key); return s; });
 
@@ -70,35 +61,42 @@ export default function Examination() {
     const noteCombined = orderRows.map(r => r.note).filter(Boolean).join("; ");
 
     updateOne(pid, {
-      status: "Chờ khám dịch vụ",
+      status: "Chờ tiếp nhận (dịch vụ)",
       serviceOrder: {
         items,
         note: noteCombined || "",
         fromDoctor: patient.doctor || "Bác sĩ phụ trách",
         dept: "Cận lâm sàng",
-        dispatched: false,
+        dispatched: false, // chưa vào quầy dịch vụ
       },
       pendingServiceResults: orderRows.map(r => ({
-        id: r.id, name: r.serviceName, status: r.status || "Chưa có kết quả", result: r.result || "", note: r.note || "",
+        id: r.id,
+        name: r.serviceName,
+        status: r.status || "Chưa có kết quả",
+        result: r.result || "",
+        note: r.note || "",
       })),
       lastExamVersion: payload?.meta?.version,
       lastExamAt: payload?.meta?.examAt,
     });
-
+    try { window.dispatchEvent(new CustomEvent("patients:changed", { detail:{ pid } })); } catch {}
     setActive(null);
   }
 
-  // Xuất phiếu chẩn đoán (không in) → set “Chờ xử lý”
+  // Xuất phiếu chẩn đoán → CHỜ XỬ LÝ hoặc CHỜ XỬ LÝ (DỊCH VỤ) tuỳ nơi đang khám
   function handleExportDiagnosis(patient, payload) {
     if (!patient) return;
     const key = pickId(patient);
-        if (!key) return;
-        finishAndRemove(key);
-       setInProgress((prev) => { const s = new Set(prev); s.delete(key); return s; });
+    if (!key) return;
 
-       const pid = pickId(patient);
+    finishAndRemove(key);
+    setInProgress((prev) => { const s = new Set(prev); s.delete(key); return s; });
+
+    const pid = pickId(patient);
+    const nextStatus = (patient.tag === "service") ? "Chờ xử lý (dịch vụ)" : "Chờ xử lý";
+
     updateOne(pid, {
-      status: "Chờ xử lý",
+      status: nextStatus,
       pendingProcess: {
         ...payload,
         services: payload?.services || (payload?.orderRows || []).map(r => r.serviceName),
@@ -106,7 +104,8 @@ export default function Examination() {
       lastExamVersion: payload?.meta?.version,
       lastExamAt: payload?.meta?.examAt,
     });
-
+    try { window.dispatchEvent(new CustomEvent("patients:changed", { detail:{ pid } })); } catch {}
+    
     setActive(null);
   }
 
@@ -124,7 +123,6 @@ export default function Examination() {
           className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
           style={{ "--topbar-h": `${topbar}px` }}
         >
-          {/* Ẩn ô tìm kiếm khi đã “gọi vào” */}
           <ExamToolbar todayCount={patients.length} q={q} onSearch={setQ} hideSearch={!!active} />
 
           <div className="mt-3 flex-1 min-h-0">

@@ -196,7 +196,7 @@ export default function PatientsFilterPopover({ open, onClose, values, setValues
                         aria-checked={active}
                         onClick={() => setStatus(s)}
                         className={[
-                          "relative z-10 px-2 py-1 text-[12px] font-semibold whitespace-nowrap rounded-lg",
+                          "relative z-10 px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap rounded-lg",
                           "transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
                           active ? "text-teal-800" : "text-slate-700 hover:text-emerald-800",
                           "ring-1",
