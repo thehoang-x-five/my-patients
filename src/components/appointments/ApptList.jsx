@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
 import Chip from "../ui/Chip.jsx";
 
 function TimeRange({ start = "08:00", duration = 30 }) {
@@ -23,35 +22,10 @@ export default function ApptList({
   onCheckIn,
   stretch = false,
 }) {
-  const [busy, setBusy] = useState(new Set());
-  const setBusyFor = (id, flag) => {
-    setBusy(prev => {
-      const next = new Set(prev);
-      flag ? next.add(id) : next.delete(id);
-      return next;
-    });
-  };
 
-  const navigate = useNavigate();
 
-  async function handleCheckIn(a) {
-    const id = a.id ?? a.code ?? a.pid ?? a.patient;
-    setBusyFor(id, true);
-    try {
-      const maybe = onCheckIn?.(a);
-      if (maybe?.then) await maybe;
 
-      const isRevisit = /tái\s*khám/i.test(a.type || "");
-      if (isRevisit) {
-        const highlightPid = a.pid ?? a.code ?? a.patientId ?? null;
-        navigate("/patients", { state: { highlightPid, flashOnce: true } });
-      } else {
-        navigate("/patients", { state: { focusAddNew: true, flashOnce: true } });
-      }
-    } finally {
-      setBusyFor(id, false);
-    }
-  }
+
 
   if (loading) {
     return (
@@ -86,9 +60,11 @@ export default function ApptList({
     <section className={`pt-2 bg-white rounded-2xl overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}>
       <div className={`${stretch ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"} p-4 pt-1`}>
         <div className="flex flex-col gap-2">
-          {items.map((a, i) => {
-            const canCheckIn = a.status !== "Đã hủy" && !a.checkedIn;
+        {items.map((a, i) => {
             const id = a.id ?? a.code ?? a.pid ?? a.patient;
+            // Disallow check-in for canceled, no-show, or completed
+            const blocked = ["Đã hủy", "Không đến", "Đã hoàn thành"];
+            const canCheckIn = !blocked.includes(a.status) && !a.checkedIn;
 
             return (
               <motion.article
@@ -156,6 +132,7 @@ export default function ApptList({
                       )}
 
                       <motion.button
+                       type="button"
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => onDetail?.(a)}
@@ -168,12 +145,11 @@ export default function ApptList({
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          disabled={busy.has(id)}
-                          aria-busy={busy.has(id)}
-                          onClick={() => handleCheckIn(a)}
+                          
+                          onClick={() => onCheckIn(a)}
                           className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-purple-500 text-white font-semibold shadow-sm hover:shadow-md hover:brightness-105 transition text-sm"
                         >
-                          {busy.has(id) ? "Đang check-in…" : "Check-in"}
+                           Check-in
                         </motion.button>
                       )}
                     </div>

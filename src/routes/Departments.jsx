@@ -1,11 +1,15 @@
-import React from 'react';
-import { useEffect, useMemo, useState } from "react";
+// src/pages/Departments.jsx
+import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import DeptToolbar from "../components/departments/DeptToolbar.jsx";
 import DeptGrid from "../components/departments/DeptGrid.jsx";
 import DeptModal from "../components/departments/DeptModal.jsx";
 import ScheduleModal from "../components/departments/ScheduleModal.jsx";
-import { DEPARTMENTS, DUTY, WEEK_TEMPLATE } from "../data/departments.js";
+import { WEEK_TEMPLATE } from "../data/departments.js";
+import { useDepartments, useDutyByRoom, subscribeDepartments } from "../api/departments.js";
+import { useUIStore } from "../components/stores/uiStore.js";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -16,28 +20,18 @@ const dayKeyToday = () => {
   return WEEK_TEMPLATE.includes(k) ? k : "Mon";
 };
 
-function decorateRoom(dept, duty, todayKey) {
-  const status = dept.status ?? (dept.room?.status ? "active" : "inactive");
-  const waitingPatients = status === "inactive" ? 0 : (dept.waitingPatients || 0);
-  const roomDuty = duty?.[dept.id] || {};
-  const todayDuty = roomDuty?.[todayKey] || { doc: "—", nurse: "—" };
-  const weekDays = {
-    Mon: roomDuty.Mon || { doc: "—", nurse: "—" },
-    Tue: roomDuty.Tue || { doc: "—", nurse: "—" },
-    Wed: roomDuty.Wed || { doc: "—", nurse: "—" },
-    Thu: roomDuty.Thu || { doc: "—", nurse: "—" },
-    Fri: roomDuty.Fri || { doc: "—", nurse: "—" },
-    Sat: roomDuty.Sat || { doc: "Luân phiên", nurse: "Luân phiên" },
-    Sun: roomDuty.Sun || { doc: "Luân phiên", nurse: "Luân phiên" }
-  };
+function decorateRow(d) {
+  const status = d.status ?? (d.room?.status ? "active" : "inactive");
+  const waitingPatients = status === "inactive" ? 0 : (d.waitingPatients || 0);
+  return { ...d, status, waitingPatients };
+}
 
-  return {
-    ...dept,
-    status,
-    waitingPatients,
-    _todayDuty: todayDuty,
-    _weekDays: weekDays
-  };
+// helper để escape CSS attribute selector
+function safeCssEscape(v) {
+  const s = String(v ?? "");
+  // @ts-ignore
+  if (typeof CSS !== "undefined" && CSS.escape) return CSS.escape(s);
+  return s.replace(/[^a-zA-Z0-9_\-]/g, "\\$&");
 }
 
 export default function Departments() {
@@ -46,25 +40,59 @@ export default function Departments() {
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
-  const [all, setAll] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("all"); // all | active | inactive
+  const todayKey = dayKeyToday();
+
+  // Load departments
+  const { data: depItems = [], isLoading, error } = useDepartments();
+  const all = useMemo(() => (depItems || []).map(decorateRow), [depItems]);
+
+  const [tab, setTab] = useState("all");
   const [query, setQuery] = useState("");
 
   const [detail, setDetail] = useState({ open: false, dept: null });
-  const [schedule, setSchedule] = useState({ open: false, dept: null, todayDuty: null, weekDays: null });
+  const [schedule, setSchedule] = useState({ open: false, dept: null });
 
-  const todayKey = dayKeyToday();
-
+  // realtime
+  const qc = useQueryClient();
   useEffect(() => {
-    setLoading(true);
-    const t = setTimeout(() => {
-      const baked = DEPARTMENTS.map(d => decorateRoom(d, DUTY, todayKey));
-      setAll(baked);
-      setLoading(false);
-    }, 120);
-    return () => clearTimeout(t);
-  }, [todayKey]);
+    let off;
+    (async () => { off = await subscribeDepartments(qc); })();
+    return () => { if (typeof off === "function") off(); };
+  }, [qc]);
+
+  // ===== Highlight room by URL =====
+  const { search } = useLocation();
+  const sp = new URLSearchParams(search);
+  const focusRoomId = sp.get("room");
+  const focus = sp.get("focus") === "true";
+
+  const highlightRoomId = useUIStore((s) => s.highlightRoomId);
+  const setHighlightRoomId = useUIStore((s) => s.setHighlightRoomId);
+  const clearHighlightRoom = useUIStore((s) => s.clearHighlightRoom);
+
+  // set highlight when URL asks
+  useEffect(() => {
+    if (focus && focusRoomId) {
+      setHighlightRoomId(focusRoomId);
+    }
+  }, [focus, focusRoomId, setHighlightRoomId]);
+
+  // scroll into view when highlighted appears in DOM
+  useEffect(() => {
+    if (!highlightRoomId) return;
+    const sel = `[data-room-id="${safeCssEscape(highlightRoomId)}"]`;
+    const el = document.querySelector(sel);
+    if (el && el.scrollIntoView) {
+      try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch {}
+      // auto-clear after 5s
+      const t = setTimeout(() => clearHighlightRoom(), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [highlightRoomId, clearHighlightRoom, all]); // re-run after data render
+
+  // duty when schedule modal opens
+  const dutyRoomId = schedule.open && schedule.dept ? schedule.dept.id : null;
+  const { data: weekDays } = useDutyByRoom(dutyRoomId, { enabled: !!dutyRoomId });
 
   const activeCount = useMemo(() => all.filter((d) => d.status === "active").length, [all]);
 
@@ -87,17 +115,8 @@ export default function Departments() {
     return arr;
   }, [all, tab, query]);
 
-  function openDetail(dept) {
-    setDetail({ open: true, dept });
-  }
-  function openSchedule(dept) {
-    setSchedule({
-      open: true,
-      dept,
-      todayDuty: dept._todayDuty,
-      weekDays: dept._weekDays
-    });
-  }
+  function openDetail(dept) { setDetail({ open: true, dept }); }
+  function openSchedule(dept) { setSchedule({ open: true, dept }); }
 
   return (
     <motion.main
@@ -121,11 +140,15 @@ export default function Departments() {
           setQuery={setQuery}
         />
 
-        {loading ? (
+        {isLoading ? (
           <section className="card mt-3 p-4 h-full">
             <div className="space-y-2">
               {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skel h-24" />)}
             </div>
+          </section>
+        ) : error ? (
+          <section role="alert" className="card mt-3 p-4 ring-1 ring-red-200 bg-red-50 text-red-700">
+            Không tải được danh sách phòng. <span className="text-red-600/80 text-sm">{String(error)}</span>
           </section>
         ) : (
           <div className="mt-2.5 flex-1 min-h-0">
@@ -143,6 +166,7 @@ export default function Departments() {
                     items={filtered}
                     onOpenDetail={openDetail}
                     onOpenSchedule={openSchedule}
+                    highlightId={highlightRoomId}   // NEW
                   />
                 </div>
               </motion.div>
@@ -160,10 +184,10 @@ export default function Departments() {
       <ScheduleModal
         open={schedule.open}
         dept={schedule.dept}
-        todayDuty={schedule.todayDuty}
-        weekDays={schedule.weekDays}
+        todayDuty={weekDays ? weekDays[todayKey] : null}
+        weekDays={weekDays}
         todayKey={todayKey}
-        onClose={() => setSchedule({ open: false, dept: null, todayDuty: null, weekDays: null })}
+        onClose={() => setSchedule({ open: false, dept: null })}
       />
     </motion.main>
   );

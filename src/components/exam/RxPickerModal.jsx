@@ -1,17 +1,18 @@
+// src/components/exam/RxPickerModal.jsx
 import { AnimatePresence, motion } from "framer-motion";
 import React, { useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import Button from "../ui/Button.jsx";
-import { loadStock } from "../../data/prescriptions.js";
+import { useStock } from "../../api/pharmacy.js";
 
 export default function RxPickerModal({ open, onClose, onPickMany }) {
   const [q, setQ] = useState("");
-  const [stock, setStock] = useState([]);
   const [rows, setRows] = useState([]); // [{code,name,unit,price,dose,qty,usage}]
   const inputRef = useRef(null);
 
+  const { data: stock = [] } = useStock();
+
   useEffect(() => {
     if (open) {
-      setStock(loadStock());
       setRows([]);
       setQ("");
       const t = setTimeout(() => inputRef.current?.focus(), 80);
@@ -27,15 +28,21 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
   }, [stock, qDef]);
 
   const alreadyPicked = (code) => rows.some((r) => r.code === code);
-  function addDrug(d) { if (!alreadyPicked(d.code)) setRows((s) => [...s, { ...d, dose: "", qty: "" }]); }
+  function addDrug(d) {
+    if (!alreadyPicked(d.code)) setRows((s) => [...s, { ...d, dose: "", qty: "" }]);
+  }
   function removeDrug(code) { setRows((s) => s.filter((x) => x.code !== code)); }
 
   function onKeyDown(e) {
     if (e.key === "Escape") return onClose?.();
+    const isSearch = e.target === inputRef.current;
     if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault();
-      const first = filtered[0];
-      if (first) addDrug(first);
+      if (isSearch) {
+        e.preventDefault();
+        const first = filtered[0];
+        if (first) addDrug(first);
+      }
+      return;
     }
     if ((e.key === "Enter" && (e.ctrlKey || e.metaKey)) || e.key === "F9") {
       e.preventDefault();
@@ -147,15 +154,19 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
                           </td>
                           <td className="px-3 py-2">
                             <input
-                              type="number" min="1"
+                              type="number" min="1" step="1"
                               value={r.qty}
-                              onChange={(e) => setRows((s) => s.map((x) => (x.code === r.code ? { ...x, qty: e.target.value } : x)))}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                const n = Math.max(1, Number.parseInt(v || "0", 10) || 1);
+                                setRows((s) => s.map((x) => (x.code === r.code ? { ...x, qty: String(n) } : x)));
+                              }}
                               placeholder="SL"
                               className="w-full rounded-md px-2 py-1 ring-1 ring-teal-200/80 focus:ring-2 focus:ring-teal-500 outline-none"
                             />
                           </td>
                           <td className="px-3 py-2">
-                            <Button className="!px-2" onClick={() => removeDrug(r.code)} aria-label={`Xóa ${r.name}`} title="Xóa">✕</Button>
+                            <Button type="button" className="!px-2" onClick={() => removeDrug(r.code)} aria-label={`Xóa ${r.name}`} title="Xóa">✕</Button>
                           </td>
                         </tr>
                       ))}
@@ -169,8 +180,8 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
             <footer className="flex items-center justify-between gap-2 px-4 py-3 border-t border-slate-200 bg-white">
               <div className="text-xs text-slate-500">Gợi ý: Enter để thêm thuốc đầu, Ctrl+Enter hoặc F9 để xác nhận.</div>
               <div className="flex items-center gap-2">
-                <Button onClick={onClose}>Huỷ</Button>
-                <Button className="btn-primary" disabled={!rows.length} aria-disabled={!rows.length} onClick={() => onPickMany?.(rows)}>
+                <Button type="button" onClick={onClose}>Huỷ</Button>
+                <Button type="button" className="btn-primary" disabled={!rows.length} aria-disabled={!rows.length} onClick={() => onPickMany?.(rows)}>
                   {rows.length ? `Thêm ${rows.length} thuốc` : "Kê"}
                 </Button>
               </div>

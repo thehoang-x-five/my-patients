@@ -1,8 +1,9 @@
+// src/components/departments/DeptGrid.jsx
 import React, { useMemo } from 'react';
 import { motion } from "framer-motion";
 import DeptCard from "./DeptCard.jsx";
 
-export default function DeptGrid({ items = [], onOpenDetail, onOpenSchedule, tab = "all" }) {
+export default function DeptGrid({ items = [], onOpenDetail, onOpenSchedule, tab = "all", highlightId = null }) {
   const filteredItems = useMemo(() => {
     if (tab === "all") return items;
     return items.filter(item => {
@@ -31,6 +32,7 @@ export default function DeptGrid({ items = [], onOpenDetail, onOpenSchedule, tab
           dept={d}
           onOpenDetail={onOpenDetail}
           onOpenSchedule={onOpenSchedule}
+          pulse={highlightId && d.id === highlightId}   // NEW
         />
       ))}
     </motion.section>

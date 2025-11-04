@@ -7,7 +7,7 @@ const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 export default function ScheduleModal({ open, dept, todayDuty, weekDays, todayKey, onClose }) {
   if (!dept) return null;
 
-  const slot = todayDuty || { doc: "—", nurse: "—" };
+  const slot = (todayDuty && (todayDuty.doc || todayDuty.nurse)) ? todayDuty : { doc: "—", nurse: "—" };
 
   return (
     <AnimatePresence>
@@ -70,8 +70,10 @@ export default function ScheduleModal({ open, dept, todayDuty, weekDays, todayKe
                       <thead>
                         <tr className="text-left">
                           {DAYS.map(d => (
-                            <th key={d}
-                                className={`px-2 py-2 border-b border-slate-200 font-semibold ${d===todayKey ? "bg-indigo-50 text-indigo-800 rounded-t-md" : ""}`}>
+                            <th
+                              key={d}
+                              className={`px-2 py-2 border-b border-slate-200 font-semibold ${d===todayKey ? "bg-indigo-50 text-indigo-800 rounded-t-md" : ""}`}
+                            >
                               {d}
                             </th>
                           ))}
@@ -80,11 +82,12 @@ export default function ScheduleModal({ open, dept, todayDuty, weekDays, todayKe
                       <tbody>
                         <tr>
                           {DAYS.map(d => (
-                            <td key={d}
-                                className={`px-2 py-3 align-top border-b border-slate-100 transition-colors
-                                  ${d===todayKey ? "bg-indigo-50/70" : "hover:bg-slate-50"}`}>
-                              <div>BS: <b>{weekDays?.[d]?.doc || "—"}</b></div>
-                              <div>ĐD: <b>{weekDays?.[d]?.nurse || "—"}</b></div>
+                            <td
+                              key={d}
+                              className={`px-2 py-3 align-top border-b border-slate-100 transition-colors ${d===todayKey ? "bg-indigo-50/70" : "hover:bg-slate-50"}`}
+                            >
+                              <div>BS: <b>{(weekDays && weekDays[d] && weekDays[d].doc) ? weekDays[d].doc : "—"}</b></div>
+                              <div>ĐD: <b>{(weekDays && weekDays[d] && weekDays[d].nurse) ? weekDays[d].nurse : "—"}</b></div>
                             </td>
                           ))}
                         </tr>

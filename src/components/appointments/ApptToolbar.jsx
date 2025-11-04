@@ -39,7 +39,8 @@ export default function ApptToolbar({
         className="ml-auto relative inline-flex p-0.5 rounded-xl overflow-hidden ring-1 ring-slate-200 bg-white"
       >
         <button
-          className={`relative z-9 px-3 py-1.5 font-semibold transition ${
+          type="button"
+          className={`relative z-10 px-3 py-1.5 font-semibold transition ${
             view === "list" ? "text-violet-700" : "text-slate-700"
           }`}
           aria-pressed={view === "list"}
@@ -55,7 +56,8 @@ export default function ApptToolbar({
           <span className="relative">Danh sách</span>
         </button>
         <button
-          className={`relative z-9 px-3 py-1.5 font-semibold transition ${
+          type="button"
+          className={`relative z-10 px-3 py-1.5 font-semibold transition ${
             view === "cal" ? "text-violet-700" : "text-slate-700"
           }`}
           aria-pressed={view === "cal"}
@@ -74,6 +76,7 @@ export default function ApptToolbar({
 
       {/* CTA tạo lịch */}
       <motion.button
+        type="button"
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         onClick={onOpenCreate}

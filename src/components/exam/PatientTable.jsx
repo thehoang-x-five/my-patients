@@ -21,7 +21,7 @@ function InitialAvatar({ name = "", id = "" }) {
 
 function Thead({ children }) {
   return (
-    <thead className="sticky top-0 z-9 text-left text-[13px] font-semibold text-slate-700">
+    <thead className="sticky top-0 z-10 text-left text-[13px] font-semibold text-slate-700">
       <tr className="bg-gradient-to-b from-teal-50 to-white shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)]">
         {children}
       </tr>
@@ -132,6 +132,10 @@ function ActionButton({ active, onClick }) {
   );
 }
 
+function getKey(p) {
+  return p?.id ?? p?.queueId ?? p?.pid;
+}
+
 export default function PatientTable({ items = [], onStart, inProgress = new Set(), stretch = false }) {
   return (
     <section
@@ -170,10 +174,11 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                 </tr>
               ) : (
                 items.map((p, i) => {
-                  const active = inProgress.has(p.id);
+                  const key = getKey(p);
+                  const active = inProgress.has(key);
                   const t = tone(p, active);
                   return (
-                    <Row key={p.id ?? p.pid ?? i} i={i}>
+                    <Row key={key ?? i} i={i}>
                       <Td first><i className={`inline-block w-2 h-2 rounded-full ${pillTone[t].dot}`} title={t} /></Td>
                       <Td>{i + 1}</Td>
                       <Td><span className="font-mono font-semibold truncate block">{p.pid || "—"}</span></Td>
@@ -195,7 +200,7 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                         </span>
                       </Td>
                       <Td><StatusPills item={p} /></Td>
-                      <Td><div className="truncate text-slate-700 max-w-40 break-words">{p.note || p.symptoms || "—"}</div></Td>
+                      <Td><div className="truncate text-slate-700 max-w-[10rem] break-words">{p.note || p.symptoms || "—"}</div></Td>
                       <Td last right><ActionButton active={active} onClick={() => onStart?.(p)} /></Td>
                     </Row>
                   );

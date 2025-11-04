@@ -5,6 +5,8 @@ import { AnimatePresence } from "framer-motion";
 import "./index.css";
 import { UIProvider } from "./context/UIContext.jsx";
 import App from "./App.jsx";
+import AppProviders from "./providers/AppProviders.jsx";
+
 
 const Overview = React.lazy(() => import("./routes/Overview.jsx"));
 const Appointments = React.lazy(() => import("./routes/Appointments.jsx"));
@@ -45,7 +47,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <UIProvider>
       <Suspense fallback={<div className="p-6">Đang tải…</div>}>
         <AnimatePresence mode="wait">
-          <RouterProvider router={router} />
+        <AppProviders>
+     <RouterProvider router={router} />
+    </AppProviders>
         </AnimatePresence>
       </Suspense>
     </UIProvider>

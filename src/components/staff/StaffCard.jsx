@@ -1,18 +1,18 @@
+// src/components/staff/StaffCard.jsx
 import React from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Avatar from "./Avatar.jsx";
-import { DUTY_ROOM } from "../../data/staff.js";
 
 const dayKey = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
 
 export default function StaffCard({ item, role, onDetail, onSchedule }) {
   const online = item.status === "online";
-  const apptCount =
-    item?.apptCount ?? item?.appointmentsToday ?? item?.appts ?? item?.appointments ?? 0;
+  const apptCount = item?.apptCount ?? item?.appointmentsToday ?? item?.appts ?? item?.appointments ?? 0;
 
   const today = dayKey();
-  const roomToday = DUTY_ROOM?.[item.id]?.[today] ?? "—";
+  // server nên trả sẵn field roomToday hoặc dutyRooms[today]
+  const roomToday = item.roomToday ?? item?.dutyRooms?.[today] ?? "—";
   const isAdminNurse = role === "nurse" && item.roleType === "administrative";
 
   const primaryLabel = isAdminNurse
@@ -51,7 +51,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
           >
             📍 {roomToday}
           </span>
-          
+
           <span
             className={`px-2 py-1 rounded-full text-xs font-bold ring-1 ${
               online

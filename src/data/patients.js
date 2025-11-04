@@ -2,7 +2,7 @@
 // ===============================================
 // Mock Patients Store + Helpers for the demo app
 // ===============================================
-
+import { emit as evEmit } from "./events.js";
 // ====== TRẠNG THÁI CHUẨN ======
 export const STATUSES = {
   WAIT_INTAKE: "Chờ tiếp nhận",
@@ -16,13 +16,13 @@ export const STATUSES = {
 // ====== STORE & EVENT BUS ======
 const listeners = new Set();
 const emit = () => {
-     // gọi các subscriber trong SPA
-     listeners.forEach((fn) => fn(getAll()));
-     // bắn sự kiện global cho mọi màn hình/route khác
-     try {
-       window.dispatchEvent(new CustomEvent("patients:changed"));
-     } catch {}
-   };
+    const snapshot = getAll();
+     // local subscribers (trong cùng trang)
+     listeners.forEach((fn) => fn(snapshot));
+     // global event-bus cho các trang khác
+     evEmit("patients:changed", { all: snapshot });
+  };
+  
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
 // ====== DỮ LIỆU MẪU ======
@@ -481,15 +481,7 @@ export function getLastVisit(pid) {
   return arr.length ? arr[arr.length - 1] : null;
 }
 
-// ====== LEGACY TEMPLATE CATALOG (giữ tương thích) ======
-export const TEMPLATE_CATALOG = [
-  { id: "T-KHAM-THUONG", title: "Khám thường", price: 35000, defaultDept: "Nội tổng quát", steps: ["Tiếp nhận", "Khám lâm sàng", "Chỉ định CLS", "Kết luận & đơn thuốc"] },
-  { id: "T-TONG-QUAT", title: "Khám tổng quát", price: 150000, defaultDept: "Nội tổng quát", steps: ["Khám tổng thể", "Xét nghiệm máu", "Điện tim", "Kết luận"] },
-  { id: "T-DICH-VU", title: "Khám dịch vụ", price: 300000, defaultDept: "Nội tổng quát", steps: ["Khám chi tiết", "Xét nghiệm", "Chẩn đoán hình ảnh", "Tư vấn"] },
-  { id: "T-NOI-TIET", title: "Khám Nội tiết", price: 200000, defaultDept: "Nội tiết", steps: ["Đo đường huyết", "Đánh giá điều trị", "Điều chỉnh liều", "Hẹn tái khám"] },
-  { id: "T-TIM-MACH", title: "Khám Tim mạch", price: 250000, defaultDept: "Tim mạch", steps: ["Điện tim", "Siêu âm tim", "Đánh giá tim", "Kết luận"] },
-  { id: "T-THUYET-MINH", title: "Khám Thần kinh", price: 220000, defaultDept: "Thần kinh", steps: ["Khám thần kinh", "Điện não đồ", "Đánh giá", "Kết luận"] },
-];
+
 
 // ====== DANH MỤC KHOA / BÁC SĨ (dùng cho selector) ======
 export const DEPARTMENTS = [

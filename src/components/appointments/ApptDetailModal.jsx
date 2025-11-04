@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import Button from "../ui/Button.jsx";
 
 function Badge({ status }) {
   const map = {
@@ -45,7 +44,12 @@ export default function ApptDetailModal({
     });
     const onEsc = (e) => e.key === "Escape" && onClose?.();
     window.addEventListener("keydown", onEsc);
-    return () => window.removeEventListener("keydown", onEsc);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onEsc);
+      document.body.style.overflow = prev;
+    };
   }, [open, appt, onClose]);
 
   if (!open || !appt) return null;
@@ -65,7 +69,7 @@ export default function ApptDetailModal({
 
   const canCheckIn = appt.status !== "Đã hủy" && !appt.checkedIn;
   const isFollowup = appt.type === "Tái khám";
-
+  const pid = appt.code || appt.pid || "";
   return (
     <AnimatePresence>
       {open && (
@@ -88,6 +92,7 @@ export default function ApptDetailModal({
             exit={{ opacity: 0 }}
           >
             <motion.section
+            onClick={(e) => e.stopPropagation()}
               initial={{ opacity: 0, scale: 0.98, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98, y: 8 }}
@@ -121,7 +126,7 @@ export default function ApptDetailModal({
                   {/* Link hồ sơ chỉ khi tái khám */}
                   {isFollowup && appt.code && (
                     <Link
-                      to={`/patients?pid=${encodeURIComponent(appt.code)}`}
+                    to={`/patients?pid=${encodeURIComponent(pid)}&focus=true`}
                       className="btn btn-outline hover:!border-violet-300 hover:!bg-violet-50 hover:!text-violet-700 transition-colors"
                     >
                       Mở hồ sơ BN

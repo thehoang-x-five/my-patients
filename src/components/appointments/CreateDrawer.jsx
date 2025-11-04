@@ -3,8 +3,16 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Chip from "../ui/Chip.jsx";
-import { DEPARTMENTS, DOCTORS_QUEUE } from "../../data/patients.js";
-import { APPOINTMENTS } from "../../data/appointments.js";
+
+// ✅ Dùng API layer (TanStack Query) — KHÔNG còn data/*
+import {
+  useDepartments,            // GET /metadata/departments
+  useDoctorQueueByDept,      // GET /metadata/doctor-queue?dept=...
+} from "../../api/metadata.js";
+
+import {
+  useFindLastAppointment,    // GET /appointments/last?code=...&name=...&cutoff=YYYY-MM-DD
+} from "../../api/appointments.js";
 
 export default function CreateDrawer({
   open,
@@ -23,33 +31,36 @@ export default function CreateDrawer({
   // chỉ còn 2 loại
   const [apType, setApType] = useState("new"); // "new" | "follow_up"
 
-  // bắt form value để tìm lịch gần nhất khi chọn tái khám
+  // form state (để query lastVisit đúng yêu cầu)
   const [patientName, setPatientName] = useState("");
   const [patientCode, setPatientCode] = useState("");
   const [dateStr, setDateStr] = useState(defaultDate);
 
+  // ===== Server state (TanStack Query)
+  const { data: departments = [], isLoading: deptLoading } = useDepartments();
+  const { data: doctorQueue = [], isLoading: docLoading } =
+    useDoctorQueueByDept(selectedDept, { enabled: !!selectedDept });
+
+  // Lần khám gần nhất theo cutoff (ngày đặt)
+  const { data: lastVisit } = useFindLastAppointment(
+    {
+      code: (patientCode || "").trim(),
+      name: (patientName || "").trim(),
+      cutoff: dateStr || new Date().toISOString().slice(0, 10),
+    },
+    {
+      // chỉ gọi khi có code hoặc name
+      enabled:
+        !!(patientCode && patientCode.trim()) ||
+        !!(patientName && patientName.trim()),
+    }
+  );
+
   const availableDoctors = useMemo(() => {
     if (!selectedDept) return [];
-    const dept = DEPARTMENTS.find((d) => d.name === selectedDept);
-    if (!dept) return [];
-    return dept.doctors.map((name) => ({ name, ...DOCTORS_QUEUE[name] }));
-  }, [selectedDept]);
-
-  // Lần khám gần nhất (ưu tiên theo mã BN; nếu không có mã, so theo tên)
-  const lastVisit = useMemo(() => {
-    const pool = APPOINTMENTS.filter((a) => {
-      if (patientCode?.trim()) return a.code && a.code === patientCode.trim();
-      if (patientName?.trim())
-        return a.patient && a.patient.toLowerCase().includes(patientName.trim().toLowerCase());
-      return false;
-    });
-    // lấy lần gần nhất trước hoặc cùng ngày đặt
-    const cutoff = dateStr || new Date().toISOString().slice(0, 10);
-    const sorted = pool
-      .filter((a) => a.date <= cutoff)
-      .sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
-    return sorted[0] || null;
-  }, [patientCode, patientName, dateStr]);
+    // API trả về dạng [{name, waiting, appointments, status}]
+    return Array.isArray(doctorQueue) ? doctorQueue : [];
+  }, [selectedDept, doctorQueue]);
 
   useEffect(() => {
     if (!open) return;
@@ -74,8 +85,9 @@ export default function CreateDrawer({
   function handleSubmit(e) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const obj = Object.fromEntries(fd.entries());
-    onSubmit?.(obj);
+    const raw = Object.fromEntries(fd.entries());
+    // giữ nguyên: parent sẽ normalize & map 'type'
+    onSubmit?.(raw);
   }
 
   function handleDeptSelect(deptName) {
@@ -162,7 +174,6 @@ export default function CreateDrawer({
                     <input
                       type="date"
                       name="date"
-                      defaultValue={defaultDate}
                       value={dateStr}
                       onChange={(e) => setDateStr(e.target.value)}
                       required
@@ -214,7 +225,7 @@ export default function CreateDrawer({
                       name="department"
                       value={selectedDept}
                       readOnly
-                      placeholder="Chọn khoa..."
+                      placeholder={deptLoading ? "Đang tải..." : "Chọn khoa..."}
                       onClick={() => setShowDeptSelect(true)}
                       className="mt-1.5 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-violet-500 outline-none bg-white shadow-sm transition cursor-pointer hover:bg-violet-50"
                     />
@@ -226,7 +237,13 @@ export default function CreateDrawer({
                       name="doctor"
                       value={selectedDoctor}
                       readOnly
-                      placeholder={selectedDept ? "Chọn bác sĩ..." : "Chọn khoa trước"}
+                      placeholder={
+                        selectedDept
+                          ? docLoading
+                            ? "Đang tải..."
+                            : "Chọn bác sĩ..."
+                          : "Chọn khoa trước"
+                      }
                       onClick={() => selectedDept && setShowDoctorSelect(true)}
                       disabled={!selectedDept}
                       className="mt-1.5 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-violet-500 outline-none bg-white shadow-sm transition cursor-pointer hover:bg-violet-50 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -325,6 +342,7 @@ export default function CreateDrawer({
                   <header className="flex items-center justify-between px-6 py-4 bg-violet-50 border-b border-violet-100">
                     <h3 className="font-bold text-slate-900">Chọn khoa</h3>
                     <button
+                      type="button"
                       onClick={() => setShowDeptSelect(false)}
                       className="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:text-slate-900 transition"
                     >
@@ -334,9 +352,9 @@ export default function CreateDrawer({
 
                   <div className="p-6 overflow-y-auto max-h-[60vh]">
                     <div className="space-y-2">
-                      {DEPARTMENTS.map((dept) => (
+                      {(departments || []).map((dept) => (
                         <motion.button
-                          key={dept.id}
+                          key={dept.id || dept.name}
                           whileHover={{ scale: 1.01 }}
                           whileTap={{ scale: 0.99 }}
                           onClick={() => handleDeptSelect(dept.name)}
@@ -344,7 +362,7 @@ export default function CreateDrawer({
                         >
                           <div className="font-semibold text-slate-900">{dept.name}</div>
                           <div className="text-xs text-slate-500 mt-0.5">
-                            {dept.rooms.length} phòng • {dept.doctors.length} bác sĩ
+                            {(dept.rooms || []).length} phòng • {(dept.doctors || []).length} bác sĩ
                           </div>
                         </motion.button>
                       ))}
@@ -370,8 +388,9 @@ export default function CreateDrawer({
                   className="bg-white rounded-2xl shadow-2xl ring-1 ring-violet-200 max-w-4xl w-full max-h-[80vh] overflow-hidden"
                 >
                   <header className="flex items-center justify-between px-6 py-4 bg-violet-50 border-b border-violet-100">
-                    <h3 className="font-bold text-slate-900">Chọn bác sĩ ({selectedDept})</h3>
+                    <h3 className="font-bold text-slate-900">Chọn bác sĩ ({selectedDept || "—"})</h3>
                     <button
+                      type="button"
                       onClick={() => setShowDoctorSelect(false)}
                       className="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:text-slate-900 transition"
                     >
@@ -404,17 +423,17 @@ export default function CreateDrawer({
                               </td>
                               <td className="px-3 py-2.5">
                                 <Chip tone="amber" dot="amber" className="text-xs">
-                                  {doc.waiting}
+                                  {doc.waiting ?? 0}
                                 </Chip>
                               </td>
                               <td className="px-3 py-2.5">
                                 <Chip tone="sky" dot="sky" className="text-xs">
-                                  {doc.appointments}
+                                  {doc.appointments ?? 0}
                                 </Chip>
                               </td>
                               <td className="px-3 py-2.5">
                                 <Chip tone="white" dot="emerald" className="text-xs">
-                                  {doc.status}
+                                  {doc.status || "—"}
                                 </Chip>
                               </td>
                               <td className="px-3 py-2.5">
@@ -432,11 +451,8 @@ export default function CreateDrawer({
 
                           {availableDoctors.length === 0 && (
                             <tr>
-                              <td
-                                colSpan={5}
-                                className="px-4 py-6 text-center text-slate-400"
-                              >
-                                Chưa chọn khoa
+                              <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
+                                {selectedDept ? "Không có dữ liệu bác sĩ" : "Chưa chọn khoa"}
                               </td>
                             </tr>
                           )}

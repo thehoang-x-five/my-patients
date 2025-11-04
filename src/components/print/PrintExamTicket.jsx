@@ -79,7 +79,7 @@ export default function PrintExamTicket({
       <h1 class="title ">${isServiceIntake ? "PHIẾU KHÁM DỊCH VỤ" : "PHIẾU TIẾP NHẬN KHÁM"}</h1>
 
       <!-- Thông tin BN -->
-      <table class="margin-top: 6px;">
+      <table style="margin-top: 6px;">
         <tbody>
           <tr>
             <th style="width:22%">Họ và tên</th>

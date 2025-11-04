@@ -145,7 +145,7 @@ function FilterPopover({
                       aria-selected={statusFilter === val}
                       onClick={() => setStatusFilter(val)}
                       className={
-                        "relative z-10 px-3 py-1.5 font-semibold " +
+                        "relative w-32 z-10 px-3 py-1.5 font-semibold " +
                         (statusFilter === val ? "text-cyan-700" : "text-slate-700")
                       }
                     >
@@ -176,7 +176,7 @@ function FilterPopover({
                         aria-selected={nurseKind === val}
                         onClick={() => setNurseKind(val)}
                         className={
-                          "relative z-10 px-3 py-1.5 font-semibold " +
+                          "relative w-32 z-10 px-3 py-1.5 font-semibold " +
                           (nurseKind === val ? "text-teal-700" : "text-slate-700")
                         }
                       >

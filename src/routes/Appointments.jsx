@@ -1,109 +1,89 @@
-import React from 'react';
-import { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import ApptToolbar from "../components/appointments/ApptToolbar.jsx";
 import ApptList from "../components/appointments/ApptList.jsx";
 import ApptCalendar from "../components/appointments/ApptCalendar.jsx";
 import DayPanel from "../components/appointments/DayPanel.jsx";
 import CreateDrawer from "../components/appointments/CreateDrawer.jsx";
 import ApptDetailModal from "../components/appointments/ApptDetailModal.jsx";
-import Chip from "../components/ui/Chip.jsx";
-import { APPOINTMENTS, DOCTORS } from "../data/appointments.js";
-import { STATUSES } from "../data/patients.js";
-import { enqueueFromAppointment } from "../data/queue.js";
+import {
+  useAppointmentsByDate,
+  useCreateAppointment,
+  useUpdateAppointment,
+  useCheckInAppointment,
+} from "../api/appointments";
+import { useUIStore } from "../components/stores/uiStore";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
+import { toast } from "react-toastify";
 
-function groupByDate(appts) {
-  return appts.reduce((acc, a) => ((acc[a.date] ||= []).push(a), acc), {});
-}
-function formatVN(ymd) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
-}
+const RECEPTION_HOURS = { start: 6, end: 17 };
+const isWithinReceptionHours = () => {
+  const h = new Date().getHours();
+  return h >= RECEPTION_HOURS.start && h < RECEPTION_HOURS.end;
+};
 const mm = (t) => {
   const [h, m] = (t || "00:00").split(":").map(Number);
   return h * 60 + (m || 0);
 };
-const overlap = (a, b) => {
-  const sa = mm(a.time), ea = sa + (a.duration || 30);
-  const sb = mm(b.time), eb = sb + (b.duration || 30);
-  return sa < eb && sb < ea;
-};
-
-// Giờ tiếp nhận: 6h-17h
-const RECEPTION_HOURS = { start: 6, end: 17 };
-function isWithinReceptionHours() {
-  const now = new Date();
-  const hour = now.getHours();
-  return hour >= RECEPTION_HOURS.start && hour < RECEPTION_HOURS.end;
-}
 
 export default function Appointments() {
-  const navigate = useNavigate();
   useViewportVH();
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
+  const TODAY = new Date().toISOString().slice(0, 10);
   const [view, setView] = useState("list");
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-
   const [month, setMonth] = useState(() => {
     const d = new Date();
     d.setDate(1);
     return d;
   });
   const [panelDate, setPanelDate] = useState(null);
-
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createDate, setCreateDate] = useState("");
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailAppt, setDetailAppt] = useState(null);
-
   const [newId, setNewId] = useState(null);
-  const [toast, setToast] = useState(null);
-  const toastTimer = useRef();
 
-  const TODAY = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // today list
+  const { data: todayItems = [], isLoading } = useAppointmentsByDate(TODAY);
+  const itemsByDate = {};
+  (todayItems || []).forEach((a) => {
+    (itemsByDate[a.date] ||= []).push(a);
+  });
 
-  // Update time every minute
+  // fetch items for selected panel date on demand
+  const { data: panelItems = [] } = useAppointmentsByDate(panelDate, { enabled: !!panelDate });
+
+  // reactive clock
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
+    const t = setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => clearInterval(t);
   }, []);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setItems(APPOINTMENTS);
-      setLoading(false);
-    }, 400);
-    return () => clearTimeout(t);
-  }, []);
-
-  const itemsToday = useMemo(
-    () =>
-      items
-        .filter((a) => a.date === TODAY)
-        .sort((a, b) => (a.time || "").localeCompare(b.time || "")),
-    [items, TODAY]
-  );
 
   const counts = useMemo(
     () => ({
-      today: itemsToday.length,
-      pending: itemsToday.filter((a) => a.status === "Đang chờ").length,
-      done: itemsToday.filter((a) => a.status === "Đã xác nhận").length,
-      cancel: itemsToday.filter((a) => a.status === "Đã hủy").length,
+      today: todayItems.length,
+      pending: todayItems.filter((a) => a.status === "Đang chờ").length,
+      done: todayItems.filter((a) => a.status === "Đã xác nhận").length,
+      cancel: todayItems.filter((a) => a.status === "Đã hủy").length,
     }),
-    [itemsToday]
+    [todayItems]
   );
 
-  const itemsByDate = useMemo(() => groupByDate(items), [items]);
+  function ensureMonthVisible(ymd) {
+    const d = new Date(ymd);
+    if (d.getFullYear() !== month.getFullYear() || d.getMonth() !== month.getMonth()) {
+      setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+    }
+  }
+
+  const { mutateAsync: createAppt } = useCreateAppointment();
+  const { mutateAsync: updateAppt } = useUpdateAppointment();
+  const { mutateAsync: checkInAppt } = useCheckInAppointment();
 
   function openDetail(appt) {
     setDetailAppt(appt);
@@ -113,86 +93,51 @@ export default function Appointments() {
     setDetailOpen(false);
     setDetailAppt(null);
   }
-  function updateAppt(patch) {
-    setItems((prev) =>
-      prev.map((it) => (it.id === patch.id ? { ...it, ...patch } : it))
-    );
-    setDetailAppt((a) => (a?.id === patch.id ? { ...a, ...patch } : a));
-  }
 
-  function showToast(msg, tone = "ok") {
-    clearTimeout(toastTimer.current);
-    setToast({ msg, tone });
-    toastTimer.current = setTimeout(() => setToast(null), 1800);
-  }
-
-  function ensureMonthVisible(ymd) {
-    const d = new Date(ymd);
-    if (
-      d.getFullYear() !== month.getFullYear() ||
-      d.getMonth() !== month.getMonth()
-    ) {
-      setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
-    }
-  }
-
-  function addApptFromForm(fd) {
-    // Check working hours
+  async function addApptFromForm(fd) {
     if (!isWithinReceptionHours()) {
-      showToast(`Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`, "warn");
+      toast.warn(`Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`);
       return;
     }
-
-    const {
-      patient_name,
-      patient_code,
-      date,
-      start,
-      duration,
-      type,
-      doctor,
-      department,
-      note,
-    } = fd;
-
+    // normalize payload (support CreateDrawer raw FormData)
+    const isPayload = fd && ("patient" in fd || "time" in fd);
+    let patient_name, patient_code, date, start, duration, type, doctor, department, note;
+    if (isPayload) {
+      patient_name = fd.patient?.trim() || "";
+      patient_code = fd.code?.trim() || "";
+      date = fd.date;
+      start = fd.time || fd.start;
+      duration = fd.duration;
+      type = fd.type;
+      doctor = fd.doctor;
+      department = fd.dept || fd.department;
+      note = fd.note || "";
+    } else {
+      ({ patient_name, patient_code, date, start, duration, type, doctor, department, note } = fd);
+    }
     const newItem = {
-      id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
       patient: patient_name,
       code: patient_code,
       date,
       time: start,
-      duration: parseInt(duration, 10) || 30,
+      duration: parseInt(duration || 30, 10),
       type,
       doctor,
       dept: department,
       note,
-      status: "Đã xác nhận",
-      checkedIn: false,
-      paid: false,
     };
 
-    const sameDay = items.filter(
-      (x) => x.date === date && (doctor ? x.doctor === doctor : true)
-    );
+    // basic clash check on client (optional; server should validate)
+    const sameDay = todayItems.filter((x) => x.date === date && (doctor ? x.doctor === doctor : true));
     const clash = sameDay.find((x) => {
-      const sa = mm(x.time), ea = sa + (x.duration || 30);
-      const sb = mm(newItem.time), eb = sb + (newItem.duration || 30);
+      const sa = mm(x.time),
+        ea = sa + (x.duration || 30);
+      const sb = mm(newItem.time),
+        eb = sb + (newItem.duration || 30);
       return sa < eb && sb < ea;
     });
 
-    let statusMsg = "Đã tạo lịch hẹn.";
-    if (clash) {
-      newItem.status = "Đang chờ";
-      newItem.note = "";
-      statusMsg = `Trùng lịch với ${clash.patient} (${clash.time}).`;
-    }
-
-    setItems((prev) =>
-      [newItem, ...prev].sort((a, b) =>
-        (a.date + a.time).localeCompare(b.date + b.time)
-      )
-    );
-
+    const created = await createAppt({ ...newItem, status: clash ? "Đang chờ" : "Đã xác nhận" });
     if (date === TODAY) {
       setView("list");
       setPanelDate(null);
@@ -200,56 +145,28 @@ export default function Appointments() {
       ensureMonthVisible(date);
       setPanelDate(date);
       setView("cal");
-      setNewId(newItem.id);
+      setNewId(created?.id);
     }
-
     setDrawerOpen(false);
     setCreateDate("");
-    showToast(statusMsg, clash ? "warn" : "ok");
+    toast[clash ? "warn" : "success"](clash ? `Trùng lịch với ${clash.patient} (${clash.time}).` : "Đã tạo lịch hẹn.");
   }
 
-  /* Check-in: đánh dấu & điều hướng */
-  function handleCheckIn(appt) {
+  async function handleCheckIn(appt) {
     if (!appt || appt.status === "Đã hủy") return;
     if (appt.checkedIn) {
-      showToast("Bệnh nhân đã check-in trước đó.", "warn");
+      toast.warn("Bệnh nhân đã check-in trước đó.");
       return;
     }
-
-    const isFollowup = appt.type === "Tái khám" || appt.type === "tái khám" || appt.type === "follow_up" || appt.type === "Khám định kỳ";
-
-    // Đưa vào hàng chờ
-    enqueueFromAppointment(
-      {
-        id: appt.id,
-        date: appt.date,
-        time: appt.time,
-        patient: appt.patient,
-        code: appt.code,
-        dept: appt.dept,
-        doctor: appt.doctor,
-      },
-      { note: appt.note || "" }
-    );
-
-    // Đánh dấu trên lịch hẹn
-    updateAppt({ id: appt.id, checkedIn: true, paid: true });
-
-    // Điều hướng sang trang bệnh nhân
-    if (isFollowup && appt.code) {
-      navigate(`/patients?pid=${appt.code}&focus=true&highlightId=${appt.id}`);
-      showToast("Đã check-in, chuyển sang bệnh nhân.", "ok");
-    } else {
-      navigate(`/patients?action=add&defaultCode=${appt.code || ""}&defaultName=${appt.patient}&focus=true`);
-      showToast("Đã check-in, mở thêm bệnh nhân.", "ok");
-    }
-
+    await checkInAppt(appt.id);
+    const pid = appt.code || appt.pid || null;
+    if (pid) useUIStore.getState().setHighlightPid(pid);
+    else useUIStore.getState().flashAdd();
+    toast.success("Đã check-in.");
     closeDetail();
   }
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-  };
+  const formatTime = (date) => date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 
   return (
     <motion.main
@@ -258,19 +175,16 @@ export default function Appointments() {
       exit={{ opacity: 0, y: -8 }}
       className="px-4 pb-3 pt-1 min-h-0 overflow-hidden"
     >
-  
-      {/* Content */}
       <div
-         className="mt-2 flex flex-col min-h-0
-         h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
-style={{ "--topbar-h": `${topbar}px` }}
+        className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
+        style={{ "--topbar-h": `${topbar}px` }}
       >
-                <ApptToolbar
+        <ApptToolbar
           view={view}
           setView={setView}
           onOpenCreate={() => {
             if (!isWithinReceptionHours()) {
-              showToast(`Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`, "warn");
+              toast.warn(`Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`);
               return;
             }
             setCreateDate(panelDate || TODAY);
@@ -281,27 +195,17 @@ style={{ "--topbar-h": `${topbar}px` }}
           timeLabel={formatTime(currentTime)}
           receptionHours={RECEPTION_HOURS}
         />
+
         <div className="mt-3 flex-1 min-h-0">
           {view === "list" ? (
-            <ApptList
-              items={itemsToday}
-              loading={loading}
-              error={error}
-              onDetail={openDetail}
-              onCheckIn={handleCheckIn}
-              stretch
-            />
+            <ApptList items={todayItems} loading={isLoading} error={null} onDetail={openDetail} onCheckIn={handleCheckIn} stretch />
           ) : (
             <div className="h-full min-h-0 p-0.5 overflow-auto scrollbar-none">
               <ApptCalendar
                 month={month}
                 itemsByDate={itemsByDate}
-                onPrev={() =>
-                  setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))
-                }
-                onNext={() =>
-                  setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))
-                }
+                onPrev={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+                onNext={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
                 onPickDay={(d) => {
                   setPanelDate(d);
                   setNewId(null);
@@ -315,7 +219,7 @@ style={{ "--topbar-h": `${topbar}px` }}
       <DayPanel
         open={!!panelDate}
         dateLabel={panelDate ? `${panelDate.split("-").reverse().join("/")}` : ""}
-        items={panelDate ? itemsByDate[panelDate] || [] : []}
+        items={panelItems}
         onClose={() => {
           setPanelDate(null);
           setNewId(null);
@@ -325,7 +229,7 @@ style={{ "--topbar-h": `${topbar}px` }}
           panelDate
             ? () => {
                 if (!isWithinReceptionHours()) {
-                  showToast(`Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`, "warn");
+                  toast.warn(`Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`);
                   return;
                 }
                 setCreateDate(panelDate);
@@ -337,39 +241,15 @@ style={{ "--topbar-h": `${topbar}px` }}
         onCheckIn={handleCheckIn}
       />
 
-      <CreateDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onSubmit={addApptFromForm}
-        doctorSuggest={DOCTORS}
-        defaultDate={createDate || TODAY}
-      />
+      <CreateDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} onSubmit={addApptFromForm} defaultDate={createDate || TODAY} />
 
       <ApptDetailModal
         open={detailOpen}
         appt={detailAppt}
         onClose={closeDetail}
-        onUpdate={updateAppt}
+        onUpdate={(patch) => useUpdateAppointment().mutateAsync({ id: patch.id, patch })}
         onCheckIn={handleCheckIn}
       />
-
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            className={[
-              "fixed right-4 bottom-4 z-50 rounded-xl px-4 py-3 shadow-lg ring-1 font-semibold",
-              toast.tone === "warn"
-                ? "bg-amber-50 text-amber-700 ring-amber-200"
-                : "bg-emerald-50 text-emerald-700 ring-emerald-200",
-            ].join(" ")}
-          >
-            {toast.msg}
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.main>
   );
 }

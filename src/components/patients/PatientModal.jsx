@@ -1,36 +1,38 @@
+
+// src/components/patients/PatientModal.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
 
+// ✅ Chỉ dùng API & metadata từ layer API
 import {
-  VISITS,
-  TRANSACTIONS,
-  DEPARTMENTS,
-  DOCTORS_QUEUE,
-  addVisit,
-  addTransaction,
-  listAppointmentHolds,
   STATUSES,
-  getLastVisit,
-  markAppointmentDoneForPid,
-  createFollowupHold,
-} from "../../data/patients.js";
+  useVisits,
+  useTransactions,
+  useAppointmentHolds,
+  useExamTemplates,
+  useExtraFields,
+  useDepartments,
+  useDoctorsQueue,
+  // mutations
+  useAddVisit,
+  useAddTransaction,
+  useCreateFollowupHold,
+} from "../../api/patients.js";
 
 import {
-  enqueueWalkin,
-  enqueueFromAppointment,
-  enqueueReturnToDoctor,
-  QUEUE_RULES,
-  getQueue,
-  enqueueService,
-} from "../../data/queue.js";
+  useEnqueueWalkin,
+  useEnqueueFromAppointment,
+  useReturnToDoctor,
+  useEnqueueService,
+} from "../../api/queue.js";
+
 import {
-  SERVICE_STATUSES,
-  markServiceDone,
-  markWaitDoctorReview,
-  markServiceDispatched,
-} from "../../data/patientFlow.js";
-import { EXTRA_FIELDS, EXAM_TEMPLATES } from "../../data/examination.js";
+  useMarkServiceDispatched,
+  useMarkServiceDone,
+  useMarkWaitDoctorReview,
+} from "../../api/patientFlow.js";
+
 import PrintExamTicket from "../print/PrintExamTicket.jsx";
 
 const ANIMATION_CONFIG = {
@@ -91,6 +93,7 @@ export default function PatientModal({
       </div>
     </div>
   );
+
   const firstRef = useRef(null);
   const scrollTopRef = useRef(null);
 
@@ -98,14 +101,15 @@ export default function PatientModal({
   const change = (k, v) => setForm((s) => ({ ...s, [k]: v }));
 
   // ---------- Exam template / booking ----------
-  const [tplId, setTplId] = useState("T-KHAM-THUONG");
-  const tplList = Array.isArray(EXAM_TEMPLATES) ? EXAM_TEMPLATES : [];
+  const { data: tplList = [] } = useExamTemplates();
+  const [tplId, setTplId] = useState(() => tplList[0]?.id || "T-KHAM-THUONG");
   const tpl = useMemo(
     () =>
       tplList.find((t) => t?.id === tplId) ||
       tplList[0] || { title: "Khám thường", price: 70000 },
     [tplId, tplList]
   );
+
   const [exam, setExam] = useState({
     type: "Khám thường",
     dept: "",
@@ -170,21 +174,11 @@ export default function PatientModal({
       }, 0),
     [rx]
   );
-  const isSvcProcessing = useMemo(
-    () =>
-      new RegExp(
-        `^${SERVICE_STATUSES.WAIT_PROC_SVC.replace(
-          /[.*+?^${}()|[\]\\]/g,
-          "\\$&"
-        )}$`,
-        "i"
-      ).test(patient?.status || ""),
-    [patient?.status]
-  );
 
   // ---------- Thông tin bổ sung ----------
+  const { data: extraFields = [] } = useExtraFields();
   const [extras, setExtras] = useState([]);
-  const [newExtraKey, setNewExtraKey] = useState(EXTRA_FIELDS[0]?.key || "");
+  const [newExtraKey, setNewExtraKey] = useState(extraFields[0]?.key || "");
   const [newExtraVal, setNewExtraVal] = useState("");
 
   function pushExtra() {
@@ -205,7 +199,7 @@ export default function PatientModal({
   }
 
   const [examExtras, setExamExtras] = useState([]);
-  const [newExamKey, setNewExamKey] = useState(EXTRA_FIELDS[0]?.key || "");
+  const [newExamKey, setNewExamKey] = useState(extraFields[0]?.key || "");
   const [newExamVal, setNewExamVal] = useState("");
   function pushExamExtra() {
     if (!newExamVal.trim()) return;
@@ -216,22 +210,22 @@ export default function PatientModal({
     setExamExtras((s) => s.filter((_, idx) => idx !== i));
   }
 
-  // ---------- Derived ----------
   const patientExtras = useMemo(() => {
     if (!patient) return [];
-    return EXTRA_FIELDS.filter(
-      (f) => patient[f.key] && String(patient[f.key]).trim().length
-    ).map((f) => ({ key: f.key, value: String(patient[f.key]), label: f.label }));
-  }, [patient]);
+    return (extraFields || [])
+      .filter((f) => patient[f.key] && String(patient[f.key]).trim().length)
+      .map((f) => ({ key: f.key, value: String(patient[f.key]), label: f.label }));
+  }, [patient, extraFields]);
 
   useEffect(() => {
     if (!open) return;
     setForm(patient || {});
-    setTplId("T-KHAM-THUONG");
-    setExam({ type: "Khám thường", dept: "", room: "", symptoms: "" });
-    const preExtras = EXTRA_FIELDS.filter(
-      (f) => patient?.[f.key] && String(patient[f.key]).trim().length
-    ).map((f) => ({ key: f.key, value: String(patient[f.key]) }));
+    setTplId(tplList[0]?.id || "T-KHAM-THUONG");
+    setExam({ type: "Khám thường", dept: "", room: "", symptoms: "", note: "" });
+
+    const preExtras = (extraFields || [])
+      .filter((f) => patient?.[f.key] && String(patient[f.key]).trim().length)
+      .map((f) => ({ key: f.key, value: String(patient[f.key]) }));
     setExamExtras(preExtras);
 
     setBooking({
@@ -247,74 +241,51 @@ export default function PatientModal({
 
     setRx([]);
 
-    if (patient && mode === "process") {
-      setDiagnosisData((prev) => prev ?? DIAG_INIT);
-      const svcItems = Array.isArray(patient?.serviceOrder?.items)
-        ? patient.serviceOrder.items
-        : [];
-      setSvcResults(
-        svcItems.map((s) => ({
-          service: s,
-          result: "",
-          note: "",
-          attachments: [],
-        }))
-      );
-    }
-
-    if (patient && mode === "edit") {
-      const pre = EXTRA_FIELDS.filter(
-        (f) => patient[f.key] && String(patient[f.key]).trim().length
-      ).map((f) => ({ key: f.key, value: String(patient[f.key]) }));
-      setExtras(pre);
-    } else {
-      setExtras([]);
-    }
-
     const t = setTimeout(() => firstRef.current?.focus(), 60);
     return () => clearTimeout(t);
-  }, [open, patient, mode, today]);
+  }, [open, patient, today, extraFields, tplList]);
 
   useEffect(() => {
     if (!tpl) return;
     setBooking((b) => ({ ...b, price: Number(tpl.price ?? b.price ?? 70000) }));
   }, [tpl]);
 
-  const visits = VISITS[patient?.id] || [];
-  const transactions = TRANSACTIONS[patient?.id] || [];
+  // ===== Server state (TanStack Query)
+  const pidQ = patient?.id;
+  const { data: visits = [] } = useVisits(pidQ);
+  const { data: transactions = [] } = useTransactions(pidQ);
+  const { data: holds = [] } = useAppointmentHolds(pidQ);
+  // Metadata for departments / doctors
+  const { data: departments = [] } = useDepartments();
+  const { data: doctorsQueue = {} } = useDoctorsQueue();
+
+  // Lần khám gần nhất
+  const lastVisit = useMemo(() => {
+    return [...visits].sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  }, [visits]);
 
   // ---- Helpers nhận diện trạng thái ----
   const statusLow = (patient?.status || "").toLowerCase();
   const isServiceIntake = /chờ tiếp nhận \(dịch vụ\)/i.test(statusLow);
   const isFollowupStatus = (patient?.status || "") === STATUSES.SCHEDULED_FUP;
 
-  // ---- Prefill cho Hẹn tái khám ----
+  // Prefill cho Hẹn tái khám / Khám dịch vụ
   useEffect(() => {
     if (!open || mode !== "exam") return;
     if (isFollowupStatus) {
-      const holds = listAppointmentHolds(patient?.id || "");
-      const fup = holds.find(
-        (h) => h.type === "followup" && h.status === "scheduled"
-      );
+      const fup = holds.find((h) => h.type === "followup" && h.status === "scheduled");
       if (fup) {
-        setExam((s) => ({ ...s, dept: fup.dept || "", room: "" }));
+        setExam((s) => ({ ...s, dept: fup.dept || "", room: "", note: lastVisit?.note || "" }));
         setBooking((b) => ({ ...b, doctor: fup.doctor || "", dept: fup.dept || "" }));
+      } else {
+        setExam((s) => ({ ...s, note: lastVisit?.note || "" }));
       }
-      const last = getLastVisit(patient?.id || "");
-      setExam((s) => ({ ...s, note: last?.note || "" }));
     }
     if (isServiceIntake) {
       setTplId("T-KHAM-DV");
-      setExam((s) => ({
-        ...s,
-        type: "Khám dịch vụ",
-        dept: "",
-        symptoms: "",
-        note: "",
-      }));
+      setExam((s) => ({ ...s, type: "Khám dịch vụ", dept: "", symptoms: "", note: "" }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mode]);
+  }, [open, mode, isFollowupStatus, isServiceIntake, holds, lastVisit]);
 
   // ---- Danh sách phòng dịch vụ mặc định ----
   const SERVICE_ROOMS = ["X-Quang", "Siêu âm", "Xét nghiệm", "Nội soi"];
@@ -334,13 +305,12 @@ export default function PatientModal({
   }, [serviceItems]);
 
   const priceOfService = (name) => {
-    const hit = EXAM_TEMPLATES.find((t) => t.id === name || t.title === name);
+    const hit =
+      tplList.find((t) => t.id === name || t.title === name) ||
+      tplList.find((t) => t.title?.toLowerCase() === String(name).toLowerCase());
     return hit?.price || 0;
   };
-  const totalServiceFee = serviceItems.reduce(
-    (sum, it) => sum + priceOfService(it),
-    0
-  );
+  const totalServiceFee = serviceItems.reduce((sum, it) => sum + priceOfService(it), 0);
 
   function saveEdit(e) {
     e.preventDefault();
@@ -362,46 +332,50 @@ export default function PatientModal({
   const availableDoctors = useMemo(() => {
     const deptName = exam.dept || booking.dept;
     if (!deptName) return [];
-    const dept = DEPARTMENTS.find((d) => d.name === deptName);
+    const dept = (departments || []).find((d) => d.name === deptName);
     if (!dept) return [];
-    return dept.doctors.map((name) => ({
+    return (dept.doctors || []).map((name) => ({
       name,
-      ...DOCTORS_QUEUE[name],
+      ...(doctorsQueue?.[name] || { dept: deptName, waiting: 0, appointments: 0, status: "Đang làm việc" }),
     }));
-  }, [exam.dept, booking.dept]);
+  }, [exam.dept, booking.dept, departments, doctorsQueue]);
 
   const availableRooms = useMemo(() => {
     if (isServiceIntake) return SERVICE_ROOMS;
     const deptName = exam.dept || booking.dept;
     if (!deptName) return [];
-    const dept = DEPARTMENTS.find((d) => d.name === deptName);
-    return dept ? dept.rooms : [];
-  }, [exam.dept, booking.dept, isServiceIntake]);
+    const dept = (departments || []).find((d) => d.name === deptName);
+    return dept ? (dept.rooms || []) : [];
+  }, [exam.dept, booking.dept, isServiceIntake, departments]);
 
-  const waitingByDept = useMemo(() => {
-    const q = getQueue();
-    const map = {};
-    q.forEach((it) => {
-      const k = it.dept || "";
-      map[k] = (map[k] || 0) + 1;
-    });
-    return map;
-  }, [open]);
+  const waitingByDept = {};
 
-   /* ==================== PRINT OVERLAY STATE ==================== */
-   const [print, setPrint] = useState({ show: false, payload: {} });
-   const openPrint = (payload) => setPrint({ show: true, payload });
-   const closePrint = () => {
-        setPrint({ show: false, payload: {} });
-        onClose?.();
-     };
-   const currentUser =
-     (typeof window !== "undefined" &&
-       window.APP_USER &&
-       (window.APP_USER.fullName || window.APP_USER.name)) ||
-     "—";
- 
-  // ----------------- LUỒNG KHÁM TRỰC TIẾP -----------------
+  /* ==================== PRINT OVERLAY STATE ==================== */
+  const [print, setPrint] = useState({ show: false, payload: {} });
+  const openPrint = (payload) => setPrint({ show: true, payload });
+  const closePrint = () => {
+    setPrint({ show: false, payload: {} });
+    onClose?.();
+  };
+  const currentUser =
+    (typeof window !== "undefined" &&
+      window.APP_USER &&
+      (window.APP_USER.fullName || window.APP_USER.name)) ||
+    "—";
+
+  // ===== Mutations
+  const addVisitMut = useAddVisit();
+  const addTxnMut = useAddTransaction();
+  const enqueueWalkinMut = useEnqueueWalkin();
+  const enqueueFromApptMut = useEnqueueFromAppointment();
+  const enqueueServiceMut = useEnqueueService();
+  const returnToDoctorMut = useReturnToDoctor();
+  const svcDispatched = useMarkServiceDispatched();
+  const svcDone = useMarkServiceDone();
+  const svcWaitReview = useMarkWaitDoctorReview();
+  const createFollowupHold = useCreateFollowupHold(); // ✅ giữ ở top-level
+
+  // ----------------- KHÁM TRỰC TIẾP -----------------
   function handleDirectExam() {
     const { id: pid, name } = form || {};
     if (!pid) return alert("Thiếu mã BN.");
@@ -416,24 +390,25 @@ export default function PatientModal({
       if (!services.length) return alert("Chưa có danh sách dịch vụ chỉ định.");
 
       if (totalServiceFee > 0) {
-        addTransaction(pid, {
-          date: new Date().toLocaleDateString("vi-VN"),
-          item: `Phí dịch vụ (${services.length} hạng mục)`,
-          amount: totalServiceFee,
-          status: "Đã thu",
-          ref: `SV-${Date.now()}`,
+        addTxnMut.mutate({
+          pid,
+          data: {
+            date: new Date().toLocaleDateString("vi-VN"),
+            item: `Phí dịch vụ (${services.length} hạng mục)`,
+            amount: totalServiceFee,
+            status: "Đã thu",
+            ref: `SV-${Date.now()}`,
+          },
         });
       }
 
       const perNotes = services
         .map(
-          (s, i) => `• ${s}${serviceRooms[i] ? ` @ ${serviceRooms[i]}` : ""}: ${
-            serviceNotes[i] || "—"
-          }`
+          (s, i) => `• ${s}${serviceRooms[i] ? ` @ ${serviceRooms[i]}` : ""}: ${serviceNotes[i] || "—"}`
         )
         .join("\n");
 
-      enqueueService({
+      enqueueServiceMut.mutate({
         pid,
         name,
         services,
@@ -441,7 +416,7 @@ export default function PatientModal({
         dept: "Cận lâm sàng",
         doctor: "Khu dịch vụ",
       });
-      markServiceDispatched(pid);
+      svcDispatched.mutate({ pid });
       onMutatePatient?.(pid, { status: "Chờ khám (dịch vụ)" });
 
       openPrint({
@@ -451,15 +426,15 @@ export default function PatientModal({
         examInfo: { type: exam.type || tpl?.title || "Khám dịch vụ", note: exam.note || "" },
         isServiceIntake: true,
         totalServiceFee,
-        feePaid: totalServiceFee > 0,            // để hiện "ĐÃ THU"
+        feePaid: totalServiceFee > 0,
         services: (serviceItems || []).map((sv, i) => ({
           name: sv,
           room: serviceRooms[i] || `Phòng ${sv}`,
           price: priceOfService(sv),
-          note: serviceNotes[i] || ""
+          note: serviceNotes[i] || "",
         })),
       });
-      
+
       return;
     }
 
@@ -471,35 +446,39 @@ export default function PatientModal({
     const label = isFollowupStatus ? "Ghi chú" : "Triệu chứng";
     const examNote = [
       `${label}: ${isFollowupStatus ? exam.note || "—" : exam.symptoms || "—"}`,
-      ...examExtras.map(
-        (e) =>
-          `${
-            EXTRA_FIELDS.find((f) => f.key === e.key)?.label || e.key
-          }: ${e.value}`
-      ),
+      ...examExtras.map((e) => {
+        const lab = (extraFields || []).find((f) => f.key === e.key)?.label || e.key;
+        return `${lab}: ${e.value}`;
+      }),
     ].join("\n");
 
-    addVisit(pid, {
-      date: new Date().toISOString().slice(0, 10),
-      dept,
-      doctor,
-      room,
-      note: `Tiếp nhận trực tiếp • ${exam.type}\n${examNote}`,
-      by: "Lễ tân",
-      type: "Walk-in",
+    addVisitMut.mutate({
+      pid,
+      data: {
+        date: new Date().toISOString().slice(0, 10),
+        dept,
+        doctor,
+        room,
+        note: `Tiếp nhận trực tiếp • ${exam.type}\n${examNote}`,
+        by: "Lễ tân",
+        type: "Walk-in",
+      },
     });
 
     if (fee > 0) {
-      addTransaction(pid, {
-        date: new Date().toLocaleDateString("vi-VN"),
-        item: `Phí khám (${exam.type})`,
-        amount: fee,
-        status: "Đã thu",
-        ref: `WI${Date.now()}`,
+      addTxnMut.mutate({
+        pid,
+        data: {
+          date: new Date().toLocaleDateString("vi-VN"),
+          item: `Phí khám (${exam.type})`,
+          amount: fee,
+          status: "Đã thu",
+          ref: `WI${Date.now()}`,
+        },
       });
     }
 
-    enqueueWalkin({
+    enqueueWalkinMut.mutate({
       pid,
       name,
       dept,
@@ -509,14 +488,10 @@ export default function PatientModal({
     });
     onMutatePatient?.(pid, { status: STATUSES.WAIT_EXAM });
 
-    window.dispatchEvent(
-      new CustomEvent("app:navigate", { detail: { to: `/examination` } })
-    );
+    window.dispatchEvent(new CustomEvent("app:navigate", { detail: { to: `/examination` } }));
 
-   
     // In phiếu khám thường
     openPrint({
-      type: "walkin",
       patient: { id: pid, name, gender: form?.gender, dob: form?.dob, phone: form?.phone, address: form?.address },
       booking: { date: booking.date, time: booking.time, price: fee, doctor, dept },
       examInfo: { type: exam.type || tpl?.title || "Khám", dept, room },
@@ -524,7 +499,6 @@ export default function PatientModal({
       totalServiceFee: 0,
       feePaid: fee > 0,
     });
-    
   }
 
   // ----------------- LUỒNG TÁI KHÁM (giữ chỗ) -----------------
@@ -532,20 +506,17 @@ export default function PatientModal({
     const { id: pid, name } = form || {};
     if (!pid) return alert("Thiếu mã BN.");
 
-    const holds = listAppointmentHolds(pid);
-    const fup = holds.find(
-      (h) => h.type === "followup" && h.status === "scheduled"
-    );
-
+    const fup = holds.find((h) => h.type === "followup" && h.status === "scheduled");
     if (!fup) {
       alert("Không tìm thấy lịch hẹn tái khám.");
       return;
     }
 
+    const GRACE_MIN = 10; // ⏱️ thay cho QUEUE_RULES.GRACE_MIN
     const now = new Date();
     const st = new Date(`${fup.date}T${fup.time || "00:00"}:00`);
     const diffMin = Math.round((now - st) / 60000);
-    const isLate = diffMin > QUEUE_RULES.GRACE_MIN;
+    const isLate = diffMin > GRACE_MIN;
 
     const dept = exam.dept || fup.dept || "";
     const doctor = booking.doctor || fup.doctor || "";
@@ -558,96 +529,66 @@ export default function PatientModal({
 
     const examNote = [
       `Triệu chứng: ${exam.symptoms || "—"}`,
-      ...examExtras.map(
-        (e) =>
-          `${
-            EXTRA_FIELDS.find((f) => f.key === e.key)?.label || e.key
-          }: ${e.value}`
-      ),
+      ...examExtras.map((e) => {
+        const lab = (extraFields || []).find((f) => f.key === e.key)?.label || e.key;
+        return `${lab}: ${e.value}`;
+      }),
     ].join("\n");
 
-    addVisit(pid, {
-      date: new Date().toISOString().slice(0, 10),
-      dept,
-      doctor,
-      room,
-      note: `Tái khám • ${exam.type} • ${isLate ? "ĐẾN TRỄ" : "ĐÚNG HẸN"}\n${examNote}`,
-      by: "Điều dưỡng",
-      type: "Tái khám",
+    addVisitMut.mutate({
+      pid,
+      data: {
+        date: new Date().toISOString().slice(0, 10),
+        dept,
+        doctor,
+        room,
+        note: `Tái khám • ${exam.type} • ${isLate ? "ĐẾN TRỄ" : "ĐÚNG HẸN"}\n${examNote}`,
+        by: "Điều dưỡng",
+        type: "Tái khám",
+      },
     });
 
-    // Thu phí trễ hẹn nếu có (đúng hẹn => 0đ)
+    let feeLate = 0;
     if (isLate) {
-      const fee =
-        tpl?.lateFee ??
-        tpl?.price ??
-        tplList.find((t) => t?.id === tplId)?.lateFee ??
-        35000;
-      if (fee > 0) {
-        addTransaction(pid, {
-          date: new Date().toLocaleDateString("vi-VN"),
-          item: `Phí khám (Tái khám trễ hẹn)`,
-          amount: fee,
-          status: "Đã thu",
-          ref: `FU-LATE-${Date.now()}`,
+      feeLate = tpl?.lateFee ?? tpl?.price ?? 35000;
+      if (feeLate > 0) {
+        addTxnMut.mutate({
+          pid,
+          data: {
+            date: new Date().toLocaleDateString("vi-VN"),
+            item: `Phí khám (Tái khám trễ hẹn)`,
+            amount: feeLate,
+            status: "Đã thu",
+            ref: `FU-LATE-${Date.now()}`,
+          },
         });
       }
     }
 
-    enqueueFromAppointment(
-      { ...fup, patient: name, code: pid, type: "followup" },
-      { note: examNote, symptoms: exam.symptoms || "" }
-    );
+    enqueueFromApptMut.mutate({
+      id: fup.id,
+      date: fup.date,
+      time: fup.time,
+      patient: name,
+      code: pid,
+      dept,
+      doctor,
+      note: examNote,
+      symptoms: exam.symptoms || "",
+    });
 
     onMutatePatient?.(pid, { status: STATUSES.WAIT_EXAM });
 
-    window.dispatchEvent(
-      new CustomEvent("app:navigate", { detail: { to: `/examination` } })
-    );
+    window.dispatchEvent(new CustomEvent("app:navigate", { detail: { to: `/examination` } }));
 
-     // In phiếu tái khám
-     openPrint({
-      type: "walkin",
+    // In phiếu tái khám
+    openPrint({
       printedBy: currentUser,
-      patient: {
-        id: pid,
-        name,
-        gender: form?.gender,
-        dob: form?.dob,
-        phone: form?.phone,
-        address: form?.address,
-      },
-      booking: {
-        date: fup.date || booking.date,
-        time: fup.time || booking.time,
-        price: isLate ? lateFee : 0,
-        doctor,
-        dept,
-      },
+      patient: { id: pid, name, gender: form?.gender, dob: form?.dob, phone: form?.phone, address: form?.address },
+      booking: { date: fup.date || booking.date, time: fup.time || booking.time, price: isLate ? feeLate : 0, doctor, dept },
       examInfo: { type: "Tái khám", dept, room, symptoms: exam.symptoms, note: exam.note },
-      feeInfo: { total: isLate ? lateFee : 0, paid: isLate, showFee: isLate },
+      feePaid: isLate && feeLate > 0,
     });
-
-    
-  }
-
-  // ----------------- Y TÁ “HOÀN TẤT XỬ LÝ” -----------------
-  function handleFinishNurse() {
-    const pid = form?.id;
-    if (!pid) return;
-
-    addVisit(pid, {
-      date: new Date().toISOString().slice(0, 10),
-      dept: booking.dept || "",
-      doctor: booking.doctor || "",
-      note: `Xử lý hoàn tất: Đã phát thuốc và dặn dò bệnh nhân.`,
-      by: "Điều dưỡng",
-      type: "Xử lý hoàn tất",
-    });
-
-    onMutatePatient?.(pid, { status: STATUSES.DONE });
-    markAppointmentDoneForPid(pid);
-    onClose?.();
   }
 
   // ----------------- HOÀN TẤT & THU PHÍ (THƯỜNG) -----------------
@@ -658,9 +599,7 @@ export default function PatientModal({
 
     const d = diagnosisData || {};
     const noteLines = [
-      `Chẩn đoán: ${d.dxPrimary || "—"}${
-        d.icd10 ? ` (ICD-10: ${d.icd10})` : ""
-      }`,
+      `Chẩn đoán: ${d.dxPrimary || "—"}${d.icd10 ? ` (ICD-10: ${d.icd10})` : ""}`,
       d.dxSecondary ? `Chẩn đoán phụ: ${d.dxSecondary}` : "",
       d.summary ? `Tóm tắt: ${d.summary}` : "",
       d.orders ? `Chỉ định: ${d.orders}` : "",
@@ -670,23 +609,29 @@ export default function PatientModal({
       .filter(Boolean)
       .join("\n");
 
-    addVisit(pid, {
-      date: now,
-      dept: booking.dept || exam.dept || "",
-      doctor: booking.doctor || "",
-      note: noteLines,
-      by: "Bác sĩ",
-      type: "Kết thúc khám",
+    addVisitMut.mutate({
+      pid,
+      data: {
+        date: now,
+        dept: booking.dept || exam.dept || "",
+        doctor: booking.doctor || "",
+        note: noteLines,
+        by: "Bác sĩ",
+        type: "Kết thúc khám",
+      },
     });
 
     const drugTotal = Number(totalDrugAmount || 0);
     if (drugTotal > 0) {
-      addTransaction(pid, {
-        date: new Date().toLocaleDateString("vi-VN"),
-        item: "Thuốc",
-        amount: drugTotal,
-        status: "Đã thu",
-        ref: `RX-${Date.now()}`,
+      addTxnMut.mutate({
+        pid,
+        data: {
+          date: new Date().toLocaleDateString("vi-VN"),
+          item: "Thuốc",
+          amount: drugTotal,
+          status: "Đã thu",
+          ref: `RX-${Date.now()}`,
+        },
       });
     }
 
@@ -694,14 +639,16 @@ export default function PatientModal({
       const date = (d.followupDate || "").slice(0, 10);
       const time = d.followupTime || "08:00";
       if (date) {
-        createFollowupHold({
+        createFollowupHold.mutate({
           pid,
-          patient: form?.name || pid,
-          date,
-          time,
-          dept: booking.dept || exam.dept || "",
-          doctor: booking.doctor || "",
-          note: d.advice || "Hẹn tái khám từ xử lý bác sĩ",
+          data: {
+            patient: form?.name || pid,
+            date,
+            time,
+            dept: booking.dept || exam.dept || "",
+            doctor: booking.doctor || "",
+            note: d.advice || "Hẹn tái khám từ xử lý bác sĩ",
+          },
         });
         onMutatePatient?.(pid, { status: STATUSES.SCHEDULED_FUP });
       } else {
@@ -711,7 +658,6 @@ export default function PatientModal({
       onMutatePatient?.(pid, { status: STATUSES.DONE });
     }
 
-    markAppointmentDoneForPid(pid);
     onClose?.();
   }
 
@@ -719,32 +665,29 @@ export default function PatientModal({
   function handleServiceReturnToDoctor() {
     const pid = form?.id;
     if (!pid) return;
-    const fromDoctor =
-      patient?.serviceOrder?.fromDoctor || booking.doctor || "Bác sĩ chỉ định";
+    const fromDoctor = patient?.serviceOrder?.fromDoctor || booking.doctor || "Bác sĩ chỉ định";
 
     const now = new Date().toISOString().slice(0, 10);
     const svcNote = (svcResults || [])
-      .map(
-        (r, i) =>
-          `#${i + 1} ${r.service}: ${r.result || "—"}${
-            r.note ? ` • ${r.note}` : ""
-          }`
-      )
+      .map((r, i) => `#${i + 1} ${r.service}: ${r.result || "—"}${r.note ? ` • ${r.note}` : ""}`)
       .join("\n");
 
-    addVisit(pid, {
-      date: now,
-      dept: "Cận lâm sàng",
-      doctor: "Khu dịch vụ",
-      note: `Hoàn tất dịch vụ:\n${svcNote}`,
-      by: "Điều dưỡng CLS",
-      type: "Dịch vụ hoàn tất",
+    // ⚠️ Fix Rules of Hooks: dùng addVisitMut (đã create ở top-level), KHÔNG gọi hook trong hàm
+    addVisitMut.mutate({
+      pid,
+      data: {
+        date: now,
+        dept: "Cận lâm sàng",
+        doctor: "Khu dịch vụ",
+        note: `Hoàn tất dịch vụ:\n${svcNote}`,
+        by: "Điều dưỡng CLS",
+        type: "Dịch vụ hoàn tất",
+      },
     });
 
-    markServiceDone(pid);
-    markWaitDoctorReview(pid);
-    enqueueReturnToDoctor({
-      pid,
+    svcDone.mutate({ pid });
+    svcWaitReview.mutate({ pid });
+    returnToDoctorMut.mutate({
       name: form?.name || pid,
       dept: "Phòng khám",
       doctor: fromDoctor,
@@ -1189,7 +1132,7 @@ export default function PatientModal({
                           >
                             <div className="text-sm flex-1 min-w-0">
                               <b className="text-slate-700">
-                                {EXTRA_FIELDS.find((f) => f.key === ex.key)?.label || ex.key}:
+                                {extraFields.find((f) => f.key === ex.key)?.label || ex.key}:
                               </b>
                               <span className="text-slate-600 ml-2">{ex.value}</span>
                             </div>
@@ -1224,7 +1167,7 @@ export default function PatientModal({
                           onChange={(e) => setNewExtraKey(e.target.value)}
                           className="mt-1.5 w-full rounded-xl px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition"
                         >
-                          {EXTRA_FIELDS.map((o) => (
+                          {extraFields.map((o) => (
                             <option key={o.key} value={o.key}>
                               {o.label}
                             </option>
@@ -1266,330 +1209,303 @@ export default function PatientModal({
 
                 {/* EXAM */}
                 {mode === "exam" && (
-                  <motion.div {...ANIMATION_CONFIG} className="space-y-3">
-                    <motion.section
-                      whileHover={{ y: -2 }}
-                      className="rounded-2xl p-2 mt-2 mb-0 ring-1 ring-emerald-200/50 bg-white shadow-sm"
+  <motion.div {...ANIMATION_CONFIG} className="space-y-3">
+    <motion.section
+      whileHover={{ y: -2 }}
+      className="rounded-2xl p-2 mt-2 mb-0 ring-1 ring-emerald-200/50 bg-white shadow-sm"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="font-bold text-slate-900">Phiếu khám</h4>
+        <Chip tone="emerald" dot="emerald" className="text-xs">
+          {exam.type || tpl.title}
+        </Chip>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-3 mb-3">
+        <div className="rounded-xl p-3.5 bg-emerald-50/60 ring-1 ring-emerald-100">
+          <div className="text-xs text-slate-600 mb-1">Bệnh nhân</div>
+          <div className="font-bold text-slate-900">{form?.name}</div>
+          <div className="text-xs text-slate-600">{form?.id}</div>
+        </div>
+        <div className="rounded-xl p-3.5 bg-cyan-50/60 ring-1 ring-cyan-100">
+          <div className="text-xs text-slate-600 mb-1">Loại khám</div>
+          <div className="font-bold text-slate-900">
+            {exam.type || tpl.title}
+          </div>
+        </div>
+        <div className="rounded-xl p-3.5 bg-amber-50/60 ring-1 ring-amber-100">
+          <div className="text-xs text-slate-600 mb-1">Mức phí</div>
+          <div className="font-bold text-emerald-700">
+            {(isServiceIntake ? totalServiceFee : booking.price)?.toLocaleString("vi-VN")}đ
+          </div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-3 mb-5">
+        {!isServiceIntake && (
+          <>
+            <label className="text-sm font-semibold text-slate-700">
+              Mẫu khám
+              <select
+                value={tplId}
+                onChange={(e) => {
+                  setTplId(e.target.value);
+                  setExam((s) => ({
+                    ...s,
+                    type: e.target.options[e.target.selectedIndex].text,
+                  }));
+                }}
+                className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition shadow-sm"
+              >
+                {tplList.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-slate-700">
+              Chuyên khoa
+              <button
+                type="button"
+                onClick={() => setShowDeptSelect(true)}
+                className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-left transition hover:bg-emerald-50 shadow-sm"
+              >
+                {exam.dept || "Chọn khoa..."}
+              </button>
+            </label>
+            <label className="text-sm font-semibold text-slate-700">
+              Bác sĩ
+              <button
+                type="button"
+                onClick={() => setShowDoctorSelect(true)}
+                className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-left transition hover:bg-emerald-50 shadow-sm"
+              >
+                {booking.doctor || "Chọn bác sĩ..."}
+              </button>
+            </label>
+          </>
+        )}
+        {!isServiceIntake && (
+          <label className="text-sm font-semibold text-slate-700">
+            Phòng
+            <button
+              type="button"
+              onClick={() => setShowRoomSelect(true)}
+              className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-left transition hover:bg-emerald-50 shadow-sm"
+            >
+              {exam.room || "Chọn phòng..."}
+            </button>
+          </label>
+        )}
+        <label className="text-sm font-semibold text-slate-700">
+          Ngày
+          <input
+            type="date"
+            value={booking.date}
+            onChange={(e) =>
+              setBooking((b) => ({ ...b, date: e.target.value }))
+            }
+            className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition shadow-sm"
+          />
+        </label>
+        <label className="text-sm font-semibold text-slate-700">
+          Giờ
+          <input
+            type="time"
+            value={booking.time}
+            onChange={(e) =>
+              setBooking((b) => ({ ...b, time: e.target.value }))
+            }
+            className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition shadow-sm"
+          />
+        </label>
+      </div>
+
+      {!isServiceIntake && (
+        <label className="text-sm font-semibold text-slate-700 mb-2 block">
+          {isFollowupStatus ? "Ghi chú" : "Triệu chứng"}
+          <textarea
+            rows={2}
+            value={isFollowupStatus ? exam.note : exam.symptoms}
+            onChange={(e) =>
+              isFollowupStatus
+                ? setExam((s) => ({ ...s, note: e.target.value }))
+                : setExam((s) => ({
+                    ...s,
+                    symptoms: e.target.value,
+                  }))
+            }
+            className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition resize-none shadow-sm"
+          />
+        </label>
+      )}
+
+      {isServiceIntake && (
+        <div className="mt-0 mb-2 rounded-2xl p-3 ring-1 ring-amber-200 bg-amber-50/50">
+          <div className="flex items-center justify-between">
+            <h5 className="font-bold text-slate-900">
+              Dịch vụ đã chỉ định
+            </h5>
+            <Chip tone="amber" dot="amber" className="text-xs">
+              {serviceItems.length || 0}
+            </Chip>
+          </div>
+          <div className="mt-2 space-y-2">
+            {(serviceItems.length ? serviceItems : ["(Không có dịch vụ)"]).map((sv, idx) => (
+              <div key={idx} className="rounded-xl p-2 bg-white ring-1 ring-amber-100">
+                <div className="grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-6 md:col-span-6 font-semibold text-sm truncate">
+                    {sv}
+                  </div>
+                  <div className="col-span-3 md:col-span-3 text-sm font-bold text-emerald-700 tabular-nums">
+                    {serviceItems.length ? priceOfService(sv).toLocaleString("vi-VN") : 0}đ
+                  </div>
+                  <div className="col-span-3 md:col-span-3">
+                    <select
+                      value={serviceRooms[idx] || ""}
+                      onChange={(e) =>
+                        setServiceRooms((arr) => arr.map((x, i) => (i === idx ? e.target.value : x)))
+                      }
+                      className="w-full rounded-lg px-2 py-1.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 bg-white text-sm"
+                      disabled={!serviceItems.length}
                     >
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 className="font-bold text-slate-900">Phiếu khám</h4>
-                        <Chip tone="emerald" dot="emerald" className="text-xs">
-                          {exam.type || tpl.title}
-                        </Chip>
-                      </div>
+                      <option value="">{serviceItems.length ? "Chọn phòng…" : "—"}</option>
+                      {SERVICE_ROOMS.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <input
+                  value={serviceNotes[idx] || ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setServiceNotes((s) => s.map((x, i) => (i === idx ? v : x)));
+                  }}
+                  className="mt-2 w-full rounded-lg px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
+                  placeholder={serviceItems.length ? "Ghi chú riêng cho dịch vụ này…" : "Không có nội dung"}
+                  disabled={!serviceItems.length}
+                />
+              </div>
+            ))}
+          </div>
+          <label className="block text-sm font-semibold text-slate-700 mt-3">
+            Ghi chú
+            <textarea
+              rows={2}
+              value={exam.note}
+              onChange={(e) => setExam((s) => ({ ...s, note: e.target.value }))}
+              className="mt-2 w-full rounded-xl px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
+              placeholder="Ghi chú chung…"
+            />
+          </label>
+          <div className="mt-3 flex items-center justify-end gap-3">
+            <span className="text-sm text-slate-600">Tổng phí</span>
+            <span className="text-base font-extrabold text-emerald-700">
+              {totalServiceFee.toLocaleString("vi-VN")}đ
+            </span>
+          </div>
+        </div>
+      )}
 
-                      <div className="grid md:grid-cols-3 gap-3 mb-3">
-                        <div className="rounded-xl p-3.5 bg-emerald-50/60 ring-1 ring-emerald-100">
-                          <div className="text-xs text-slate-600 mb-1">Bệnh nhân</div>
-                          <div className="font-bold text-slate-900">{form?.name}</div>
-                          <div className="text-xs text-slate-600">{form?.id}</div>
-                        </div>
-                        <div className="rounded-xl p-3.5 bg-cyan-50/60 ring-1 ring-cyan-100">
-                          <div className="text-xs text-slate-600 mb-1">Loại khám</div>
-                          <div className="font-bold text-slate-900">
-                            {exam.type || tpl.title}
-                          </div>
-                        </div>
-                        <div className="rounded-xl p-3.5 bg-amber-50/60 ring-1 ring-amber-100">
-                          <div className="text-xs text-slate-600 mb-1">Mức phí</div>
-                          <div className="font-bold text-emerald-700">
-                            {(isServiceIntake ? totalServiceFee : booking.price)?.toLocaleString("vi-VN")}đ
-                          </div>
-                        </div>
-                      </div>
+      {examExtras.length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2 mb-4">
+          {examExtras.map((ex, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              whileHover={{ scale: 1.01 }}
+              className="rounded-xl p-3 bg-white ring-1 ring-slate-200 flex items-center justify-between shadow-sm"
+            >
+              <div className="text-sm flex-1">
+                <b className="text-slate-700">
+                  {extraFields.find((f) => f.key === ex.key)?.label || ex.key}:
+                </b>
+                <span className="ml-2 text-slate-600">{ex.value}</span>
+              </div>
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => removeExamExtra(i)}
+                className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold"
+              >
+                ✕
+              </motion.button>
+            </motion.div>
+          ))}
+        </motion.div>
+      )}
 
-                      <div className="grid md:grid-cols-3 gap-3 mb-5">
-                        {!isServiceIntake && (
-                          <>
-                            <label className="text-sm font-semibold text-slate-700">
-                              Mẫu khám
-                              <select
-                                value={tplId}
-                                onChange={(e) => {
-                                  setTplId(e.target.value);
-                                  setExam((s) => ({
-                                    ...s,
-                                    type:
-                                      e.target.options[e.target.selectedIndex].text,
-                                  }));
-                                }}
-                                className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition shadow-sm"
-                              >
-                                {EXAM_TEMPLATES.map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.title}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="text-sm font-semibold text-slate-700">
-                              Chuyên khoa
-                              <button
-                                type="button"
-                                onClick={() => setShowDeptSelect(true)}
-                                className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-left transition hover:bg-emerald-50 shadow-sm"
-                              >
-                                {exam.dept || "Chọn khoa..."}
-                              </button>
-                            </label>
-                            <label className="text-sm font-semibold text-slate-700">
-                              Bác sĩ
-                              <button
-                                type="button"
-                                onClick={() => setShowDoctorSelect(true)}
-                                className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-left transition hover:bg-emerald-50 shadow-sm"
-                              >
-                                {booking.doctor || "Chọn bác sĩ..."}
-                              </button>
-                            </label>
-                          </>
-                        )}
-                        {!isServiceIntake && (
-                          <label className="text-sm font-semibold text-slate-700">
-                            Phòng
-                            <button
-                              type="button"
-                              onClick={() => setShowRoomSelect(true)}
-                              className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-left transition hover:bg-emerald-50 shadow-sm"
-                            >
-                              {exam.room || "Chọn phòng..."}
-                            </button>
-                          </label>
-                        )}
-                        <label className="text-sm font-semibold text-slate-700">
-                          Ngày
-                          <input
-                            type="date"
-                            value={booking.date}
-                            onChange={(e) =>
-                              setBooking((b) => ({ ...b, date: e.target.value }))
-                            }
-                            className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition shadow-sm"
-                          />
-                        </label>
-                        <label className="text-sm font-semibold text-slate-700">
-                          Giờ
-                          <input
-                            type="time"
-                            value={booking.time}
-                            onChange={(e) =>
-                              setBooking((b) => ({ ...b, time: e.target.value }))
-                            }
-                            className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition shadow-sm"
-                          />
-                        </label>
-                      </div>
+      <div className="flex items-end gap-2 p-3 mt-2 rounded-xl bg-emerald-50/30 ring-1 ring-emerald-200/50 shadow-sm">
+        <motion.button
+          type="button"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={pushExamExtra}
+          className="px-2 py-1 rounded-xl border-2 border-emerald-400 bg-white text-emerald-700 hover:bg-emerald-50 font-semibold shadow-sm hover:shadow transition whitespace-nowrap"
+        >
+          + Thêm dòng
+        </motion.button>
+        <label className="text-sm flex-1">
+          Loại thông tin
+          <select
+            value={newExamKey}
+            onChange={(e) => setNewExamKey(e.target.value)}
+            className="mt-1.5 w-full rounded-xl px-2 py-1.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-xs transition"
+          >
+            {extraFields.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm flex-[2]">
+          Nội dung
+          <input
+            value={newExamVal}
+            onChange={(e) => setNewExamVal(e.target.value)}
+            className="mt-1.5 w-full rounded-xl px-2 py-1.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-xs transition"
+            placeholder="Nhập..."
+          />
+        </label>
+      </div>
 
-                      {!isServiceIntake && (
-                        <label className="text-sm font-semibold text-slate-700 mb-2 block">
-                          {isFollowupStatus ? "Ghi chú" : "Triệu chứng"}
-                          <textarea
-                            rows={2}
-                            value={isFollowupStatus ? exam.note : exam.symptoms}
-                            onChange={(e) =>
-                              isFollowupStatus
-                                ? setExam((s) => ({ ...s, note: e.target.value }))
-                                : setExam((s) => ({
-                                    ...s,
-                                    symptoms: e.target.value,
-                                  }))
-                            }
-                            className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition resize-none shadow-sm"
-                          />
-                        </label>
-                      )}
+      <div className="flex items-center justify-end gap-3 mt-2 pt-2 border-t border-slate-200">
+        {isFollowupStatus ? (
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.02, y: -1 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleFollowupExam}
+            className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition"
+          >
+            Lập phiếu tái khám (Miễn phí)
+          </motion.button>
+        ) : (
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.02, y: -1 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleDirectExam}
+            className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition"
+          >
+            {isServiceIntake
+              ? "Lập phiếu khám dịch vụ & Thu phí"
+              : "Lập phiếu khám & Thu phí"}
+          </motion.button>
+        )}
+      </div>
+    </motion.section>
+  </motion.div>
+)}
 
-                      {isServiceIntake && (
-                        <div className="mt-0 mb-2 rounded-2xl p-3 ring-1 ring-amber-200 bg-amber-50/50">
-                          <div className="flex items-center justify-between">
-                            <h5 className="font-bold text-slate-900">
-                              Dịch vụ đã chỉ định
-                            </h5>
-                            <Chip tone="amber" dot="amber" className="text-xs">
-                              {serviceItems.length || 0}
-                            </Chip>
-                          </div>
-                          <div className="mt-2 space-y-2">
-                            {(serviceItems.length
-                              ? serviceItems
-                              : ["(Không có dịch vụ)"]
-                            ).map((sv, idx) => (
-                              <div
-                                key={idx}
-                                className="rounded-xl p-2 bg-white ring-1 ring-amber-100"
-                              >
-                                <div className="grid grid-cols-12 gap-2 items-center">
-                                  <div className="col-span-6 md:col-span-6 font-semibold text-sm truncate">
-                                    {sv}
-                                  </div>
-                                  <div className="col-span-3 md:col-span-3 text-sm font-bold text-emerald-700 tabular-nums">
-                                    {serviceItems.length
-                                      ? priceOfService(sv).toLocaleString("vi-VN")
-                                      : 0}
-                                    đ
-                                  </div>
-                                  <div className="col-span-3 md:col-span-3">
-                                    <select
-                                      value={serviceRooms[idx] || ""}
-                                      onChange={(e) =>
-                                        setServiceRooms((arr) =>
-                                          arr.map((x, i) =>
-                                            i === idx ? e.target.value : x
-                                          )
-                                        )
-                                      }
-                                      className="w-full rounded-lg px-2 py-1.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 bg-white text-sm"
-                                      disabled={!serviceItems.length}
-                                    >
-                                      <option value="">
-                                        {serviceItems.length
-                                          ? "Chọn phòng…"
-                                          : "—"}
-                                      </option>
-                                      {SERVICE_ROOMS.map((r) => (
-                                        <option key={r} value={r}>
-                                          {r}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </div>
-                                <input
-                                  value={serviceNotes[idx] || ""}
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    setServiceNotes((s) =>
-                                      s.map((x, i) => (i === idx ? v : x))
-                                    );
-                                  }}
-                                  className="mt-2 w-full rounded-lg px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
-                                  placeholder={
-                                    serviceItems.length
-                                      ? "Ghi chú riêng cho dịch vụ này…"
-                                      : "Không có nội dung"
-                                  }
-                                  disabled={!serviceItems.length}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                          <label className="block text-sm font-semibold text-slate-700 mt-3">
-                            Ghi chú
-                            <textarea
-                              rows={2}
-                              value={exam.note}
-                              onChange={(e) =>
-                                setExam((s) => ({ ...s, note: e.target.value }))
-                              }
-                              className="mt-2 w-full rounded-xl px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
-                              placeholder="Ghi chú chung…"
-                            />
-                          </label>
-                          <div className="mt-3 flex items-center justify-end gap-3">
-                            <span className="text-sm text-slate-600">Tổng phí</span>
-                            <span className="text-base font-extrabold text-emerald-700">
-                              {totalServiceFee.toLocaleString("vi-VN")}đ
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {examExtras.length > 0 && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2 mb-4">
-                          {examExtras.map((ex, i) => (
-                            <motion.div
-                              key={i}
-                              initial={{ opacity: 0, x: -20 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              whileHover={{ scale: 1.01 }}
-                              className="rounded-xl p-3 bg-white ring-1 ring-slate-200 flex items-center justify-between shadow-sm"
-                            >
-                              <div className="text-sm flex-1">
-                                <b className="text-slate-700">
-                                  {EXTRA_FIELDS.find((f) => f.key === ex.key)?.label || ex.key}:
-                                </b>
-                                <span className="ml-2 text-slate-600">{ex.value}</span>
-                              </div>
-                              <motion.button
-                                type="button"
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                                onClick={() => removeExamExtra(i)}
-                                className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold"
-                              >
-                                ✕
-                              </motion.button>
-                            </motion.div>
-                          ))}
-                        </motion.div>
-                      )}
-
-                      <div className="flex items-end gap-2 p-3 mt-2 rounded-xl bg-emerald-50/30 ring-1 ring-emerald-200/50 shadow-sm">
-                        <motion.button
-                          type="button"
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={pushExamExtra}
-                          className="px-2 py-1 rounded-xl border-2 border-emerald-400 bg-white text-emerald-700 hover:bg-emerald-50 font-semibold shadow-sm hover:shadow transition whitespace-nowrap"
-                        >
-                          + Thêm dòng
-                        </motion.button>
-                        <label className="text-sm flex-1">
-                          Loại thông tin
-                          <select
-                            value={newExamKey}
-                            onChange={(e) => setNewExamKey(e.target.value)}
-                            className="mt-1.5 w-full rounded-xl px-2 py-1.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-xs transition"
-                          >
-                            {EXTRA_FIELDS.map((o) => (
-                              <option key={o.key} value={o.key}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="text-sm flex-[2]">
-                          Nội dung
-                          <input
-                            value={newExamVal}
-                            onChange={(e) => setNewExamVal(e.target.value)}
-                            className="mt-1.5 w-full rounded-xl px-2 py-1.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-xs transition"
-                            placeholder="Nhập..."
-                          />
-                        </label>
-                      </div>
-
-                      <div className="flex items-center justify-end gap-3 mt-2 pt-2 border-t border-slate-200">
-                        {isFollowupStatus ? (
-                          <motion.button
-                            type="button"
-                            whileHover={{ scale: 1.02, y: -1 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={handleFollowupExam}
-                            className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition"
-                          >
-                            Lập phiếu tái khám (Miễn phí)
-                          </motion.button>
-                        ) : (
-                          <motion.button
-                            type="button"
-                            whileHover={{ scale: 1.02, y: -1 }}
-                            whileTap={{ scale: 0.98 }}
-                            onClick={handleDirectExam}
-                            className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition"
-                          >
-                            {isServiceIntake
-                              ? "Lập phiếu khám dịch vụ & Thu phí"
-                              : "Lập phiếu khám & Thu phí"}
-                          </motion.button>
-                        )}
-                      </div>
-                    </motion.section>
-                  </motion.div>
-                )}
 
                 {/* PROCESS */}
-                {mode === "process" && !isSvcProcessing && (
+                {mode === "process" && !isServiceIntake && (
                   <motion.div {...ANIMATION_CONFIG} className="space-y-3">
                     <motion.section
                       whileHover={{ y: -2 }}
@@ -1705,312 +1621,301 @@ export default function PatientModal({
                 )}
 
                 {/* PROCESS — DỊCH VỤ */}
-                {mode === "process" && isSvcProcessing && (
-                  <motion.div {...ANIMATION_CONFIG} className="space-y-3">
-                    <motion.section
-                      whileHover={{ y: -2 }}
-                      className="rounded-2xl p-3 mt-2 mb-0 ring-1 ring-emerald-200/60 bg-gradient-to-br from-emerald-50/60 to-white shadow-sm"
-                    >
-                      <h4 className="font-bold text-slate-900 mb-2">
-                        Kết quả dịch vụ
-                      </h4>
-                      {svcResults.length === 0 ? (
-                        <div className="rounded-xl px-3 py-2 ring-1 ring-emerald-200/60 bg-white text-[13px] text-slate-600">
-                          Chưa có kết quả dịch vụ
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {svcResults.map((r, i) => (
-                            <div
-                              key={i}
-                              className="rounded-xl p-3 ring-1 ring-emerald-200 bg-white"
-                            >
-                              <div className="font-semibold text-slate-900">
-                                {r.service}
-                              </div>
-                              <div className="mt-2 grid md:grid-cols-3 gap-3">
-                                <R label="Kết quả" value={r.result} />
-                                <R
-                                  classname="ring-orange-200 bg-yellow-50/40"
-                                  label="Ghi chú"
-                                  value={r.note}
-                                />
-                                <R
-                                  classname="ring-sky-200 bg-sky-50/30"
-                                  label="File đính kèm"
-                                  value={(r.attachments || []).join(", ")}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                {mode === "process" && isServiceIntake && (
+  <motion.div {...ANIMATION_CONFIG} className="space-y-3">
+    <motion.section
+      whileHover={{ y: -2 }}
+      className="rounded-2xl p-3 mt-2 mb-0 ring-1 ring-emerald-200/60 bg-gradient-to-br from-emerald-50/60 to-white shadow-sm"
+    >
+      <h4 className="font-bold text-slate-900 mb-2">
+        Kết quả dịch vụ
+      </h4>
+      {svcResults.length === 0 ? (
+        <div className="rounded-xl px-3 py-2 ring-1 ring-emerald-200/60 bg-white text-[13px] text-slate-600">
+          Chưa có kết quả dịch vụ
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {svcResults.map((r, i) => (
+            <div
+              key={i}
+              className="rounded-xl p-3 ring-1 ring-emerald-200 bg-white"
+            >
+              <div className="font-semibold text-slate-900">
+                {r.service}
+              </div>
+              <div className="mt-2 grid md:grid-cols-3 gap-3">
+                <R label="Kết quả" value={r.result} />
+                <R
+                  classname="ring-orange-200 bg-yellow-50/40"
+                  label="Ghi chú"
+                  value={r.note}
+                />
+                <R
+                  classname="ring-sky-200 bg-sky-50/30"
+                  label="File đính kèm"
+                  value={(r.attachments || []).join(", ")}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-                      <div className="flex items-center justify-end gap-3 mt-3 pt-2 border-t border-slate-200">
-                        <motion.button
-                          whileHover={{ scale: 1.02, y: -1 }}
-                          whileTap={{ scale: 0.98 }}
-                          type="button"
-                          onClick={handleServiceReturnToDoctor}
-                          className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-600 text-white font-semibold shadow-md hover:shadow-lg transition"
-                        >
-                          Chuyển về bác sĩ chẩn đoán
-                        </motion.button>
-                      </div>
-                    </motion.section>
-                  </motion.div>
-                )}
+      <div className="flex items-center justify-end gap-3 mt-3 pt-2 border-t border-slate-200">
+        <motion.button
+          whileHover={{ scale: 1.02, y: -1 }}
+          whileTap={{ scale: 0.98 }}
+          type="button"
+          onClick={handleServiceReturnToDoctor}
+          className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-600 text-white font-semibold shadow-md hover:shadow-lg transition"
+        >
+          Chuyển về bác sĩ chẩn đoán
+        </motion.button>
+      </div>
+    </motion.section>
+  </motion.div>
+)}
+
               </div>
             </motion.div>
 
             {/* SELECT MODALS (Dept/Room/Doctor) */}
             {showDeptSelect && (
-              <AnimatePresence>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-[60] p-2 flex items-center justify-center"
-                >
-                  <motion.div
-                    initial={{ scale: 0.97, y: 10 }}
-                    animate={{ scale: 1, y: 0 }}
-                    className="bg-white rounded-2xl shadow-2xl ring-1 ring-emerald-200 max-w-2xl w-full overflow-hidden"
-                  >
-                    <header className="flex items-center justify-between px-6 py-4 bg-emerald-50 border-b border-emerald-100">
-                      <h3 className="font-bold text-slate-900">Chọn khoa</h3>
-                      <button
-                        onClick={() => setShowDeptSelect(false)}
-                        className="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:text-slate-900 transition"
-                      >
-                        ✕
-                      </button>
-                    </header>
-                    <div className="p-4 pt-2 overflow-y-auto max-h-[60vh] scrollbar-none">
-                      <div className="space-y-2">
-                        {DEPARTMENTS.map((dept) => (
-                          <motion.button
-                            key={dept.id}
-                            whileHover={{ scale: 1.01 }}
-                            whileTap={{ scale: 0.99 }}
-                            onClick={() => {
-                              setExam((s) => ({ ...s, dept: dept.name, room: "" }));
-                              setBooking((b) => ({
-                                ...b,
-                                dept: dept.name,
-                                doctor: "",
-                              }));
-                              setShowDeptSelect(false);
-                            }}
-                            className="w-full rounded-xl p-3 bg-white ring-1 ring-slate-200 hover:ring-emerald-300 hover:bg-emerald-50/50 transition text-left"
-                          >
-                            <div className="font-semibold text-slate-900">
-                              {dept.name}
-                            </div>
-                            <div className="text-xs text-slate-500 mt-0.5">
-                              {dept.rooms.length} phòng • {dept.doctors.length} bác sĩ
-                            </div>
-                          </motion.button>
-                        ))}
-                      </div>
-                    </div>
-                  </motion.div>
-                </motion.div>
-              </AnimatePresence>
-            )}
+  <AnimatePresence>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] p-2 flex items-center justify-center"
+    >
+      <motion.div
+        initial={{ scale: 0.97, y: 10 }}
+        animate={{ scale: 1, y: 0 }}
+        className="bg-white rounded-2xl shadow-2xl ring-1 ring-emerald-200 max-w-2xl w-full overflow-hidden"
+      >
+        <header className="flex items-center justify-between px-6 py-4 bg-emerald-50 border-b border-emerald-100">
+          <h3 className="font-bold text-slate-900">Chọn khoa</h3>
+          <button
+            onClick={() => setShowDeptSelect(false)}
+            className="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:text-slate-900 transition"
+          >
+            ✕
+          </button>
+        </header>
+        <div className="p-4 pt-2 overflow-y-auto max-h-[60vh] scrollbar-none">
+          <div className="space-y-2">
+            {DEPARTMENTS.map((dept) => (
+              <motion.button
+                key={dept.id}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => {
+                  setExam((s) => ({ ...s, dept: dept.name, room: "" }));
+                  setBooking((b) => ({
+                    ...b,
+                    dept: dept.name,
+                    doctor: "",
+                  }));
+                  setShowDeptSelect(false);
+                }}
+                className="w-full rounded-xl p-3 bg-white ring-1 ring-slate-200 hover:ring-emerald-300 hover:bg-emerald-50/50 transition text-left"
+              >
+                <div className="font-semibold text-slate-900">
+                  {dept.name}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {dept.rooms.length} phòng • {dept.doctors.length} bác sĩ
+                </div>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  </AnimatePresence>
+)}
 
-            {showRoomSelect && availableRooms.length > 0 && (
-              <AnimatePresence>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-[60] p-2 flex items-center justify-center"
+{showRoomSelect && availableRooms.length > 0 && (
+  <AnimatePresence>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] p-2 flex items-center justify-center"
+    >
+      <motion.div
+        initial={{ scale: 0.97, y: 10 }}
+        animate={{ scale: 1, y: 0 }}
+        className="bg-white rounded-2xl shadow-2xl ring-1 ring-emerald-200 max-w-xl w-full overflow-hidden"
+      >
+        <header className="flex items-center justify-between px-6 py-4 bg-emerald-50 border-b border-emerald-100">
+          <h3 className="font-bold text-slate-900">Chọn phòng</h3>
+          <button
+            onClick={() => setShowRoomSelect(false)}
+            className="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:text-slate-900 transition"
+          >
+            ✕
+          </button>
+        </header>
+        <div className="p-4 pt-2 overflow-y-auto max-h-[60vh] scrollbar-none">
+          <div className="space-y-2">
+            {availableRooms.map((room) => {
+              const deptWaiting = waitingByDept[exam.dept || booking.dept || ""] || 0;
+              return (
+                <motion.button
+                  key={room}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => {
+                    setExam((s) => ({ ...s, room }));
+                    setShowRoomSelect(false);
+                  }}
+                  className="w-full rounded-xl p-3 bg-white ring-1 ring-slate-200 hover:ring-emerald-300 hover:bg-emerald-50/50 transition text-left font-medium flex items-center justify-between"
                 >
-                  <motion.div
-                    initial={{ scale: 0.97, y: 10 }}
-                    animate={{ scale: 1, y: 0 }}
-                    className="bg-white rounded-2xl shadow-2xl ring-1 ring-emerald-200 max-w-xl w-full overflow-hidden"
-                  >
-                    <header className="flex items-center justify-between px-6 py-4 bg-emerald-50 border-b border-emerald-100">
-                      <h3 className="font-bold text-slate-900">Chọn phòng</h3>
-                      <button
-                        onClick={() => setShowRoomSelect(false)}
-                        className="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:text-slate-900 transition"
-                      >
-                        ✕
-                      </button>
-                    </header>
-                    <div className="p-4 pt-2 overflow-y-auto max-h-[60vh] scrollbar-none">
-                      <div className="space-y-2">
-                        {availableRooms.map((room) => {
-                          const deptWaiting =
-                            waitingByDept[exam.dept || booking.dept || ""] || 0;
-                          return (
-                            <motion.button
-                              key={room}
-                              whileHover={{ scale: 1.01 }}
-                              whileTap={{ scale: 0.99 }}
-                              onClick={() => {
-                                setExam((s) => ({ ...s, room }));
-                                setShowRoomSelect(false);
-                              }}
-                              className="w-full rounded-xl p-3 bg-white ring-1 ring-slate-200 hover:ring-emerald-300 hover:bg-emerald-50/50 transition text-left font-medium flex items-center justify-between"
-                            >
-                              <span>{room}</span>
-                              <span className="text-xs text-slate-500">
-                                Đang chờ trong khoa:{" "}
-                                <b className="text-slate-700">{deptWaiting}</b>
-                              </span>
-                            </motion.button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </motion.div>
-                </motion.div>
-              </AnimatePresence>
-            )}
+                  <span>{room}</span>
+                  <span className="text-xs text-slate-500">
+                    Đang chờ trong khoa: <b className="text-slate-700">{deptWaiting}</b>
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  </AnimatePresence>
+)}
 
-            {showDoctorSelect && (
-              <AnimatePresence>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-[60] p-2 flex items-center justify-center"
-                >
-                  <motion.div
-                    initial={{ scale: 0.97, y: 10 }}
-                    animate={{ scale: 1, y: 0 }}
-                    className="bg-white rounded-2xl shadow-2xl ring-1 ring-emerald-200 max-w-4xl w-full max-h-[80vh] overflow-hidden"
+{showDoctorSelect && (
+  <AnimatePresence>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] p-2 flex items-center justify-center"
+    >
+      <motion.div
+        initial={{ scale: 0.97, y: 10 }}
+        animate={{ scale: 1, y: 0 }}
+        className="bg-white rounded-2xl shadow-2xl ring-1 ring-emerald-200 max-w-4xl w-full max-h-[80vh] overflow-hidden"
+      >
+        <header className="flex items-center justify-between px-6 py-4 bg-emerald-50 border-b border-emerald-100">
+          <h3 className="font-bold text-slate-900">Chọn bác sĩ</h3>
+          <button
+            onClick={() => setShowDoctorSelect(false)}
+            className="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:text-slate-900 transition"
+          >
+            ✕
+          </button>
+        </header>
+        <div className="p-4 pt-2 overflow-y-auto max-h-[calc(80vh-73px)] scrollbar-none">
+          <div className="rounded-xl ring-1 ring-slate-200 overflow-hidden">
+            <table className="min-w-full text-sm">
+              <thead className="bg-emerald-50">
+                <tr className="text-xs font-bold text-slate-700">
+                  <th className="px-3 py-2.5 text-left">Bác sĩ</th>
+                  <th className="px-3 py-2.5 text-left">Khoa</th>
+                  <th className="px-3 py-2.5 text-left">Đang chờ</th>
+                  <th className="px-3 py-2.5 text-left">Lịch hẹn</th>
+                  <th className="px-3 py-2.5 text-left">Trạng thái</th>
+                  <th className="px-3 py-2.5 text-left">Chọn</th>
+                </tr>
+              </thead>
+              <tbody>
+                {availableDoctors.map((doc) => (
+                  <motion.tr
+                    key={doc.name}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="border-t border-slate-100 hover:bg-emerald-50/30 transition"
                   >
-                    <header className="flex items-center justify-between px-6 py-4 bg-emerald-50 border-b border-emerald-100">
-                      <h3 className="font-bold text-slate-900">Chọn bác sĩ</h3>
-                      <button
-                        onClick={() => setShowDoctorSelect(false)}
-                        className="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:text-slate-900 transition"
+                    <td className="px-3 py-2.5 font-semibold text-slate-900">
+                      {doc.name}
+                    </td>
+                    <td className="px-3 py-2.5">{doc.dept}</td>
+                    <td className="px-3 py-2.5">
+                      <Chip tone="amber" dot="amber" className="text-xs">
+                        {doc.waiting}
+                      </Chip>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Chip tone="teal" dot="teal" className="text-xs">
+                        {doc.appointments}
+                      </Chip>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Chip tone="emerald" dot="emerald" className="text-xs">
+                        {doc.status}
+                      </Chip>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          setBooking((b) => ({ ...b, doctor: doc.name }));
+                          setShowDoctorSelect(false);
+                        }}
+                        className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition"
                       >
-                        ✕
-                      </button>
-                    </header>
-                    <div className="p-4 pt-2 overflow-y-auto max-h-[calc(80vh-73px)] scrollbar-none">
-                      <div className="rounded-xl ring-1 ring-slate-200 overflow-hidden">
-                        <table className="min-w-full text-sm">
-                          <thead className="bg-emerald-50">
-                            <tr className="text-xs font-bold text-slate-700">
-                              <th className="px-3 py-2.5 text-left">Bác sĩ</th>
-                              <th className="px-3 py-2.5 text-left">Khoa</th>
-                              <th className="px-3 py-2.5 text-left">Đang chờ</th>
-                              <th className="px-3 py-2.5 text-left">Lịch hẹn</th>
-                              <th className="px-3 py-2.5 text-left">Trạng thái</th>
-                              <th className="px-3 py-2.5 text-left">Chọn</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {availableDoctors.map((doc) => (
-                              <motion.tr
-                                key={doc.name}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="border-t border-slate-100 hover:bg-emerald-50/30 transition"
-                              >
-                                <td className="px-3 py-2.5 font-semibold text-slate-900">
-                                  {doc.name}
-                                </td>
-                                <td className="px-3 py-2.5">{doc.dept}</td>
-                                <td className="px-3 py-2.5">
-                                  <Chip tone="amber" dot="amber" className="text-xs">
-                                    {doc.waiting}
-                                  </Chip>
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <Chip tone="teal" dot="teal" className="text-xs">
-                                    {doc.appointments}
-                                  </Chip>
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <Chip tone="emerald" dot="emerald" className="text-xs">
-                                    {doc.status}
-                                  </Chip>
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={() => {
-                                      setBooking((b) => ({ ...b, doctor: doc.name }));
-                                      setShowDoctorSelect(false);
-                                    }}
-                                    className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition"
-                                  >
-                                    Chọn
-                                  </motion.button>
-                                </td>
-                              </motion.tr>
-                            ))}
-                            {availableDoctors.length === 0 && (
-                              <tr>
-                                <td
-                                  colSpan={6}
-                                  className="px-4 py-6 text-center text-slate-400"
-                                >
-                                  Chưa chọn khoa
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </motion.div>
-                </motion.div>
-              </AnimatePresence>
-            )}
+                        Chọn
+                      </motion.button>
+                    </td>
+                  </motion.tr>
+                ))}
+                {availableDoctors.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                      Chưa chọn khoa
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  </AnimatePresence>
+)}
+            {/* PRINT OVERLAY */}
+            <PrintExamTicket
+              show={print.show}
+              onAfterPrint={closePrint}
+              patient={{
+                id: form?.id,
+                name: form?.name,
+                gender: form?.gender,
+                dob: form?.dob,
+                phone: form?.phone,
+                address: form?.address,
+              }}
+              exam={{
+                type: exam.type,
+                dept: exam.dept,
+                room: exam.room,
+                symptoms: exam.symptoms,
+                note: exam.note,
+              }}
+              booking={{
+                date: booking.date,
+                time: booking.time,
+                price: isServiceIntake ? totalServiceFee : booking.price,
+                doctor: booking.doctor,
+                dept: booking.dept,
+              }}
+              isServiceIntake={isServiceIntake}
+              totalServiceFee={totalServiceFee}
+              services={(serviceItems || []).map((sv, i) => ({
+                name: sv,
+                room: serviceRooms[i] || `Phòng ${sv}`,
+                price: priceOfService(sv),
+                note: serviceNotes[i] || "",
+              }))}
+              feePaid={isServiceIntake ? totalServiceFee > 0 : (booking.price || 0) > 0}
+            />
           </motion.div>
-
-         {/* PRINT OVERLAY */}
-<PrintExamTicket
-  show={print.show}
-  onAfterPrint={closePrint}
-  // dữ liệu chung
-  patient={{
-    id: form?.id,
-    name: form?.name,
-    gender: form?.gender,
-    dob: form?.dob,
-    phone: form?.phone,
-    address: form?.address,
-  }}
-  exam={{
-    type: exam.type,
-    dept: exam.dept,
-    room: exam.room,
-    symptoms: exam.symptoms,
-    note: exam.note,
-  }}
-  booking={{
-    date: booking.date,
-    time: booking.time,
-    price: isServiceIntake ? totalServiceFee : booking.price,
-    doctor: booking.doctor,
-    dept: booking.dept,
-  }}
-  isServiceIntake={isServiceIntake}
-  totalServiceFee={totalServiceFee}
-  services={(serviceItems || []).map((sv, i) => ({
-    name: sv,
-    room: serviceRooms[i] || `Phòng ${sv}`,
-    price: priceOfService(sv),
-    note: serviceNotes[i] || "",
-  }))}
-  // miễn phí tái khám: bạn không truyền feePaid -> ẩn dòng phí
-  feePaid={
-    isServiceIntake
-      ? totalServiceFee > 0
-      : (booking.price || 0) > 0
-  }
-/>
         </>
       )}
     </AnimatePresence>

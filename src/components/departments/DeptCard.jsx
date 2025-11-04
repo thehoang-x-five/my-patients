@@ -3,7 +3,7 @@ import React from 'react';
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 
-export default function DeptCard({ dept, onOpenDetail, onOpenSchedule }) {
+export default function DeptCard({ dept, onOpenDetail, onOpenSchedule, pulse = false }) {
   const room = dept.room || { number: "—", status: false };
   const isActive = !!room.status;
   const waiting = dept.waitingPatients || 0;
@@ -12,13 +12,17 @@ export default function DeptCard({ dept, onOpenDetail, onOpenSchedule }) {
 
   return (
     <motion.article
+      data-room-id={dept.id}   // NEW: để scrollIntoView
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       whileHover={{ y: -2, scale: 1.005 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      className="relative group rounded-2xl bg-white/95 ring-1 ring-slate-200 shadow-sm
-                 hover:shadow-xl hover:ring-indigo-300 hover:bg-gradient-to-b hover:from-white hover:to-indigo-50/70
-                 p-3"
+      className={[
+        "relative group rounded-2xl bg-white/95 ring-1 ring-slate-200 shadow-sm",
+        "hover:shadow-xl hover:ring-indigo-300 hover:bg-gradient-to-b hover:from-white hover:to-indigo-50/70",
+        "p-3",
+        pulse ? "flash-once ring-2 ring-indigo-400" : "" // NEW visual pulse
+      ].join(" ")}
     >
       {/* Badge trạng thái góc phải */}
       <span
@@ -48,14 +52,13 @@ export default function DeptCard({ dept, onOpenDetail, onOpenSchedule }) {
 
       {/* Body tổng quan */}
       <div className="mt-3 space-y-2">
-        {/* Quản lý phòng */}
         <div className="rounded-xl ring-1 ring-indigo-100/40 bg-white p-3 transition-colors
                         group-hover:bg-gradient-to-b group-hover:from-white group-hover:to-indigo-50">
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div>
               <div className="text-[11px] text-indigo-700/80">BS phụ trách</div>
               <b className="block truncate text-slate-900" title={dept.doctorInCharge || ""}>
-              {dept.doctorInCharge || "—"}
+                {dept.doctorInCharge || "—"}
               </b>
             </div>
             <div>
@@ -67,7 +70,7 @@ export default function DeptCard({ dept, onOpenDetail, onOpenSchedule }) {
           </div>
         </div>
 
-        {/* Stats — 1 tone indigo */}
+        {/* Stats */}
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-xl p-2 ring-1 ring-indigo-100/40 bg-indigo-50 text-center">
             <div className="text-[11px] text-indigo-700/80">Đang chờ</div>

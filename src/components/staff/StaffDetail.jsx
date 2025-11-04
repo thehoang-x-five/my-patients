@@ -1,24 +1,22 @@
+// src/components/staff/StaffDetail.jsx
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Avatar from "./Avatar.jsx";
-import { DUTY_ROOM, SCHEDULE } from "../../data/staff.js";
 
+const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const dayKey = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
 
-export default function StaffDetail({ open, item, role, onClose }) {
+export default function StaffDetail({ open, item, role, schedule, roomToday, weekRoom, onClose }) {
   if (!item) return null;
 
-  const apptCount =
-    item?.apptCount ?? item?.appointmentsToday ?? item?.appts ?? item?.appointments ?? 0;
-
+  const apptCount = item?.apptCount ?? item?.appointmentsToday ?? item?.appts ?? item?.appointments ?? 0;
   const isAdminNurse = role === "nurse" && item.roleType === "administrative";
   const today = dayKey();
-  const roomToday = DUTY_ROOM?.[item.id]?.[today] ?? "—";
-  const shiftToday = SCHEDULE?.[item.id]?.[today] ?? "—";
+  const shiftToday = schedule?.[today] ?? "—";
   const managedRooms = item.managedRooms || [];
   const certCount = (item.certificates || []).length;
-  const weekShifts = Object.values(SCHEDULE?.[item.id] || {}).filter((s) => s !== "Nghỉ").length;
+  const weekShifts = Object.values(schedule || {}).filter((s) => s && s !== "Nghỉ").length;
 
   return (
     <AnimatePresence>
@@ -60,7 +58,7 @@ export default function StaffDetail({ open, item, role, onClose }) {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-1 rounded-full text-xs font-bold ring-1 bg-sky-50 text-sky-700 ring-sky-200">
-                      📍 {roomToday}
+                      📍 {roomToday || "—"}
                     </span>
                     <span
                       className={`px-2 py-1 rounded-full text-xs font-bold ring-1 ${
@@ -148,7 +146,7 @@ export default function StaffDetail({ open, item, role, onClose }) {
                   </section>
                 )}
 
-                {/* Hành chính: KPI + Đơn vị phụ trách + Nhiệm vụ + Quy trình */}
+                {/* Hành chính */}
                 {isAdminNurse && (
                   <>
                     <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
@@ -157,7 +155,7 @@ export default function StaffDetail({ open, item, role, onClose }) {
                         <StatTile label="Hồ sơ xử lý hôm nay" value={item.adminHandledToday ?? 0} />
                         <StatTile label="SLA" value={item.adminSLA ?? "—"} />
                         <StatTile label="HS chờ duyệt" value={item.docsPending ?? 0} />
-                        <StatTile label="Bàn hôm nay" value={roomToday} />
+                        <StatTile label="Bàn hôm nay" value={roomToday || "—"} />
                       </div>
                     </section>
 
@@ -214,15 +212,33 @@ export default function StaffDetail({ open, item, role, onClose }) {
                   <div className="text-sm">{item.bio || "—"}</div>
                 </section>
 
-                {/* Liên kết nhanh */}
-                <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
-                  <b className="block mb-2">Liên kết nhanh</b>
-                  <div className="flex flex-wrap gap-2 text-sm">
-                    <a className="rounded-xl px-3 py-1 ring-1 ring-slate-200 hover:bg-slate-50 transition" href="#">🗂️ Hồ sơ nội bộ</a>
-                    <a className="rounded-xl px-3 py-1 ring-1 ring-slate-200 hover:bg-slate-50 transition" href="#">📆 Lịch tuần</a>
-                    <a className="rounded-xl px-3 py-1 ring-1 ring-slate-200 hover:bg-slate-50 transition" href="#">💬 Nhắn Zalo</a>
-                  </div>
-                </section>
+                {/* Lịch tuần nhanh */}
+                {weekRoom && schedule && (
+                  <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
+                    <b className="block mb-2">Lịch tuần</b>
+                    <div className="overflow-auto">
+                      <table className="min-w-[640px] w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="text-left text-xs font-semibold text-slate-600 bg-slate-50">
+                            {WEEK.map((d) => (
+                              <th key={d} className="px-2 py-2">{d}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            {WEEK.map((d) => (
+                              <td key={d} className={`px-2 py-2 align-top ${d===today ? "bg-sky-50" : ""}`}>
+                                <div>Ca: <b>{schedule?.[d] ?? "—"}</b></div>
+                                <div>Phòng: <b>{weekRoom?.[d] ?? "—"}</b></div>
+                              </td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
               </div>
             </motion.section>
           </motion.div>

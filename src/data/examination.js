@@ -1,8 +1,6 @@
 // src/data/examination.js
 // ======= MOCK DATA CHO MÀN KHÁM BỆNH (Hàng chờ + Phiếu khám) =======
 
-import { label } from "framer-motion/client";
-
 // Queue “walk-in” & “tái khám” đồng bộ với PatientTable (có dept, doctor, time, checkIn, source, early/late, tag…)
 export const EXAM_PATIENTS = {
   direct: [

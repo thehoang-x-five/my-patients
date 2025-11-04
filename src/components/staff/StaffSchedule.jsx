@@ -1,20 +1,21 @@
+// src/components/staff/StaffSchedule.jsx
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
-import { WEEK, DUTY_ROOM } from "../../data/staff.js";
 
+const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const dayKey = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
 
-export default function StaffSchedule({ open, item, schedule, onClose }) {
+export default function StaffSchedule({ open, item, schedule, dutyRooms, onClose }) {
   if (!item) return null;
   const today = dayKey();
-  const roomToday = DUTY_ROOM?.[item.id]?.[today] ?? "—";
+  const roomToday = dutyRooms?.[today] ?? "—";
   const shiftToday = schedule?.[today] ?? "—";
 
   function printSched() {
     const win = window.open("", "_blank");
     const trs = WEEK.map(
-      (d) => `<tr><td>${d}</td><td>${schedule?.[d] || "-"}</td><td>${(DUTY_ROOM?.[item.id]?.[d]) || "-"}</td></tr>`
+      (d) => `<tr><td>${d}</td><td>${schedule?.[d] || "-"}</td><td>${(dutyRooms?.[d]) || "-"}</td></tr>`
     ).join("");
     win.document.write(`
       <html><head><title>Lịch ${item.name}</title>
@@ -84,7 +85,7 @@ export default function StaffSchedule({ open, item, schedule, onClose }) {
                     <tbody>
                       {WEEK.map((d) => {
                         const shift = schedule?.[d] || "—";
-                        const room = DUTY_ROOM?.[item.id]?.[d] || "—";
+                        const room = dutyRooms?.[d] || "—";
                         const isToday = d === today;
                         const shiftBg =
                           shift === "Sáng" ? "bg-emerald-50 ring-emerald-100" :

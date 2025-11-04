@@ -6,6 +6,7 @@ import Topbar from "./components/ui/Topbar.jsx";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary.jsx";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+
 export default function App() {
   const location = useLocation();
   return (
