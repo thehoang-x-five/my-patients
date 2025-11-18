@@ -2,18 +2,30 @@
 import React, { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
+import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments.js";
+
 
 function Badge({ status }) {
-  const map = {
-    "Đã xác nhận": "bg-emerald-50 text-emerald-700 border-emerald-200",
-    "Đang chờ": "bg-amber-50 text-amber-700 border-amber-200",
-    "Đã hủy": "bg-red-50 text-red-700 border-red-200",
+  const label = APPT_STATUS_LABEL[status] || "—";
+
+  const clsMap = {
+    [APPT_STATUS.DA_XAC_NHAN]:
+      "bg-emerald-50 text-emerald-700 border-emerald-200",
+    [APPT_STATUS.DANG_CHO]:
+      "bg-amber-50 text-amber-700 border-amber-200",
+    [APPT_STATUS.DA_CHECKIN]:
+      "bg-sky-50 text-sky-700 border-sky-200",
+    [APPT_STATUS.DA_HUY]:
+      "bg-red-50 text-red-700 border-red-200",
   };
+
   return (
     <span
-      className={`badge ${map[status] || "bg-slate-100 text-slate-700 border-slate-200"} transition-colors`}
+      className={`badge ${
+        clsMap[status] || "bg-slate-100 text-slate-700 border-slate-200"
+      } transition-colors`}
     >
-      {status}
+      {label}
     </span>
   );
 }
@@ -66,8 +78,7 @@ export default function ApptDetailModal({
     });
     setEditing(false);
   };
-
-  const canCheckIn = appt.status !== "Đã hủy" && !appt.checkedIn;
+  const canCheckIn = appt.status === APPT_STATUS.DA_XAC_NHAN;
   const isFollowup = appt.type === "Tái khám";
   const pid = appt.code || appt.pid || "";
   return (
@@ -145,17 +156,21 @@ export default function ApptDetailModal({
               <div className="p-5 grid gap-3">
                 <section className="rounded-xl ring-1 ring-violet-200/80 p-3 bg-white hover:bg-violet-50/40 hover:ring-violet-300 transition-colors">
                   <div className="grid md:grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <b className="text-slate-800">Bệnh nhân:</b> {appt.patient}
-                    </div>
-                    <div>
-                      <b className="text-slate-800">Mã BN:</b>{" "}
-                      {appt.code || <i className="text-slate-400">—</i>}
-                    </div>
-                    <div>
-                      <b className="text-slate-800">Bác sĩ:</b>{" "}
-                      {appt.doctor || <i className="text-slate-400">—</i>}
-                    </div>
+                  <div>
+  <b className="text-slate-800">Bệnh nhân:</b> {appt.patient}
+</div>
+<div>
+  <b className="text-slate-800">Mã BN:</b>{" "}
+  {appt.code || <i className="text-slate-400">—</i>}
+</div>
+<div>
+  <b className="text-slate-800">SĐT:</b>{" "}
+  {appt.phone || <i className="text-slate-400">—</i>}
+</div>
+<div>
+  <b className="text-slate-800">Bác sĩ:</b>{" "}
+  {appt.doctor || <i className="text-slate-400">—</i>}
+</div>
                     <div>
                       <b className="text-slate-800">Khoa:</b>{" "}
                       {appt.dept || <i className="text-slate-400">—</i>}
@@ -164,7 +179,7 @@ export default function ApptDetailModal({
                       <b className="text-slate-800">Ngày:</b> {appt.date}
                     </div>
                     <div>
-                      <b className="text-slate-800">Giờ:</b> {appt.time} ({appt.duration || 30} phút)
+                      <b className="text-slate-800">Giờ:</b> {appt.time} 
                     </div>
                     <div className="md:col-span-2 max-w-[1000px] break-words">
                       <b className="text-slate-800">Ghi chú:</b>{" "}
@@ -178,25 +193,26 @@ export default function ApptDetailModal({
                     <b className="text-violet-800">Thao tác</b>
                     {!editing ? (
                       <div className="flex gap-2 flex-wrap">
-                        {appt.status !== "Đã xác nhận" && (
+                        
+                        {appt.status !== APPT_STATUS.DA_XAC_NHAN && (
                           <button
-                            onClick={() => doUpdate({ status: "Đã xác nhận" })}
+                          onClick={() => doUpdate({ status: APPT_STATUS.DA_XAC_NHAN })}
                             className="px-3 py-2 rounded-xl border border-violet-200 text-violet-700 hover:bg-violet-50 hover:border-violet-300 transition"
                           >
                             Xác nhận
                           </button>
                         )}
-                        {appt.status !== "Đang chờ" && (
+                        {appt.status !== APPT_STATUS.DANG_CHO && (
                           <button
-                            onClick={() => doUpdate({ status: "Đang chờ" })}
+                          onClick={() => doUpdate({ status: APPT_STATUS.DANG_CHO })}
                             className="px-3 py-2 rounded-xl border border-violet-200 text-violet-700 hover:bg-violet-50 hover:border-violet-300 transition"
                           >
                             Đánh dấu chờ
                           </button>
                         )}
-                        {appt.status !== "Đã hủy" && (
+                        {appt.status !== APPT_STATUS.DA_HUY && (
                           <button
-                            onClick={() => doUpdate({ status: "Đã hủy" })}
+                          onClick={() => doUpdate({ status: APPT_STATUS.DA_HUY })}
                             className="px-3 py-2 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 transition"
                           >
                             Hủy lịch
@@ -259,20 +275,7 @@ export default function ApptDetailModal({
                           required
                         />
                       </label>
-                      <label className="text-sm">
-                        Thời lượng (phút)
-                        <input
-                          type="number"
-                          min={10}
-                          step={5}
-                          className="mt-1 w-full rounded-md px-3 py-2 ring-1 ring-violet-200/80 focus:ring-2 focus:ring-violet-400 outline-none transition"
-                          value={form.duration}
-                          onChange={(e) =>
-                            setForm((s) => ({ ...s, duration: e.target.value }))
-                          }
-                          required
-                        />
-                      </label>
+                      
                       <label className="text-sm md:col-span-4">
                         Ghi chú
                         <textarea

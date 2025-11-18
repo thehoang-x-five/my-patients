@@ -1,11 +1,22 @@
-import React from 'react';
-import { useDeferredValue, useMemo, useRef, useState } from "react";
+import React, {
+  useDeferredValue,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
+
 import HistoryToolbar from "../components/history/HistoryToolbar.jsx";
 import HistoryTable from "../components/history/HistoryTable.jsx";
 import HistoryFilters from "../components/history/HistoryFilterPopover.jsx";
 import HistoryDetailModal from "../components/history/HistoryDetailModal.jsx";
-import { VISITS, TRANSACTIONS, todayStats } from "../data/history.js";
+
+import {
+  useHistoryVisits,
+  useHistoryTransactions,
+  todayStats,
+} from "../api/history.js";
+
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
@@ -16,40 +27,53 @@ export default function History() {
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
   const [tab, setTab] = useState("visits");
-  const stats = todayStats(VISITS, TRANSACTIONS);
 
-  // filters (controlled at route)
+  // filter state
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [kw, setKw] = useState("");
   const kwDef = useDeferredValue(kw);
 
-  const [detail, setDetail] = useState({ open: false, type: null, row: null });
+  const [detail, setDetail] = useState({
+    open: false,
+    type: null,
+    row: null,
+  });
 
-  // popover control
   const [openFilter, setOpenFilter] = useState(false);
   const filterBtnRef = useRef(null);
 
-  // rows
+  // load data
+  const { data: visitRows = [] } = useHistoryVisits();
+  const { data: txnRows = [] } = useHistoryTransactions();
+
   const rows = useMemo(() => {
-    const data = tab === "visits" ? VISITS : TRANSACTIONS;
+    const data = tab === "visits" ? visitRows : txnRows;
+
     const inRange = (d) => {
-      if (!d) return false;
+      if (!d) return true;
       const dt = new Date(d);
       if (from && dt < new Date(from)) return false;
       if (to && dt > new Date(to)) return false;
       return true;
     };
-    const match = (r) =>
+
+    const matchKw = (r) =>
       !kwDef ||
-      JSON.stringify(r).toLowerCase().includes(kwDef.trim().toLowerCase());
+      JSON.stringify(r)
+        .toLowerCase()
+        .includes(kwDef.trim().toLowerCase());
 
     return data
-      .filter((r) => inRange(r.date) && match(r))
+      .filter((r) => inRange(r.date) && matchKw(r))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [tab, from, to, kwDef]);
+  }, [tab, visitRows, txnRows, from, to, kwDef]);
 
-  // helper to clear filters (topbar button)
+  const stats = useMemo(
+    () => todayStats(visitRows, txnRows),
+    [visitRows, txnRows]
+  );
+
   const resetFilters = () => {
     setFrom("");
     setTo("");
@@ -58,7 +82,7 @@ export default function History() {
 
   return (
     <motion.main
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       className="px-4 pb-3 pt-1 min-h-0 overflow-hidden"
@@ -86,18 +110,18 @@ export default function History() {
             exit={{ opacity: 0, y: -6 }}
             className="card p-4 pt-2 mt-3 flex-1 min-h-0 flex flex-col"
           >
-            {/* Bảng giãn đầy phần còn lại và tự scroll */}
             <HistoryTable
               tab={tab}
               rows={rows}
-              onEye={(row, type) => setDetail({ open: true, type, row })}
+              onEye={(row, type) =>
+                setDetail({ open: true, type, row })
+              }
               stretch
             />
           </motion.section>
         </AnimatePresence>
       </div>
 
-      {/* Popover lọc (tự động áp dụng) */}
       <HistoryFilters
         open={openFilter}
         onClose={() => setOpenFilter(false)}
@@ -114,7 +138,9 @@ export default function History() {
         open={detail.open}
         type={detail.type}
         row={detail.row}
-        onClose={() => setDetail({ open: false, type: null, row: null })}
+        onClose={() =>
+          setDetail({ open: false, type: null, row: null })
+        }
       />
     </motion.main>
   );

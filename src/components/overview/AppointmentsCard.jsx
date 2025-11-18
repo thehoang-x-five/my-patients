@@ -11,12 +11,9 @@ export default function AppointmentsCard({
   return (
     <Card
       title="Lịch hẹn sắp tới (hôm nay)"
-      action={
-        <a href="/appointments" className="text-slate-500 text-sm underline hover:text-sky-500">
-          Quản lý →
-        </a>
-      }
+     
       ariaLabel="Lịch hẹn sắp tới"
+      className="h-full"
     >
       {loading && <div className="skel h-36" />}
       {error && <div className="text-rose-600">{error}</div>}
@@ -40,11 +37,12 @@ export default function AppointmentsCard({
                        before:bg-sky-400"
           >
             <div className="flex items-center gap-2 px-2 min-w-0 ">
-              <Badge tone={r.statusTone || "info"}>{r.status}</Badge>
-              <div className="truncate">
+              
+              <div className="truncate pl-2">
                 <b className="truncate">{r.patient}</b> ·{" "}
                 <span className="text-slate-500">{r.service}</span>
               </div>
+              <Badge tone={r.statusTone || "info"}>{r.status}</Badge>
             </div>
             <time className="text-sm text-slate-600 whitespace-nowrap">
               {r.at}

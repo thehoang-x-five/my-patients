@@ -2,38 +2,82 @@
 import { http } from "./http";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ensureStarted, on } from "./realtime";
+import { mockEnabled, mockQueueApi } from "./mockData";
+
+/* ========= Helpers: chọn nguồn thật / mock ========= */
+
+function useQueueImpl() {
+  return {
+    async getQueueToday() {
+      if (mockEnabled) return mockQueueApi.listQueueToday();
+      return (await http.get("/queue")).data;
+    },
+
+    async enqueueWalkin(payload) {
+      if (mockEnabled) return mockQueueApi.enqueueWalkin(payload);
+      return (await http.post("/queue/walkin", payload)).data;
+    },
+
+    async enqueueFromAppointment(payload) {
+      if (mockEnabled) return mockQueueApi.enqueueFromAppointment(payload);
+      return (await http.post("/queue/from-appointment", payload)).data;
+    },
+
+    async enqueueService(payload) {
+      if (mockEnabled) return mockQueueApi.enqueueService(payload);
+      return (await http.post("/queue/service", payload)).data;
+    },
+
+    async enqueueReturnToDoctor(payload) {
+      if (mockEnabled) return mockQueueApi.enqueueReturnToDoctor(payload);
+      return (await http.post("/queue/return-to-doctor", payload)).data;
+    },
+
+    async startExam(id) {
+      if (mockEnabled) return mockQueueApi.startExam(id);
+      return (await http.patch(`/queue/${id}/start-exam`)).data;
+    },
+
+    async markEmergency({ id, flag }) {
+      if (mockEnabled) return mockQueueApi.markEmergency({ id, flag });
+      return (await http.patch(`/queue/${id}/mark-emergency`, { flag })).data;
+    },
+
+    async skipOnce(id) {
+      if (mockEnabled) return mockQueueApi.skipOnce(id);
+      return (await http.patch(`/queue/${id}/skip-once`)).data;
+    },
+
+    async markNoShow(id) {
+      if (mockEnabled) return mockQueueApi.markNoShow(id);
+      return (await http.patch(`/queue/${id}/no-show`)).data;
+    },
+
+    async finishAndRemove(id) {
+      if (mockEnabled) return mockQueueApi.finishAndRemove(id);
+      return (await http.delete(`/queue/${id}`)).data;
+    },
+  };
+}
+
+const impl = useQueueImpl();
 
 /* ========= Core REST ========= */
-export const getQueue = async () => (await http.get("/queue")).data;
+
 // alias để khớp các trang: hiện tại dùng chung /queue cho "today"
+export const getQueue = () => impl.getQueueToday();
 export const getQueueToday = getQueue;
 
-export const enqueueWalkin = async (payload) =>
-  (await http.post("/queue/walkin", payload)).data;
+export const enqueueWalkin = (payload) => impl.enqueueWalkin(payload);
+export const enqueueFromAppointment = (payload) => impl.enqueueFromAppointment(payload);
+export const enqueueService = (payload) => impl.enqueueService(payload);
+export const enqueueReturnToDoctor = (payload) => impl.enqueueReturnToDoctor(payload);
 
-export const enqueueFromAppointment = async (payload) =>
-  (await http.post("/queue/from-appointment", payload)).data;
-
-export const enqueueService = async (payload) =>
-  (await http.post("/queue/service", payload)).data;
-
-export const enqueueReturnToDoctor = async (payload) =>
-  (await http.post("/queue/return-to-doctor", payload)).data;
-
-export const startExam = async (id) =>
-  (await http.patch(`/queue/${id}/start-exam`)).data;
-
-export const markEmergency = async ({ id, flag }) =>
-  (await http.patch(`/queue/${id}/mark-emergency`, { flag })).data;
-
-export const skipOnce = async (id) =>
-  (await http.patch(`/queue/${id}/skip-once`)).data;
-
-export const markNoShow = async (id) =>
-  (await http.patch(`/queue/${id}/no-show`)).data;
-
-export const finishAndRemove = async (id) =>
-  (await http.delete(`/queue/${id}`)).data;
+export const startExam = (id) => impl.startExam(id);
+export const markEmergency = (args) => impl.markEmergency(args);
+export const skipOnce = (id) => impl.skipOnce(id);
+export const markNoShow = (id) => impl.markNoShow(id);
+export const finishAndRemove = (id) => impl.finishAndRemove(id);
 
 // alias để khớp hook ở trang
 export const finishRemove = finishAndRemove;

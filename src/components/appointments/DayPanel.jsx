@@ -1,7 +1,22 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
+import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments.js";
 
+function getApptChipColor(status) {
+  switch (status) {
+    case APPT_STATUS.DA_XAC_NHAN:
+      return { tone: "emerald", dot: "emerald" };   // xanh
+    case APPT_STATUS.DANG_CHO:
+      return { tone: "amber", dot: "amber" };       // vàng
+    case APPT_STATUS.DA_CHECKIN:
+      return { tone: "sky", dot: "sky" };           // xanh dương
+    case APPT_STATUS.DA_HUY:
+      return { tone: "rose", dot: "rose" };         // đỏ/hồng
+    default:
+      return { tone: "slate", dot: "slate" };
+  }
+}
 export default function DayPanel({
   open,
   dateLabel,
@@ -91,13 +106,15 @@ export default function DayPanel({
             </div>
           </header>
 
-          <div className="p-3 overflow-y-auto max-h-[calc(70vh-73px)] scrollbar-thin scrollbar-thumb-violet-200">
+          <div className="p-3 overflow-y-auto max-h-[calc(70vh-73px)] scrollbar-none">
             {normalized?.length ? (
               <div className="flex flex-col gap-2">
                 {normalized.map((a, i) => {
                   const isNew = highlightId && (a._aid === highlightId || a.id === highlightId);
-                  const blocked = ["Đã hủy", "Không đến", "Đã hoàn thành"];
-                  const canCheckIn = !blocked.includes(a.status) && !a.checkedIn;
+                  const statusCode = a.status;
+const { tone, dot } = getApptChipColor(statusCode);
+const statusLabel = APPT_STATUS_LABEL[statusCode] || "—";
+const canCheckIn = statusCode === APPT_STATUS.DA_XAC_NHAN;
                   const isBusy = busy.has(a._aid);
                   return (
                     <motion.div
@@ -121,31 +138,23 @@ export default function DayPanel({
 
                           {!a.checkedIn && (
                             <Chip
-                              tone={
-                                a.status === "Đã xác nhận"
-                                  ? "emerald"
-                                  : a.status === "Đang chờ"
-                                  ? "amber"
-                                  : "slate"
-                              }
-                              dot={
-                                a.status === "Đã xác nhận"
-                                  ? "emerald"
-                                  : a.status === "Đang chờ"
-                                  ? "amber"
-                                  : "slate"
-                              }
-                              className="text-xs"
-                            >
-                              {a.status}
-                            </Chip>
+                            tone={tone} dot={dot}
+                            className="text-xs"
+                          >
+                            {statusLabel}
+                          </Chip>
                           )}
                         </div>
                       </div>
 
-                      <div className="text-sm text-slate-700 mb-2">
-                        {a.patient} • {a.doctor || "—"} • {a.dept || "—"}
-                      </div>
+                      <div className="text-sm text-slate-700 mb-1">
+  {a.patient} • {a.doctor || "—"} • {a.dept || "—"}
+</div>
+{a.phone && (
+  <div className="text-xs text-slate-500 mb-2">
+    📞 {a.phone}
+  </div>
+)}
 
                       <Chip tone="slate" className="text-xs mb-2">
                         {a.type}

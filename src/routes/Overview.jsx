@@ -1,25 +1,30 @@
-import React from 'react';
+import React from "react";
 import { motion } from "framer-motion";
 import KpiRail from "../components/overview/KpiRail.jsx";
 import AppointmentsCard from "../components/overview/AppointmentsCard.jsx";
-import WorkBoardCard from "../components/overview/WorkBoardCard.jsx";
-import AlertsCard from "../components/overview/AlertsCard.jsx";
 import ActivityCard from "../components/overview/ActivityCard.jsx";
-import {
-  kpi,
-  upcomingAppointments,
-  scheduleTasks, // dùng dữ liệu cũ nhưng render bằng WorkBoardCard mới
-  alerts,
-  activities,
-} from "../data/overview.js";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
+import { useDashboardToday } from "../api/dashboard.js";
+
 export default function Overview() {
-    useViewportVH();
-    const isMobile = useMediaQuery("(max-width: 640px)");
-    const isTablet = useMediaQuery("(max-width: 1024px)");
-    const topbar = isMobile ? 64 : isTablet ? 72 : 80;
-  
+  useViewportVH();
+  const isMobile = useMediaQuery("(max-width: 640px)");
+  const isTablet = useMediaQuery("(max-width: 1024px)");
+  const topbar = isMobile ? 64 : isTablet ? 72 : 80;
+
+  const { data, isLoading, error } = useDashboardToday();
+
+  const kpi = data?.kpi || {
+    patientsToday: { value: "0", delta: null, meta: null, spark: [] },
+    appointments: { value: "0", delta: null, meta: null, spark: [] },
+    revenue: { value: "0", delta: null, meta: null, spark: [] },
+    exams: { value: "0", delta: null, meta: null, spark: [] },
+  };
+
+  const upcomingAppointments = data?.upcomingAppointments || [];
+  const activities = data?.activities || [];
+
   return (
     <motion.main
       id="main"
@@ -34,42 +39,39 @@ export default function Overview() {
         className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
         style={{ "--topbar-h": `${topbar}px` }}
       >
+        {/* Dải KPI 4 box */}
         <div className="flex-none">
           <KpiRail kpi={kpi} />
         </div>
-        <div className="mt-2  flex-1 min-h-0 overflow-hidden">
-      <section
-        className="
-          pb-0.5 pt-1.5 h-full py-0 overflow-y-auto scrollbar-none grid gap-3 items-start
-          md:grid-cols-12 grid-rows-[auto_auto] content-start
-        "
 
-        
-      >
-        {/* Hàng 1 */}
-        <div className="md:col-span-6 min-w-0">
-          {/* Chiều cao cố định + cuộn bên trong để bố cục không vỡ */}
-          <AppointmentsCard
-            rows={upcomingAppointments}
-          />
-        </div>
-        <div className="md:col-span-6 min-w-0">
-          <WorkBoardCard
-            upcoming={(scheduleTasks?.timeline || []).slice(0, 8)}
-            todos={(scheduleTasks?.todos || []).slice(0, 8)}
-            minH="min-h-[340px]"
-          />
-        </div>
+        {/* Vùng bên dưới: chỉ còn 2 card, kéo cao full */}
+        <div className="mt-2 flex-1 min-h-0 overflow-hidden">
+          <section
+            className="
+              pb-0.5 pt-1.5 h-full py-0 overflow-y-auto scrollbar-none
+              grid gap-3 items-stretch md:grid-cols-12 content-stretch
+            "
+          >
+            {/* Lịch hẹn sắp tới (hôm nay) - chiếm nửa trái, cao full */}
+            <div className="md:col-span-6 min-w-0 h-full">
+              <AppointmentsCard
+                rows={upcomingAppointments}
+                loading={isLoading}
+                error={error ? error.message : null}
+                maxBodyClass="max-h-none overflow-y-auto pr-1 scrollbar-none"
+              />
+            </div>
 
-        {/* Hàng 2 */}
-        <div className="md:col-span-6 min-w-0 ">
-          <AlertsCard alerts={(alerts || []).slice(0, 5)} />
+            {/* Hoạt động gần đây - nửa phải, cao full */}
+            <div className="md:col-span-6 min-w-0 h-full">
+              {isLoading && !activities.length ? (
+                <div className="skel h-36" />
+              ) : (
+                <ActivityCard items={activities} />
+              )}
+            </div>
+          </section>
         </div>
-        <div className="md:col-span-6 min-w-0">
-          <ActivityCard items={(activities || []).slice(0, 5)} />
-        </div>
-      </section>
-      </div>
       </div>
     </motion.main>
   );

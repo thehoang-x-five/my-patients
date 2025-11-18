@@ -1,102 +1,71 @@
-import React from 'react';
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+// /src/pages/Notifications.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import NotificationsToolbar from "../components/notifications/NotificationsToolbar.jsx";
 import NotificationList from "../components/notifications/NotificationList.jsx";
 import NotificationDetailModal from "../components/notifications/NotificationDetailModal.jsx";
-import {
-  loadNotifications,
-  saveNotifications,
-  markAllRead,
-  todayStats,
-} from "../data/notifications.js";
-import { useSearchParams } from "react-router-dom";
-import useViewportVH from "../hooks/useViewportVH";
+import { useMarkAllRead, useNotifications, useTodayStatsQuery, subscribeNotifications } from "../api/notifications.js";
 import useMediaQuery from "../hooks/useMediaQuery";
 
-export default function Notifications() {
-  useViewportVH();
+export default function NotificationsPage() {
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [loading, setLoading] = useState(true);
-  const [all, setAll] = useState([]);
-  const [filter, setFilter] = useState(searchParams.get("filter") || "all");
-  const [q, setQ] = useState(searchParams.get("q") || "");
-  const qDef = useDeferredValue(q);
-  const [detail, setDetail] = useState({ open: false, data: null });
+  // URL ←→ state
+  const { search } = useLocation();
+  const nav = useNavigate();
+  const sp = new URLSearchParams(search);
+  const tabInit = sp.get("tab") || "all";
+  const qInit = sp.get("q") || "";
 
+  const [tab, setTab] = useState(tabInit);
+  const [query, setQuery] = useState(qInit);
+
+  // data
+  const { data: listResp, isLoading, error } = useNotifications({ params: { tab, q: query } });
+  const items = useMemo(() => Array.isArray(listResp?.data) ? listResp.data : (listResp || []), [listResp]);
+  const { data: todayStats } = useTodayStatsQuery();
+
+  const [detail, setDetail] = useState({ open: false, item: null });
+  function openDetail(item) { setDetail({ open: true, item }); }
+
+  // mark all
+  const markAll = useMarkAllRead();
+
+  // sync URL when tab/query changed
   useEffect(() => {
-    setLoading(true);
-    const t = setTimeout(() => {
-      setAll(loadNotifications());
-      setLoading(false);
-    }, 250);
-    return () => clearTimeout(t);
-  }, []);
+    const p = new URLSearchParams();
+    if (tab && tab !== "all") p.set("tab", tab);
+    if (query) p.set("q", query);
+    nav({ search: p.toString() }, { replace: true });
+  }, [tab, query, nav]);
 
-  // deep-link mở chi tiết ?open=id
+  // realtime subscribe
+  const qc = useQueryClient();
   useEffect(() => {
-    const openId = searchParams.get("open");
-    if (!openId || !all.length) return;
-    const found = all.find((x) => x.id === openId);
-    if (found) setDetail({ open: true, data: found });
-  }, [all, searchParams]);
+    let off;
+    (async () => { off = await subscribeNotifications(qc); })();
+    return () => { try { off?.(); } catch {} };
+  }, [qc]);
 
-  // đồng bộ URL khi đổi filter/search
-  useEffect(() => {
-    const sp = new URLSearchParams(searchParams);
-    filter ? sp.set("filter", filter) : sp.delete("filter");
-    q ? sp.set("q", q) : sp.delete("q");
-    sp.delete("open");
-    setSearchParams(sp, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, q]);
-
-  const stats = todayStats(all);
-
-  const items = useMemo(() => {
-    const kw = qDef.trim().toLowerCase();
-    return all
-      .filter((n) => {
-        if (filter === "all") return true;
-        if (filter === "unread") return n.unread;
-        return n.type === filter;
-      })
-      .filter((n) =>
-        !kw
-          ? true
-          : [
-              n.title,
-              n.body,
-              n.patientId,
-              n.patientName,
-              n.rxId,
-              n.invoiceId,
-              n.drugCode,
-            ]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase()
-              .includes(kw)
-      )
-      .sort((a, b) => new Date(b.ts) - new Date(a.ts));
-  }, [all, filter, qDef]);
-
-  function toggleRead(id) {
-    setAll((prev) => {
-      const next = prev.map((n) =>
-        n.id === id ? { ...n, unread: !n.unread } : n
-      );
-      saveNotifications(next);
-      return next;
+  // filter client-side fallback (if server not filtering)
+  const filtered = useMemo(() => {
+    let arr = items || [];
+    if (tab === "unread") arr = arr.filter((n) => !n.read);
+    if (tab === "today") arr = arr.filter((n) => {
+      const d = new Date(n.createdAt || n.time || n.date);
+      const now = new Date();
+      return d.toDateString() === now.toDateString();
     });
-  }
-  function markAll() {
-    setAll(markAllRead());
-  }
+    if (query) {
+      const s = query.toLowerCase();
+      arr = arr.filter((n) => `${n.title || n.message || ""} ${n.type || ""}`.toLowerCase().includes(s));
+    }
+    return arr;
+  }, [items, tab, query]);
 
   return (
     <motion.main
@@ -108,49 +77,53 @@ export default function Notifications() {
       aria-label="Thông báo"
     >
       <div
-        className="mt-2 flex flex-col min-h-0
-                   h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
+        className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
         style={{ "--topbar-h": `${topbar}px` }}
       >
-        {/* Toolbar chiếm tự nhiên, không kéo giãn */}
         <NotificationsToolbar
-          filter={filter}
-          setFilter={setFilter}
-          stats={stats}
-          q={q}
-          setQ={setQ}
-          onMarkAll={markAll}
+          tab={tab}
+          setTab={setTab}
+          query={query}
+          setQuery={setQuery}
+          todayStats={todayStats}
+          onMarkAll={() => markAll.mutate()}
+          isMarkingAll={markAll.isPending}
         />
 
-        {/* List fill phần còn lại */}
-        <div className="mt-3 flex-1 min-h-0">
-          <AnimatePresence mode="wait">
-            <motion.section
-              key={filter + "|" + (qDef ? "q" : "")}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="h-full min-h-0"
-            >
-              <NotificationList
-                items={items}
-                loading={loading}
-                onToggleRead={toggleRead}
-                onOpen={(data) => {
-                  setDetail({ open: true, data });
-                  if (data.unread) toggleRead(data.id);
-                }}
-                stretch
-              />
-            </motion.section>
-          </AnimatePresence>
-        </div>
+        {isLoading ? (
+          <section className="card mt-3 p-4 h-full">
+            <div className="space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skel h-20" />)}
+            </div>
+          </section>
+        ) : error ? (
+          <section role="alert" className="card mt-3 p-4 ring-1 ring-red-200 bg-red-50 text-red-700">
+            Không tải được danh sách thông báo. <span className="text-red-600/80 text-sm">{String(error)}</span>
+          </section>
+        ) : (
+          <div className="mt-2.5 flex-1 min-h-0">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${tab}-${query}`}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+                className="h-full min-h-0"
+              >
+                <div className="h-full min-h-0 overflow-auto scrollbar-none">
+                  <NotificationList items={filtered} onOpenDetail={openDetail} />
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        )}
       </div>
 
       <NotificationDetailModal
         open={detail.open}
-        data={detail.data}
-        onClose={() => setDetail({ open: false, data: null })}
+        item={detail.item}
+        onClose={() => setDetail({ open: false, item: null })}
       />
     </motion.main>
   );

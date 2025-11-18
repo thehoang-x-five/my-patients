@@ -1,4 +1,3 @@
-// src/components/exam/ExamDetail.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
@@ -22,11 +21,33 @@ function emptyRow() {
   };
 }
 
-export default function ExamDetail({ patient, onBack, onExportDiagnosis, onExportOrder }) {
+export default function ExamDetail({
+  patient,
+  onBack,
+  onExportDiagnosis,
+  onExportOrder,
+}) {
+  // ----- STATE CHUNG -----
   const [rows, setRows] = useState([emptyRow()]);
-  const [dx, setDx] = useState({ pre: "", final: "", plan: "", advice: "" });
+  const [dx, setDx] = useState({
+    pre: "",
+    final: "",
+    plan: "",
+    advice: "",
+    note: "",
+    flags: {
+      choVe: false,
+      choThuocVe: false,
+      taiKham: false,
+    },
+  });
+  const [dxFlagError, setDxFlagError] = useState("");
   const [rx, setRx] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // CLS – thêm kết quả & file
+  const [clsResult, setClsResult] = useState("");
+  const [clsFiles, setClsFiles] = useState([]);
 
   const { data: examServices = [] } = useExamServices();
   const svcMap = useMemo(() => {
@@ -35,7 +56,7 @@ export default function ExamDetail({ patient, onBack, onExportDiagnosis, onExpor
     return m;
   }, [examServices]);
 
-  // Prefill nếu có serviceOrder.items
+  // Prefill nếu có serviceOrder.items (LS)
   useEffect(() => {
     const items = patient?.serviceOrder?.items;
     if (Array.isArray(items) && items.length) {
@@ -49,15 +70,53 @@ export default function ExamDetail({ patient, onBack, onExportDiagnosis, onExpor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient?.serviceOrder?.items]);
 
-  const hasOrder = useMemo(() => rows.some((r) => (r.svcId || "").trim()), [rows]);
+  const hasOrder = useMemo(
+    () => rows.some((r) => (r.svcId || "").trim()),
+    [rows]
+  );
   const hasDx = useMemo(() => {
     const t = (v) => (v ?? "").trim();
     return !!(t(dx.pre) || t(dx.final) || t(dx.plan) || t(dx.advice));
   }, [dx]);
 
-  function addRow() { setRows((s) => [...s, emptyRow()]); }
-  function removeRow(id) { setRows((s) => (s.length > 1 ? s.filter((r) => r.id !== id) : s)); }
-  function patchRow(id, patch) { setRows((s) => s.map((r) => (r.id === id ? { ...r, ...patch } : r))); }
+  function addRow() {
+    setRows((s) => [...s, emptyRow()]);
+  }
+  function removeRow(id) {
+    setRows((s) => (s.length > 1 ? s.filter((r) => r.id !== id) : s));
+  }
+  function patchRow(id, patch) {
+    setRows((s) => s.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  // ---- FLAGS HƯỚNG XỬ TRÍ ----
+  const dxFlags = dx.flags || {
+    choVe: false,
+    choThuocVe: false,
+    taiKham: false,
+  };
+
+  function toggleDxFlag(name) {
+    setDxFlagError("");
+    setDx((prev) => {
+      const prevFlags = prev.flags || {
+        choVe: false,
+        choThuocVe: false,
+        taiKham: false,
+      };
+      const nextFlags = { ...prevFlags, [name]: !prevFlags[name] };
+
+      // Không cho tick cùng lúc “Cho về” + “Tái khám”
+      if (name === "choVe" && nextFlags.choVe && nextFlags.taiKham) {
+        nextFlags.taiKham = false;
+      }
+      if (name === "taiKham" && nextFlags.taiKham && nextFlags.choVe) {
+        nextFlags.choVe = false;
+      }
+
+      return { ...prev, flags: nextFlags };
+    });
+  }
 
   function buildPayloadCommon() {
     const orderRows = rows
@@ -69,7 +128,6 @@ export default function ExamDetail({ patient, onBack, onExportDiagnosis, onExpor
           serviceName: meta?.name || r.svcId,
           status: r.status || STATUS_DEFAULT,
           note: r.note || "",
-          result: r.result || "",
         };
       });
 
@@ -80,7 +138,14 @@ export default function ExamDetail({ patient, onBack, onExportDiagnosis, onExpor
         dose: (r.dose ?? "").trim(),
         qty: Math.max(1, Number.parseInt(r.qty ?? 0, 10) || 0),
       }))
-      .filter((r) => r.code && r.name && r.dose && Number.isFinite(r.qty) && r.qty > 0);
+      .filter(
+        (r) =>
+          r.code &&
+          r.name &&
+          r.dose &&
+          Number.isFinite(r.qty) &&
+          r.qty > 0
+      );
 
     return {
       meta: {
@@ -92,11 +157,11 @@ export default function ExamDetail({ patient, onBack, onExportDiagnosis, onExpor
       },
       orderRows,
       rxRows,
-      dx: { ...dx },
+      dx: { ...dx, flags: dxFlags },
     };
   }
 
-  // Mutations
+  // Mutations (fallback nếu không có callback từ parent)
   const orderMut = useCreateExamOrder();
   const dxMut = useCreateDiagnosis();
 
@@ -106,261 +171,800 @@ export default function ExamDetail({ patient, onBack, onExportDiagnosis, onExpor
     const pid = patient?.pid || patient?.id;
 
     if (onExportOrder) {
-      onExportOrder(patient, payload);
+      await onExportOrder(patient, payload);
       return;
     }
-    // Default: gọi API trực tiếp
+
     await orderMut.mutateAsync({
       pid,
       services: payload.orderRows.map((r) => ({ id: r.id, note: r.note })),
-      note: payload.orderRows.map((r) => r.note).filter(Boolean).join("; "),
+      note: payload.orderRows
+        .map((r) => r.note)
+        .filter(Boolean)
+        .join("; "),
       fromDoctor: patient?.doctor || "Bác sĩ phụ trách",
     });
   }
 
-  async function handleExportDiagnosis() {
+  async function handleExportDiagnosisLS() {
     if (!hasDx) return;
+
+    // đảm bảo không có combination choVe + taiKham (phòng thủ)
+    if (dxFlags.choVe && dxFlags.taiKham) {
+      setDxFlagError('Không thể chọn đồng thời "Cho về" và "Tái khám".');
+      return;
+    }
+
     const payload = buildPayloadCommon();
     const pid = patient?.pid || patient?.id;
     payload.services = payload.orderRows.map((r) => r.id);
 
     if (onExportDiagnosis) {
-      onExportDiagnosis(patient, payload);
+      await onExportDiagnosis(patient, {
+        dx: payload.dx,
+        rxRows: payload.rxRows,
+        services: payload.services,
+      });
       return;
     }
-    // Default: gọi API trực tiếp
+
     await dxMut.mutateAsync({
       pid,
-      dx,
+      dx: payload.dx,
       rx: payload.rxRows,
       services: payload.services,
     });
   }
 
   function onPickMany(list) {
-    setRx((s) => [...s, ...list.filter((n) => !s.some((x) => x.code === n.code))]);
+    setRx((s) => [
+      ...s,
+      ...list.filter((n) => !s.some((x) => x.code === n.code)),
+    ]);
     setPickerOpen(false);
   }
-  function removeRxAt(index) { setRx((s) => s.filter((_, i) => i !== index)); }
+  function removeRxAt(index) {
+    setRx((s) => s.filter((_, i) => i !== index));
+  }
 
   const now = new Date();
   const todayStr = now.toLocaleDateString("vi-VN");
-  const timeStr = now.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+  const timeStr = now.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  // ----- PHÂN BIỆT LS / CLS -----
+  const queueType =
+    patient?.loai_hang_doi || patient?.queueType || patient?.visitType;
+  const isCLS = queueType === "can_lam_sang" || queueType === "cls";
+
+  // Loại lượt (Khám mới / Tái khám) chỉ hiển thị trong LS
+  const visitKind = patient?.loai_luot || patient?.visitKind; // kham_moi | tai_kham
+  let visitKindLabel = "";
+  if (visitKind === "tai_kham") visitKindLabel = "Tái khám";
+  else if (visitKind === "kham_moi") visitKindLabel = "Khám mới";
+
+  // LS: có phải lượt "trả từ dịch vụ" hay không
+  const src = patient?.nguon || patient?.source; // appointment | walkin | service_return
+  const isReturnFromService =
+    !isCLS &&
+    (src === "service_return" || patient?.nguon_label === "Trả từ dịch vụ");
+
+  // Dữ liệu kết quả dịch vụ kèm theo (tùy backend, cố gắng map linh hoạt)
+  const rawServiceResults =
+    patient?.serviceResults || // dạng mong muốn
+    patient?.clsResults ||
+    patient?.services ||
+    [];
+
+  // Chuẩn hóa: mỗi dòng gồm tên DV, ghi chú, kết quả, file đính kèm
+  const serviceResults = Array.isArray(rawServiceResults)
+    ? rawServiceResults.map((x, i) => ({
+        id: x.id || x.ma_chi_tiet_dv || `svc-${i}`,
+        name:
+          x.serviceName ||
+          x.ten_dich_vu ||
+          x.name ||
+          `Dịch vụ ${i + 1}`,
+        note: x.note || x.ghi_chu || "",
+        result: x.result || x.ket_qua || "",
+        files:
+          x.files ||
+          x.attachments ||
+          x.tep_dinh_kem ||
+          [],
+      }))
+    : [];
+
+  const serviceName =
+    patient?.serviceName || patient?.ten_dich_vu || patient?.dich_vu || "";
+
+  // Hoàn tất CLS
+  async function handleFinishCLS() {
+    const pid = patient?.pid || patient?.id;
+    const payload = {
+      dx: {
+        note: dx.note || "",
+        result: clsResult || "",
+      },
+      result: clsResult || "",
+      note: dx.note || "",
+      files: clsFiles,
+      services: patient?.services?.map((s) => s.id) || [],
+    };
+
+    if (onExportDiagnosis) {
+      await onExportDiagnosis(patient, payload);
+      return;
+    }
+
+    await dxMut.mutateAsync({
+      pid,
+      dx: payload.dx,
+      rx: [],
+      services: payload.services,
+    });
+  }
 
   return (
     <>
-      <section className="h-full min-h-0 flex flex-col">
+      <section className="h-full min-h-0 flex flex-col ">
         {/* Header */}
-        <header className="sticky top-0 z-20 bg-gradient-to-r from-teal-50 via-white to-teal-50/60 backdrop-blur shadow-sm">
+        <header className="sticky top-0 z-20 bg-gradient-to-r from-teal-50 via-white to-teal-50/60 backdrop-blur shadow-sm rounded-2xl">
           <div className="flex items-start justify-between gap-2 px-4 py-3">
             <div className="flex items-center gap-2">
               <motion.div whileTap={{ scale: 0.96 }}>
-                <Button onClick={onBack} aria-label="Quay lại">←</Button>
+                <Button onClick={onBack} aria-label="Quay lại">
+                  ←
+                </Button>
               </motion.div>
-              <h2 className="text-lg font-extrabold tracking-tight text-slate-900">{patient.name}</h2>
+              <h2 className="text-lg font-extrabold tracking-tight text-slate-900">
+                {patient.name}
+              </h2>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-              <span className="rounded-full bg-slate-100 px-2 py-0.5">{patient.pid || patient.id}</span>
-              {patient.age != null && <span className="rounded-full bg-slate-100 px-2 py-0.5">{patient.age} tuổi</span>}
-              {patient.gender && <span className="rounded-full bg-slate-100 px-2 py-0.5">{patient.gender}</span>}
-              {(patient.dept || patient.department) && <span className="rounded-full bg-slate-100 px-2 py-0.5">{patient.dept || patient.department}</span>}
-              <span className="rounded-full bg-slate-100 px-2 py-0.5">{todayStr} • {timeStr}</span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                {patient.pid || patient.id}
+              </span>
+              {patient.age != null && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                  {patient.age} tuổi
+                </span>
+              )}
+              {patient.gender && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                  {patient.gender}
+                </span>
+              )}
+              {(patient.dept || patient.department) && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                  {patient.dept || patient.department}
+                </span>
+              )}
+
+              {/* Loại lượt: LS / CLS */}
+              {isCLS ? (
+                <span className="rounded-full bg-sky-100 text-sky-800 px-2 py-0.5">
+                  CLS
+                </span>
+              ) : (
+                <span className="rounded-full bg-teal-100 text-teal-800 px-2 py-0.5">
+                  Khám LS
+                </span>
+              )}
+
+              {/* LS: Khám mới / Tái khám (nếu có) */}
+              {!isCLS && visitKindLabel && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                  {visitKindLabel}
+                </span>
+              )}
+
+              {/* Nguồn hiển thị chỉ cho LS (Hẹn khám / Walk-in / Trả từ dịch vụ) */}
+              {!isCLS && src && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                  {src === "appointment"
+                    ? "Hẹn khám"
+                    : src === "walkin"
+                    ? "Walk-in"
+                    : src === "service_return"
+                    ? "Trả từ dịch vụ"
+                    : src}
+                </span>
+              )}
+
+              {(patient.cap_cuu || patient.capCuu) && (
+                <span className="rounded-full bg-rose-100 text-rose-800 px-2 py-0.5">
+                  Khẩn
+                </span>
+              )}
+
+              <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                {todayStr} • {timeStr}
+              </span>
             </div>
           </div>
         </header>
 
         {/* Body */}
-        <motion.div {...fadeIn} className="flex-1 min-h-0 overflow-y-auto scrollbar-none px-1 pt-3 pb-0">
-          {/* Phiếu khám */}
-          <motion.section {...fadeIn} className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200">
-            <h4 className="font-extrabold mb-2 text-slate-900">Phiếu khám (Chỉ định dịch vụ)</h4>
-            <div className="overflow-x-auto scrollbar-none">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-slate-700 sticky top-0 bg-white/95 backdrop-blur">
-                  <tr className="bg-gradient-to-b from-teal-50 to-white">
-                    <th className="px-2 py-2 w-12">STT</th>
-                    <th className="px-2 py-2 w-72">Dịch vụ</th>
-                    <th className="px-2 py-2 w-44">Trạng thái</th>
-                    <th className="px-2 py-2">Ghi chú</th>
-                    <th className="px-2 py-2 w-16">Xóa</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map((r, idx) => {
-                    const svc = svcMap.get(r.svcId);
-                    return (
-                      <tr key={r.id} className="align-top transition-colors hover:bg-teal-50/50">
-                        <td className="px-2 py-2 text-slate-700">{idx + 1}</td>
-                        <td className="px-2 py-2">
-                          <select
-                            value={r.svcId}
-                            onChange={(e) => patchRow(r.id, { svcId: e.target.value })}
-                            className="w-full rounded-lg px-2 py-1 ring-1 ring-teal-200/80 focus:ring-2 focus:ring-teal-500 outline-none"
-                          >
-                            <option value="">— Chọn dịch vụ —</option>
-                            {examServices.map((s) => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
-                          {svc?.name && <div className="text-xs text-slate-500 mt-0.5">{svc.name}</div>}
-                        </td>
-                        <td className="px-2 py-2">
-                          <span className="inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ring-1 ring-amber-200 bg-amber-50 text-amber-700">
-                            {r.status || STATUS_DEFAULT}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2">
-                          <textarea
-                            value={r.note}
-                            onChange={(e) => patchRow(r.id, { note: e.target.value.slice(0, MAX_NOTE_LEN) })}
-                            title={r.note}
-                            rows={2}
-                            maxLength={MAX_NOTE_LEN}
-                            placeholder="Ghi chú (vd: chụp tay phải, nhịn ăn 8h...)"
-                            className="w-full px-2 py-1 rounded-md ring-1 ring-teal-200/80 focus:ring-2 focus:ring-teal-500 outline-none max-h-16 overflow-y-auto scrollbar-none bg-white"
-                          />
-                          <div className="text-[11px] text-slate-400 mt-0.5 text-right">
-                            {r.note?.length || 0}/{MAX_NOTE_LEN}
-                          </div>
-                        </td>
-                        <td className="px-2 py-2">
-                          <Button type="button" className="!px-2" onClick={() => removeRow(r.id)} aria-label="Xóa dòng">✕</Button>
-                        </td>
+        <motion.div
+          {...fadeIn}
+          className="flex-1 bg-cyan-50/10 min-h-0 overflow-y-auto scrollbar-none px-1 pt-3 pb-0"
+        >
+          {/* ================== MODE KHÁM LÂM SÀNG (LS) ================== */}
+          {!isCLS && (
+            <>
+              {/* Phiếu khám (Chỉ định dịch vụ) */}
+              <motion.section
+                {...fadeIn}
+                className="rounded-2xl p-4 mt-0 bg-white shadow-sm border border-slate-200"
+              >
+                <h4 className="font-extrabold mb-2 text-slate-900">
+                  Phiếu khám (Chỉ định dịch vụ)
+                </h4>
+                <div className="overflow-x-auto scrollbar-none">
+                  <table className="min-w-full text-sm">
+                    <thead className="text-left text-slate-700 sticky top-0 bg-white/95 backdrop-blur">
+                      <tr className="bg-gradient-to-b from-teal-50 to-white">
+                        <th className="px-2 py-2 w-12">STT</th>
+                        <th className="px-2 py-2 w-72">Dịch vụ</th>
+                        <th className="px-2 py-2 w-44">Trạng thái</th>
+                        <th className="px-2 py-2">Ghi chú</th>
+                        <th className="px-2 py-2 w-16">Xóa</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {rows.map((r, idx) => {
+                        const svc = svcMap.get(r.svcId);
+                        return (
+                          <tr
+                            key={r.id}
+                            className="align-top transition-colors hover:bg-teal-50/50"
+                          >
+                            <td className="px-2 py-2 text-slate-700">
+                              {idx + 1}
+                            </td>
+                            <td className="px-2 py-2">
+                              <select
+                                value={r.svcId}
+                                onChange={(e) =>
+                                  patchRow(r.id, { svcId: e.target.value })
+                                }
+                                className="w-full rounded-lg px-2 py-1 ring-1 ring-teal-200/80 focus:ring-2 focus:ring-teal-500 outline-none"
+                              >
+                                <option value="">— Chọn dịch vụ —</option>
+                                {examServices.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {svc?.name && (
+                                <div className="text-xs text-slate-500 mt-0.5">
+                                  {svc.name}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-2 py-2">
+                              <span className="inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ring-1 ring-amber-200 bg-amber-50 text-amber-700">
+                                {r.status || STATUS_DEFAULT}
+                              </span>
+                            </td>
+                            <td className="px-2 py-2">
+                              <textarea
+                                value={r.note}
+                                onChange={(e) =>
+                                  patchRow(r.id, {
+                                    note: e.target.value.slice(
+                                      0,
+                                      MAX_NOTE_LEN
+                                    ),
+                                  })
+                                }
+                                title={r.note}
+                                rows={2}
+                                maxLength={MAX_NOTE_LEN}
+                                placeholder="Ghi chú (vd: chụp tay phải, nhịn ăn 8h...)"
+                                className="w-full px-2 py-1 rounded-md ring-1 ring-teal-200/80 focus:ring-2 focus:ring-teal-500 outline-none max-h-16 overflow-y-auto scrollbar-none bg-white"
+                              />
+                              <div className="text-[11px] text-slate-400 mt-0.5 text-right">
+                                {r.note?.length || 0}/{MAX_NOTE_LEN}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2">
+                              <Button
+                                type="button"
+                                className="!px-2"
+                                onClick={() => removeRow(r.id)}
+                                aria-label="Xóa dòng"
+                              >
+                                ✕
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-            <div className="mt-3 flex justify-between items-center">
-              <Button type="button" onClick={addRow}>+ Thêm dòng</Button>
-              <div className="flex gap-2">
-                <Button
-                  className="transition-all duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-70"
-                  variant="radigan"
-                  disabled={!hasOrder || orderMut.isPending}
-                  onClick={handleExportOrder}
-                  title={!hasOrder ? "Chọn ít nhất 1 dịch vụ" : "Xuất phiếu khám (chuyển sang tiếp nhận dịch vụ)"}
+                <div className="mt-3 flex justify-between items-center">
+                  <Button type="button" onClick={addRow}>
+                    + Thêm dòng
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      className="transition-all duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-70"
+                      variant="radigan"
+                      disabled={!hasOrder || orderMut.isPending}
+                      onClick={handleExportOrder}
+                      title={
+                        !hasOrder
+                          ? "Chọn ít nhất 1 dịch vụ"
+                          : "Xuất phiếu khám (chuyển sang tiếp nhận dịch vụ)"
+                      }
+                    >
+                      {orderMut.isPending
+                        ? "Đang lưu..."
+                        : "Xuất phiếu khám"}
+                    </Button>
+                  </div>
+                </div>
+              </motion.section>
+
+              {/* Kết quả dịch vụ trả về (nếu lượt này là Trả từ dịch vụ) */}
+              {isReturnFromService && serviceResults.length > 0 && (
+                <motion.section
+                  {...fadeIn}
+                  className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200"
                 >
-                  {orderMut.isPending ? "Đang lưu..." : "Xuất phiếu khám"}
-                </Button>
-              </div>
-            </div>
-          </motion.section>
+                  <h4 className="font-extrabold mb-2 text-slate-900">
+                    Kết quả dịch vụ trả về
+                  </h4>
+                  <p className="text-xs text-slate-500 mb-2">
+                    Tổng hợp kết quả các cận lâm sàng đã thực hiện trước khi
+                    quay lại khám lâm sàng.
+                  </p>
+                  <div className="overflow-x-auto scrollbar-none">
+                    <table className="min-w-full text-sm">
+                      <thead className="text-left text-slate-700 sticky top-0 bg-white/95 backdrop-blur">
+                        <tr className="bg-gradient-to-b from-sky-50 to-white">
+                          <th className="px-2 py-2 w-10">STT</th>
+                          <th className="px-2 py-2 w-64">Dịch vụ</th>
+                          <th className="px-2 py-2">Ghi chú</th>
+                          <th className="px-2 py-2 w-80">Kết quả</th>
+                          <th className="px-2 py-2 w-40">Tệp đính kèm</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {serviceResults.map((row, idx) => (
+                          <tr
+                            key={row.id || idx}
+                            className="align-top hover:bg-sky-50/40 transition-colors"
+                          >
+                            <td className="px-2 py-2 text-slate-700">
+                              {idx + 1}
+                            </td>
+                            <td className="px-2 py-2">
+                              <div className="font-semibold text-slate-900">
+                                {row.name}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2">
+                              <div className="text-sm text-slate-700 whitespace-pre-wrap">
+                                {row.note || (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2">
+                              <div className="text-sm text-slate-700 whitespace-pre-wrap max-h-24 overflow-y-auto scrollbar-none">
+                                {row.result || (
+                                  <span className="text-slate-400">
+                                    Chưa nhập
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2">
+                              {Array.isArray(row.files) &&
+                              row.files.length > 0 ? (
+                                <ul className="text-xs text-slate-600 space-y-0.5 max-h-20 overflow-y-auto scrollbar-none">
+                                  {row.files.map((f, i) => (
+                                    <li
+                                      key={f.id || f.name || i}
+                                      className="truncate"
+                                    >
+                                      📎{" "}
+                                      {f.name ||
+                                        f.fileName ||
+                                        f.filename ||
+                                        `Tệp ${i + 1}`}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <span className="text-xs text-slate-400">
+                                  Không có tệp
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </motion.section>
+              )}
 
-          {/* Chẩn đoán & Điều trị */}
-          <motion.section {...fadeIn} className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200">
-            <h4 className="font-extrabold mb-2 text-slate-900">Chẩn đoán & Điều trị</h4>
-            <div className="grid md:grid-cols-2 gap-3">
-              <label className="text-sm">Chẩn đoán sơ bộ
-                <input
-                  value={dx.pre}
-                  onChange={(e) => setDx((s) => ({ ...s, pre: e.target.value }))}
-                  className="mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
-                />
-              </label>
-              <label className="text-sm">Chẩn đoán xác định
-                <input
-                  value={dx.final}
-                  onChange={(e) => setDx((s) => ({ ...s, final: e.target.value }))}
-                  className="mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
-                />
-              </label>
-              <label className="text-sm md:col-span-2">Phác đồ điều trị
-                <textarea
-                  rows={3}
-                  value={dx.plan}
-                  onChange={(e) => setDx((s) => ({ ...s, plan: e.target.value }))}
-                  className="scrollbar-none mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
-                />
-              </label>
-              <label className="text-sm md:col-span-2">Tư vấn & Dặn dò
-                <textarea
-                  rows={3}
-                  value={dx.advice}
-                  onChange={(e) => setDx((s) => ({ ...s, advice: e.target.value }))}
-                  className="scrollbar-none mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
-                />
-              </label>
-            </div>
-          </motion.section>
+              {/* Chẩn đoán & Điều trị */}
+              <motion.section
+                {...fadeIn}
+                className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200"
+              >
+                <h4 className="font-extrabold mb-2 text-slate-900">
+                  Chẩn đoán & Điều trị
+                </h4>
+                <div className="grid md:grid-cols-2 gap-3">
+                  <label className="text-sm">
+                    Chẩn đoán sơ bộ
+                    <input
+                      value={dx.pre}
+                      onChange={(e) =>
+                        setDx((s) => ({ ...s, pre: e.target.value }))
+                      }
+                      className="mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                    />
+                  </label>
+                  <label className="text-sm">
+                    Chẩn đoán xác định
+                    <input
+                      value={dx.final}
+                      onChange={(e) =>
+                        setDx((s) => ({ ...s, final: e.target.value }))
+                      }
+                      className="mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                    />
+                  </label>
+                  <label className="text-sm md:col-span-2">
+                    Phác đồ điều trị
+                    <textarea
+                      rows={3}
+                      value={dx.plan}
+                      onChange={(e) =>
+                        setDx((s) => ({ ...s, plan: e.target.value }))
+                      }
+                      className="scrollbar-none mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                    />
+                  </label>
+                  <label className="text-sm md:col-span-2">
+                    Tư vấn & Dặn dò
+                    <textarea
+                      rows={3}
+                      value={dx.advice}
+                      onChange={(e) =>
+                        setDx((s) => ({ ...s, advice: e.target.value }))
+                      }
+                      className="scrollbar-none mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                    />
+                  </label>
 
-          {/* Kê đơn */}
-          <motion.section {...fadeIn} className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between">
-              <h4 className="font-extrabold text-slate-900">Kê đơn thuốc</h4>
-              <Button type="button" className="btn-primary" onClick={() => setPickerOpen(true)}>Kê thuốc</Button>
-            </div>
-
-            <div className="mt-2 rounded-xl bg-white shadow-inner/10 max-h-56 overflow-y-auto scrollbar-none border border-slate-200">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-slate-700 sticky top-0 bg-white/95 backdrop-blur">
-                  <tr className="bg-gradient-to-b from-teal-50 to-white">
-                    <th className="px-3 py-2 w-12">STT</th>
-                    <th className="px-3 py-2">Thuốc</th>
-                    <th className="px-3 py-2">Liều dùng</th>
-                    <th className="px-3 py-2 w-24">Số lượng</th>
-                    <th className="px-3 py-2 w-12">Xóa</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rx.map((r, i) => (
-                    <tr key={r.code || `${r.name}-${i}`} className="transition-colors hover:bg-teal-50/50">
-                      <td className="px-3 py-2 text-slate-700">{i + 1}</td>
-                      <td className="px-3 py-2">
-                        <div className="font-semibold text-slate-900">{r.name}</div>
-                        <div className="text-xs text-slate-500">{r.code} • {r.unit}</div>
-                      </td>
-                      <td className="px-3 py-2">
+                  {/* Ô tích sau tư vấn */}
+                  <div className="md:col-span-2 mt-1">
+                    <div className="flex flex-wrap gap-4 text-sm text-slate-700">
+                      <label className="inline-flex items-center gap-2">
                         <input
-                          value={r.dose || ""}
-                          onChange={(e) => setRx((s) => s.map((x, j) => (j === i ? { ...x, dose: e.target.value } : x)))}
-                          placeholder="VD: 1v x 2 lần/ngày"
-                          className="w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none placeholder:text-slate-400"
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 focus:ring-teal-500"
+                          checked={!!dxFlags.choVe}
+                          onChange={() => toggleDxFlag("choVe")}
                         />
-                      </td>
-                      <td className="px-3 py-2">
+                        <span>Cho về</span>
+                      </label>
+                      <label className="inline-flex items-center gap-2">
                         <input
-                          type="number" min="1" value={r.qty || ""}
-                          onChange={(e) => setRx((s) => s.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
-                          placeholder="SL"
-                          className="w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 focus:ring-teal-500"
+                          checked={!!dxFlags.choThuocVe}
+                          onChange={() => toggleDxFlag("choThuocVe")}
                         />
-                      </td>
-                      <td className="px-3 py-2">
-                        <Button type="button" className="!px-2" onClick={() => removeRxAt(i)} aria-label="Xóa thuốc">✕</Button>
-                      </td>
-                    </tr>
-                  ))}
-                  {!rx.length && (
-                    <tr><td colSpan="5" className="px-3 py-6 text-slate-500">Chưa có thuốc. Nhấn <b>Kê thuốc</b> để thêm.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </motion.section>
+                        <span>Cho thuốc về</span>
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 focus:ring-teal-500"
+                          checked={!!dxFlags.taiKham}
+                          onChange={() => toggleDxFlag("taiKham")}
+                        />
+                        <span>Tái khám</span>
+                      </label>
+                    </div>
+                    {dxFlagError && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {dxFlagError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </motion.section>
 
-          {/* Actions */}
-          <div className="px-4 pt-3 flex justify-end">
-            <Button
-              className="transition-all duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-70"
-              variant="radigan"
-              disabled={!hasDx || dxMut.isPending}
-              aria-disabled={!hasDx || dxMut.isPending}
-              onClick={handleExportDiagnosis}
-              title={!hasDx ? "Cần có chẩn đoán" : "Xuất phiếu chẩn đoán & kết thúc khám"}
-            >
-              {dxMut.isPending ? "Đang lưu..." : "Xuất phiếu chẩn đoán"}
-            </Button>
-          </div>
+              {/* Kê đơn */}
+              <motion.section
+                {...fadeIn}
+                className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="font-extrabold text-slate-900">
+                    Kê đơn thuốc
+                  </h4>
+                  <Button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => setPickerOpen(true)}
+                  >
+                    Kê thuốc
+                  </Button>
+                </div>
 
-          <div className="h-2" />
+                <div className="mt-2 rounded-xl bg-white shadow-inner/10 max-h-56 overflow-y-auto scrollbar-none border border-slate-200">
+                  <table className="min-w-full text-sm">
+                    <thead className="text-left text-slate-700 sticky top-0 bg-white/95 backdrop-blur">
+                      <tr className="bg-gradient-to-b from-teal-50 to-white">
+                        <th className="px-3 py-2 w-12">STT</th>
+                        <th className="px-3 py-2">Thuốc</th>
+                        <th className="px-3 py-2">Liều dùng</th>
+                        <th className="px-3 py-2 w-24">Số lượng</th>
+                        <th className="px-3 py-2 w-12">Xóa</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {rx.map((r, i) => (
+                        <tr
+                          key={r.code || `${r.name}-${i}`}
+                          className="transition-colors hover:bg-teal-50/50"
+                        >
+                          <td className="px-3 py-2 text-slate-700">
+                            {i + 1}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="font-semibold text-slate-900">
+                              {r.name}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {r.code} • {r.unit}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              value={r.dose || ""}
+                              onChange={(e) =>
+                                setRx((s) =>
+                                  s.map((x, j) =>
+                                    j === i
+                                      ? { ...x, dose: e.target.value }
+                                      : x
+                                  )
+                                )
+                              }
+                              placeholder="VD: 1v x 2 lần/ngày"
+                              className="w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none placeholder:text-slate-400"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min="1"
+                              value={r.qty || ""}
+                              onChange={(e) =>
+                                setRx((s) =>
+                                  s.map((x, j) =>
+                                    j === i
+                                      ? { ...x, qty: e.target.value }
+                                      : x
+                                  )
+                                )
+                              }
+                              placeholder="SL"
+                              className="w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <Button
+                              type="button"
+                              className="!px-2"
+                              onClick={() => removeRxAt(i)}
+                              aria-label="Xóa thuốc"
+                            >
+                              ✕
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                      {!rx.length && (
+                        <tr>
+                          <td
+                            colSpan="5"
+                            className="px-3 py-6 text-slate-500"
+                          >
+                            Chưa có thuốc. Nhấn <b>Kê thuốc</b> để thêm.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="px-4 pt-3 flex justify-end">
+                  <Button
+                    className="transition-all duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-70"
+                    variant="radigan"
+                    disabled={!hasDx || dxMut.isPending}
+                    aria-disabled={!hasDx || dxMut.isPending}
+                    onClick={handleExportDiagnosisLS}
+                    title={
+                      !hasDx
+                        ? "Cần có chẩn đoán"
+                        : "Xuất phiếu chẩn đoán & kết thúc khám"
+                    }
+                  >
+                    {dxMut.isPending
+                      ? "Đang lưu..."
+                      : "Xuất phiếu chẩn đoán"}
+                  </Button>
+                </div>
+              </motion.section>
+            </>
+          )}
+
+          {/* ================== MODE CẬN LÂM SÀNG (CLS) ================== */}
+          {isCLS && (
+            <>
+              {/* Thông tin lượt CLS */}
+              <motion.section
+                {...fadeIn}
+                className="rounded-2xl p-4 mt-0 bg-white shadow-sm border border-slate-200"
+              >
+                <h4 className="font-extrabold mb-2 text-slate-900">
+                  Thực hiện cận lâm sàng
+                </h4>
+                <div className="grid md:grid-cols-2 gap-3 text-sm text-slate-700">
+                  <div className="space-y-1">
+                    <p>
+                      <b>Bệnh nhân:</b> {patient.name} (
+                      {patient.pid || patient.id})
+                    </p>
+                    {patient.dept && (
+                      <p>
+                        <b>Khoa:</b> {patient.dept}
+                      </p>
+                    )}
+                    {patient.room && (
+                      <p>
+                        <b>Phòng thực hiện:</b> {patient.room}
+                      </p>
+                    )}
+                    {patient.doctor && (
+                      <p>
+                        <b>Người chỉ định:</b> {patient.doctor}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p>
+                      <b>Loại lượt:</b>{" "}
+                      {queueType === "can_lam_sang"
+                        ? "Cận lâm sàng"
+                        : "Khác"}
+                    </p>
+                    {serviceName && (
+                      <p>
+                        <b>Loại dịch vụ:</b> {serviceName}
+                      </p>
+                    )}
+                    {(patient.cap_cuu || patient.capCuu) && (
+                      <p className="text-rose-600 font-semibold">
+                        • Ca cấp cứu
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </motion.section>
+
+              {/* Ghi chú thực hiện */}
+              <motion.section
+                {...fadeIn}
+                className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200"
+              >
+                <h4 className="font-extrabold mb-2 text-slate-900">
+                  Ghi chú thực hiện
+                </h4>
+                <p className="text-sm text-slate-600 mb-2">
+                  Ghi lại các lưu ý trong quá trình thực hiện, tình trạng bệnh
+                  nhân, hoặc thông tin cần nhắn lại cho bác sĩ chỉ định.
+                </p>
+                <textarea
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 outline-none"
+                  placeholder="Nhập ghi chú (tùy chọn)…"
+                  value={dx.note || ""}
+                  onChange={(e) =>
+                    setDx((s) => ({ ...s, note: e.target.value }))
+                  }
+                />
+              </motion.section>
+
+              {/* Kết quả thực hiện */}
+              <motion.section
+                {...fadeIn}
+                className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200"
+              >
+                <h4 className="font-extrabold mb-2 text-slate-900">
+                  Kết quả thực hiện
+                </h4>
+                <p className="text-xs text-slate-500 mb-2">
+                  Ghi tóm tắt kết quả chính hoặc nhận xét kỹ thuật cho lần thực
+                  hiện này.
+                </p>
+                <textarea
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 outline-none"
+                  placeholder="Nhập kết quả chính (tùy chọn)…"
+                  value={clsResult}
+                  onChange={(e) => setClsResult(e.target.value)}
+                />
+              </motion.section>
+
+              {/* Tệp đính kèm */}
+              <motion.section
+                {...fadeIn}
+                className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200"
+              >
+                <h4 className="font-extrabold mb-2 text-slate-900">
+                  Tệp đính kèm
+                </h4>
+                <p className="text-xs text-slate-500 mb-2">
+                  Đính kèm hình ảnh, PDF hoặc file kết quả máy (nếu có).
+                </p>
+                <input
+                  type="file"
+                  multiple
+                  onChange={(e) =>
+                    setClsFiles(Array.from(e.target.files || []))
+                  }
+                  className="block w-full text-sm text-slate-700 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
+                />
+                {clsFiles.length > 0 && (
+                  <div className="mt-2 text-xs text-slate-600">
+                    Đã chọn {clsFiles.length} tệp.
+                  </div>
+                )}
+
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button variant="ghost" type="button" onClick={onBack}>
+                    Đóng
+                  </Button>
+                  <Button
+                    className="transition-all duration-300"
+                    variant="radigan"
+                    onClick={handleFinishCLS}
+                  >
+                    Hoàn tất CLS
+                  </Button>
+                </div>
+              </motion.section>
+            </>
+          )}
         </motion.div>
       </section>
 
       {/* Rx modal */}
-      <RxPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onPickMany={onPickMany} />
+      <RxPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPickMany={onPickMany}
+      />
     </>
   );
 }

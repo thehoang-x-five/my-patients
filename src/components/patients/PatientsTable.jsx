@@ -1,22 +1,51 @@
+// src/components/patients/PatientsTable.jsx
 import React, { useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 
-// ✅ Chỉ dùng API layer (không còn data/*)
 import {
-  // metadata nếu cần dùng để render khác (không bắt buộc trong bảng này)
   useExamTemplates,
   useAddTransaction,
+  STATUSES,
+  useUpdatePatient,
 } from "../../api/patients.js";
 
 import { useEnqueueService, useReturnToDoctor } from "../../api/queue.js";
-
 import {
   useMarkServiceDispatched,
   useMarkServiceDone,
   useMarkWaitDoctorReview,
 } from "../../api/patientFlow.js";
 
+/* ===== Helpers normalize theo ERD ===== */
+function getAccount(p) {
+  return (
+    p?.trang_thai_tai_khoan ??
+    p?.accountStatus ??
+    p?.account?.status ??
+    ""
+  );
+}
+function getTodayStatus(p) {
+  return (
+    p?.trang_thai_hom_nay ??
+    p?.todayStatus ??
+    p?.status ??
+    ""
+  );
+}
+function getStatusDate(p) {
+  return (
+    p?.ngay_trang_thai ??
+    p?.statusDate ??
+    ""
+  );
+}
+function getVitals(p) {
+  return p?.sinh_hieu ?? p?.vitals ?? "";
+}
+
+/* ===== UI helpers ===== */
 function StatusBadge({ s }) {
   const low = (s || "").toLowerCase();
   const cls =
@@ -42,6 +71,28 @@ function StatusBadge({ s }) {
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${cls}`}>
       <i className={`w-1.5 h-1.5 rounded-full ${dot}`} />
       {s || "—"}
+    </span>
+  );
+}
+function AccountBadge({ a }) {
+  const low = (a || "").toLowerCase();
+  const cls =
+    /đã xóa|da_xoa|xoa/.test(low)
+      ? "bg-rose-50 text-rose-700 ring-rose-200"
+      : /không hoạt động|khong_hoat_dong/.test(low)
+      ? "bg-slate-50 text-slate-700 ring-slate-200"
+      : "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  const text =
+    /đã xóa|da_xoa|xoa/.test(low)
+      ? "Đã xóa"
+      : /không hoạt động|khong_hoat_dong/.test(low)
+      ? "Không hoạt động"
+      : /hoat_dong|hoạt động|active|1/.test(low)
+      ? "Hoạt động"
+      : a || "—";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${cls}`}>
+      {text}
     </span>
   );
 }
@@ -127,11 +178,22 @@ function safeCssEscape(v) {
   return s.replace(/[^a-zA-Z0-9_\-]/g, "\\$&");
 }
 
-export default function PatientsTable({ items = [], onAction, stretch = false, highlightPid = null }) {
-  // ===== Server metadata for fees
+export default function PatientsTable({
+  items = [],
+  onAction,
+  stretch = false,
+  highlightPid = null,
+}) {
+  // ===== metadata (phí khám DV) =====
   const { data: examTemplates = [] } = useExamTemplates();
+  const addTxnMut = useAddTransaction();
+  const enqueueServiceMut = useEnqueueService();
+  const returnToDoctorMut = useReturnToDoctor();
+  const svcDispatched = useMarkServiceDispatched();
+  const svcDone = useMarkServiceDone();
+  const svcWaitReview = useMarkWaitDoctorReview();
+  const updatePatient = useUpdatePatient();
 
-  // compute service exam fee once per metadata change (fix: tránh gọi hàm lồng 2 lần)
   const computeServiceExamFee = useMemo(() => {
     const byId = Object.fromEntries((examTemplates || []).map((t) => [t.id, t]));
     return () => {
@@ -142,18 +204,26 @@ export default function PatientsTable({ items = [], onAction, stretch = false, h
     };
   }, [examTemplates]);
 
-  // ===== Mutations
-  const addTxnMut = useAddTransaction();
-  const enqueueServiceMut = useEnqueueService();
-  const returnToDoctorMut = useReturnToDoctor();
-  const svcDispatched = useMarkServiceDispatched();
-  const svcDone = useMarkServiceDone();
-  const svcWaitReview = useMarkWaitDoctorReview();
+  const handleStartToday = (p) => {
+    if (!p) return;
+    const id = p.id ?? p.pid;
+    if (!id) return;
+    const today = new Date().toISOString().slice(0, 10);
+    updatePatient.mutate({
+      id,
+      patch: {
+        trang_thai_hom_nay: STATUSES.WAIT_INTAKE,
+        ngay_trang_thai: today,
+      },
+    });
+  };
 
-  // Scroll to highlighted row
+  // scroll tới dòng được highlight
   useEffect(() => {
     if (!highlightPid) return;
-    const row = document.querySelector(`tr[data-pid="${safeCssEscape(highlightPid)}"]`);
+    const row = document.querySelector(
+      `tr[data-pid="${safeCssEscape(highlightPid)}"]`
+    );
     if (row && row.scrollIntoView) {
       try {
         row.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -165,7 +235,6 @@ export default function PatientsTable({ items = [], onAction, stretch = false, h
     const list = p?.serviceOrder?.items || [];
     const note = p?.serviceOrder?.note || "";
     const pid = p.id ?? p.pid;
-
     if (!list.length) return;
 
     enqueueServiceMut.mutate({
@@ -176,7 +245,6 @@ export default function PatientsTable({ items = [], onAction, stretch = false, h
       dept: "Cận lâm sàng",
       doctor: "Khu dịch vụ",
     });
-
     svcDispatched.mutate({ pid });
   }
 
@@ -195,23 +263,23 @@ export default function PatientsTable({ items = [], onAction, stretch = false, h
     });
   }
 
-  // Click “Lập phiếu khám” — nếu flow dịch vụ: THU PHÍ + ĐẨY DỊCH VỤ; ngược lại mở intake
+  // Click “Lập phiếu khám” — logic DV / thường
   function handleIntakeSmart(p) {
-    const status = (p.status || "").toLowerCase();
+    const status = String(getTodayStatus(p) || "").toLowerCase();
     const service = p.serviceOrder;
-    const hasServiceOrder = !!service && Array.isArray(service.items) && service.items.length > 0;
+    const hasServiceOrder =
+      !!service && Array.isArray(service.items) && service.items.length > 0;
     const notDispatched = !service?.dispatched;
 
     const isServiceIntakeStatus = /chờ tiếp nhận \(dịch vụ\)/i.test(status);
-    const isServiceDispatchable = /chờ khám \(dịch vụ\)/i.test(status) || (hasServiceOrder && notDispatched);
+    const isServiceDispatchable =
+      /chờ khám \(dịch vụ\)/i.test(status) || (hasServiceOrder && notDispatched);
 
-    // Trạng thái chờ tiếp nhận (dịch vụ) -> mở modal intake dịch vụ
     if (isServiceIntakeStatus) {
       onAction?.("intake", p);
       return;
     }
 
-    // Đã tới bước đẩy khu dịch vụ -> THU PHÍ (nếu có) + đẩy dịch vụ
     if (isServiceDispatchable) {
       const pid = p.id ?? p.pid;
       const fee = computeServiceExamFee() || 0;
@@ -219,7 +287,7 @@ export default function PatientsTable({ items = [], onAction, stretch = false, h
         addTxnMut.mutate({
           pid,
           data: {
-            date: new Date().toLocaleDateString("vi-VN"),
+            date: new Date().toISOString().slice(0, 10),
             item: "Phí khám dịch vụ",
             amount: fee,
             status: "Đã thu",
@@ -237,21 +305,27 @@ export default function PatientsTable({ items = [], onAction, stretch = false, h
 
   return (
     <section
-      className={`pt-2 bg-white rounded-2xl overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
+      className={`pt-2 bg-white rounded-2xl overflow-hidden shadow-soft ${
+        stretch ? "h-full flex flex-col min-h-0" : "mt-3"
+      }`}
       role="region"
       aria-label="Danh sách bệnh nhân"
     >
       <div
-        className={`${stretch ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"} p-4 pt-0`}
+        className={`${
+          stretch
+            ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none"
+            : "overflow-x-auto scrollbar-none"
+        } p-4 pt-0 pb-0 `}
       >
         <table className="min-w-full table-fixed">
           <colgroup>
             <col style={{ width: "10%" }} />
-            <col style={{ width: "22%" }} />
+            <col style={{ width: "24%" }} />
             <col style={{ width: "12%" }} />
             <col style={{ width: "8%" }} />
             <col style={{ width: "18%" }} />
-            <col style={{ width: "14%" }} />
+            <col style={{ width: "12%" }} />
             <col style={{ width: "16%" }} />
           </colgroup>
           <Thead>
@@ -266,35 +340,96 @@ export default function PatientsTable({ items = [], onAction, stretch = false, h
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                <td
+                  colSpan={7}
+                  className="px-3 py-10 text-center text-slate-500"
+                >
                   Không có bản ghi phù hợp.
                 </td>
               </tr>
             ) : (
               items.map((p, i) => {
-                const status = p.status || "";
+                const status = getTodayStatus(p) || "";
+                const account = getAccount(p) || "";
+                const statusDate = getStatusDate(p);
+
+                const today = new Date().toISOString().slice(0, 10);
+                const isToday =
+                  statusDate && String(statusDate).slice(0, 10) === today;
+                const accountActive = /hoat_dong|hoạt động|active|1/.test(
+                  String(account).toLowerCase()
+                );
+                const hasTodayStatus = !!status && !!isToday;
+
+                const lowStatus = String(status).toLowerCase();
+                const isWaitIntake = /chờ tiếp nhận/.test(lowStatus);
+                const isWaitProc = /chờ xử lý/.test(lowStatus);
+
+                const vitals = getVitals(p);
+
                 const service = p.serviceOrder;
-                const hasServiceOrder = !!service && Array.isArray(service.items) && service.items.length > 0;
+                const hasServiceOrder =
+                  !!service &&
+                  Array.isArray(service.items) &&
+                  service.items.length > 0;
                 const serviceDispatched = !!service?.dispatched;
 
-                // Hiện "Lập phiếu khám" cho các trạng thái sau + case có dịch vụ chưa dispatch
-                const showExamBtn =
-                  /^(chờ tiếp nhận|hẹn tái khám|hẹn khám|hoàn thành|chờ tiếp nhận \(dịch vụ\))$/i.test(status) ||
-                  (hasServiceOrder && !serviceDispatched);
+                let showExamBtn = false;
+                let showProcessBtn = false;
 
-                const showProcessBtn = /^chờ xử lý( ?\(dịch vụ\))?$/i.test(status);
-                const pulse = highlightPid && (p.id === highlightPid || p.pid === highlightPid);
+                if (accountActive && hasTodayStatus) {
+                  if (isWaitIntake) {
+                    showExamBtn = true;
+                  } else if (isWaitProc) {
+                    showProcessBtn = true;
+                  }
+                }
+
+                // nếu có service order mà chưa đẩy đi vẫn ưu tiên nút "Lập phiếu khám"
+                if (
+                  accountActive &&
+                  hasTodayStatus &&
+                  hasServiceOrder &&
+                  !serviceDispatched
+                ) {
+                  showExamBtn = true;
+                }
+
+                const pulse =
+                  highlightPid &&
+                  (p.id === highlightPid || p.pid === highlightPid);
 
                 return (
-                  <Row key={p.id ?? p.pid ?? i} i={i} pulse={!!pulse} data-pid={p.id ?? p.pid ?? ""}>
-                    <Td first classNameOverride="whitespace-nowrap overflow-hidden text-ellipsis">
-                      <span className="font-mono font-semibold">{p.id ?? p.pid ?? "—"}</span>
+                  <Row
+                    key={p.id ?? p.pid ?? i}
+                    i={i}
+                    pulse={!!pulse}
+                    data-pid={p.id ?? p.pid ?? ""}
+                  >
+                    <Td
+                      first
+                      classNameOverride="whitespace-nowrap overflow-hidden text-ellipsis"
+                    >
+                      <span className="font-mono font-semibold">
+                        {p.id ?? p.pid ?? "—"}
+                      </span>
                     </Td>
+
                     <Td classNameOverride="max-w-0 overflow-hidden">
                       <div className="flex items-start gap-2 min-w-0">
-                        <InitialAvatar name={p.name} id={p.id ?? p.pid} />
+                        <InitialAvatar
+                          name={p.name || p.ho_ten}
+                          id={p.id ?? p.pid}
+                        />
                         <div className="min-w-0 max-w-full">
-                          <div className="font-semibold truncate">{p.name || "—"}</div>
+                          <div className="font-semibold truncate">
+                            {p.name || p.ho_ten || "—"}
+                          </div>
+                          {vitals && (
+                            <div className="mt-0.5 text-[12px] text-slate-600 truncate">
+                              <b>Sinh hiệu:</b> {String(vitals)}
+                            </div>
+                          )}
                           {hasServiceOrder && (
                             <div className="mt-0.5 text-[12px] text-amber-700 truncate">
                               <b>Dịch vụ:</b> {service.items.join(", ")}
@@ -304,33 +439,74 @@ export default function PatientsTable({ items = [], onAction, stretch = false, h
                         </div>
                       </div>
                     </Td>
+
                     <Td classNameOverride="whitespace-nowrap overflow-hidden text-ellipsis">
-                      {p.dob || p.birthDate || "—"}
+                      {p.dob || p.birthDate || p.ngay_sinh || "—"}
                     </Td>
+
                     <Td classNameOverride="whitespace-nowrap overflow-hidden text-ellipsis">
-                      {p.gender || p.sex || "—"}
+                      {p.gender || p.sex || p.gioi_tinh || "—"}
                     </Td>
+
                     <Td classNameOverride="max-w-0">
-                      <div className="overflow-hidden truncate">{p.phone || p.contact?.phone || "—"}</div>
+                      <div className="overflow-hidden truncate">
+                        {p.phone ||
+                          p.dien_thoai ||
+                          p.contact?.phone ||
+                          "—"}
+                      </div>
                       <div className="text-slate-500 text-xs overflow-hidden truncate">
                         {p.email || p.contact?.email || "—"}
                       </div>
                     </Td>
+
                     <Td classNameOverride="whitespace-nowrap overflow-hidden text-ellipsis">
-                      <StatusBadge s={status} />
+                      <div className="flex flex-col gap-1">
+                        <AccountBadge a={account} />
+
+                        {hasTodayStatus ? (
+                          <div className="flex items-center gap-2">
+                            <StatusBadge s={status} />
+                            {statusDate && (
+                              <span className="text-[11px] text-slate-500 tabular-nums">
+                                {String(statusDate).slice(0, 10)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          accountActive && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartToday(p)}
+                              className="inline-flex items-center self-start rounded-full px-2.5 py-0.5 text-[11px] font-semibold
+                                         border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
+                            >
+                              Start hôm nay
+                            </button>
+                          )
+                        )}
+                      </div>
                     </Td>
+
                     <Td last classNameOverride="whitespace-nowrap">
                       <div className="flex items-center gap-2 flex-nowrap">
-                        <Button className="!px-2" onClick={() => onAction?.("view", p)}>
+                        <Button
+                          className="!px-2"
+                          onClick={() => onAction?.("view", p)}
+                        >
                           👁️
                         </Button>
-                        <Button className="!px-2" onClick={() => onAction?.("edit", p)}>
+                        <Button
+                          className="!px-2"
+                          onClick={() => onAction?.("edit", p)}
+                        >
                           ✎
                         </Button>
 
-                        {(showExamBtn || showProcessBtn) && <span className="grow" />}
+                        {accountActive &&
+                          (showExamBtn || showProcessBtn) && <span className="grow" />}
 
-                        {showExamBtn && (
+                        {accountActive && showExamBtn && (
                           <button
                             onClick={() => handleIntakeSmart(p)}
                             className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-gradient-to-tr from-teal-100 to-emerald-200 px-3 py-1.5 text-sm font-semibold text-emerald-900 shadow hover:shadow-md hover:-translate-y-0.5 transition"
@@ -339,7 +515,7 @@ export default function PatientsTable({ items = [], onAction, stretch = false, h
                           </button>
                         )}
 
-                        {showProcessBtn && (
+                        {accountActive && showProcessBtn && (
                           <button
                             onClick={() => onAction?.("process", p)}
                             className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-gradient-to-tr from-rose-100 to-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-900 shadow hover:shadow-md hover:-translate-y-0.5 transition"

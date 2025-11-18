@@ -8,7 +8,7 @@ import Chip from "../ui/Chip.jsx";
 import {
   useDepartments,            // GET /metadata/departments
   useDoctorQueueByDept,      // GET /metadata/doctor-queue?dept=...
-} from "../../api/metadata.js";
+} from "../../api/departments.js";
 
 import {
   useFindLastAppointment,    // GET /appointments/last?code=...&name=...&cutoff=YYYY-MM-DD
@@ -20,9 +20,11 @@ export default function CreateDrawer({
   onSubmit,
   doctorSuggest = [],
   defaultDate,
+    // ✅ Prefill từ Patients → Appointments (patient, code, type, note, dept, doctor, date, time)
+  defaultValues,
 }) {
   const firstFieldRef = useRef(null);
-
+  const canEditCode = !!(defaultValues && (defaultValues.code || defaultValues.patient));
   const [selectedDept, setSelectedDept] = useState("");
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [showDeptSelect, setShowDeptSelect] = useState(false);
@@ -35,7 +37,10 @@ export default function CreateDrawer({
   const [patientName, setPatientName] = useState("");
   const [patientCode, setPatientCode] = useState("");
   const [dateStr, setDateStr] = useState(defaultDate);
-
+    const [startStr, setStartStr] = useState("08:00");
+    const [noteStr, setNoteStr] = useState("");
+    const [phone, setPhone] = useState("");
+    
   // ===== Server state (TanStack Query)
   const { data: departments = [], isLoading: deptLoading } = useDepartments();
   const { data: doctorQueue = [], isLoading: docLoading } =
@@ -69,18 +74,29 @@ export default function CreateDrawer({
 
     const t = setTimeout(() => firstFieldRef.current?.focus(), 60);
 
-    setSelectedDept("");
-    setSelectedDoctor("");
-    setApType("new");
-    setPatientName("");
-    setPatientCode("");
-    setDateStr(defaultDate);
+    // ==== Prefill khi mở ====
+    const mapTypeToKey = (t) => {
+        const s = String(t || "").toLowerCase();
+        if (s === "follow_up" || /tái\s*kha|khám\s*lại/.test(s)) return "follow_up";
+        return "new";
+      };
+      const dv = defaultValues || {};
+  
+      setSelectedDept(dv.dept || "");
+      setSelectedDoctor(dv.doctor || "");
+      setApType(mapTypeToKey(dv.type));
+      setPatientName(dv.patient || "");
+      setPatientCode(dv.code || "");
+      setDateStr(dv.date || defaultDate);
+      setStartStr(dv.time || "08:00");
+      setNoteStr(dv.note || "");
+      setPhone(dv.phone || dv.so_dien_thoai || "");
 
     return () => {
       window.removeEventListener("keydown", handleKey);
       clearTimeout(t);
     };
-  }, [open, onClose, defaultDate]);
+  }, [open, onClose, defaultDate, defaultValues]);
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -162,13 +178,30 @@ export default function CreateDrawer({
                     Mã BN
                     <input
                       name="patient_code"
-                      placeholder="VD: BN001"
+                      placeholder={canEditCode ? "VD: BN001" : "Không nhập"}
                       className="mt-1.5 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-violet-500 outline-none bg-white shadow-sm transition"
                       value={patientCode}
-                      onChange={(e) => setPatientCode(e.target.value)}
+                      onChange={(e) => {
+                        if (!canEditCode) return; // khóa setPatientCode khi tự mở
+                        setPatientCode(e.target.value);
+                      }}
+                      disabled={!canEditCode}
+                      readOnly={!canEditCode}
+                      aria-disabled={!canEditCode}
+                     />
+                  
+                  </label>
+                  <label className="text-sm font-semibold text-slate-700">
+                    Số điện thoại
+                    <input
+                      name="phone"
+                      type="tel"
+                      placeholder="VD: 0909 000 000"
+                      className="mt-1.5 w-full rounded-xl px-3 py-2 border border-slate-200 shadow-sm focus:ring-2 focus:ring-violet-500 outline-none bg-white transition"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
                     />
                   </label>
-
                   <label className="text-sm font-semibold text-slate-700">
                     Ngày
                     <input
@@ -186,24 +219,14 @@ export default function CreateDrawer({
                     <input
                       type="time"
                       name="start"
-                      defaultValue="08:00"
+                      value={startStr}
+                      onChange={(e) => setStartStr(e.target.value)}
                       required
                       className="mt-1.5 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-violet-500 outline-none bg-white shadow-sm transition"
                     />
                   </label>
 
-                  <label className="text-sm font-semibold text-slate-700">
-                    Thời lượng (phút)
-                    <input
-                      type="number"
-                      name="duration"
-                      min="10"
-                      step="5"
-                      defaultValue="30"
-                      required
-                      className="mt-1.5 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-violet-500 outline-none bg-white shadow-sm transition"
-                    />
-                  </label>
+                 
 
                   <label className="text-sm font-semibold text-slate-700">
                     Loại khám
@@ -255,6 +278,8 @@ export default function CreateDrawer({
                     <textarea
                       name="note"
                       rows="3"
+                      value={noteStr}
+                      onChange={(e) => setNoteStr(e.target.value)}
                       placeholder="Ví dụ: mang kết quả cũ..."
                       className="mt-1.5 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-violet-500 outline-none bg-white shadow-sm transition resize-none"
                     />

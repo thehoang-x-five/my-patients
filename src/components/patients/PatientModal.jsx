@@ -3,10 +3,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
+import { useUIStore } from "../stores/uiStore.js";
 
 // ✅ Chỉ dùng API & metadata từ layer API
 import {
+  // constants
   STATUSES,
+  ACCOUNT_STATUSES,
+  mapTodayStatusLabel,
+  // queries
   useVisits,
   useTransactions,
   useAppointmentHolds,
@@ -117,11 +122,12 @@ export default function PatientModal({
     symptoms: "",
     note: "",
   });
-
   const today = new Date().toISOString().slice(0, 10);
+    const nowTimeHHMM = () =>
+      new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
   const [booking, setBooking] = useState({
     date: today,
-    time: "08:00",
+    time: nowTimeHHMM(),
     price: 70000,
     doctor: "",
     dept: "",
@@ -230,7 +236,7 @@ export default function PatientModal({
 
     setBooking({
       date: today,
-      time: "08:00",
+      time:nowTimeHHMM(), 
       price: 70000,
       doctor: "",
       dept: "",
@@ -269,23 +275,45 @@ export default function PatientModal({
   const isServiceIntake = /chờ tiếp nhận \(dịch vụ\)/i.test(statusLow);
   const isFollowupStatus = (patient?.status || "") === STATUSES.SCHEDULED_FUP;
 
-  // Prefill cho Hẹn tái khám / Khám dịch vụ
   useEffect(() => {
-    if (!open || mode !== "exam") return;
-    if (isFollowupStatus) {
-      const fup = holds.find((h) => h.type === "followup" && h.status === "scheduled");
-      if (fup) {
-        setExam((s) => ({ ...s, dept: fup.dept || "", room: "", note: lastVisit?.note || "" }));
-        setBooking((b) => ({ ...b, doctor: fup.doctor || "", dept: fup.dept || "" }));
-      } else {
-        setExam((s) => ({ ...s, note: lastVisit?.note || "" }));
-      }
-    }
-    if (isServiceIntake) {
-      setTplId("T-KHAM-DV");
-      setExam((s) => ({ ...s, type: "Khám dịch vụ", dept: "", symptoms: "", note: "" }));
-    }
-  }, [open, mode, isFollowupStatus, isServiceIntake, holds, lastVisit]);
+        if (!open || mode !== "exam") return;
+        if (isFollowupStatus) {
+          const fup = holds.find((h) => h.type === "followup" && h.status === "scheduled");
+          if (fup) {
+            // Ưu tiên dữ liệu giữ chỗ tái khám
+            setExam((s) => ({ ...s, dept: fup.dept || "", room: "", note: lastVisit?.note || "" }));
+            setBooking((b) => ({
+              ...b,
+              doctor: fup.doctor || (lastVisit?.doctor || ""),
+              dept: fup.dept || (lastVisit?.dept || ""),
+              time: nowTimeHHMM(), // giờ hiện tại khi lập phiếu
+              date: today,
+            }));
+          } else {
+            // Không có hold: đẩy về bác sĩ/khoa của lần khám gần nhất
+            setExam((s) => ({
+              ...s,
+              dept: lastVisit?.dept || "",
+              room: "",
+              note: lastVisit?.note || "",
+            }));
+            setBooking((b) => ({
+              ...b,
+              doctor: lastVisit?.doctor || "",
+              dept: lastVisit?.dept || "",
+              time: nowTimeHHMM(),
+              date: today,
+            }));
+          }
+        } else if (isServiceIntake) {
+          setTplId("T-KHAM-DV");
+          setExam((s) => ({ ...s, type: "Khám dịch vụ", dept: "", symptoms: "", note: "" }));
+          setBooking((b) => ({ ...b, time: nowTimeHHMM(), date: today }));
+        } else {
+          // Hẹn khám / Chờ tiếp nhận / Hoàn thành → luôn có giờ hiện tại
+          setBooking((b) => ({ ...b, time: nowTimeHHMM(), date: today }));
+        }
+      }, [open, mode, isFollowupStatus, isServiceIntake, holds, lastVisit, today]);
 
   // ---- Danh sách phòng dịch vụ mặc định ----
   const SERVICE_ROOMS = ["X-Quang", "Siêu âm", "Xét nghiệm", "Nội soi"];
@@ -695,7 +723,39 @@ export default function PatientModal({
     });
     onClose?.();
   }
+// ====== Quick-create appointment from VIEW mode ======
+function handleCreateAppointmentFromView() {
+  const code = patient?.id || patient?.pid || "";
+  const name = patient?.name || "";
+  if (!code || !name) return;
+  const hasPast = (visits || []).length > 0;
+  const isFollowup = (patient?.status || "") === STATUSES.SCHEDULED_FUP;
+  const type = isFollowup ? "Tái khám" : hasPast ? "Khám lại" : "Khám mới";
+  const note = isFollowup
+    ? (patient?.pendingProcess?.dx?.advice ? `Theo dặn dò: ${patient.pendingProcess.dx.advice}` : "Hẹn tái khám")
+    : hasPast
+    ? "Bệnh nhân cũ"
+    : "Bệnh nhân mới";
 
+  // Lưu prefill & highlight nút “Tạo lịch hẹn”
+  try {
+    useUIStore.getState().setApptPrefill({
+      patient: name,
+      code,
+      type,
+      note,
+      // gợi ý dept/doctor nếu đang hiển thị
+      dept: booking.dept || exam.dept || "",
+      doctor: booking.doctor || "",
+    });
+    useUIStore.getState().flashApptCreate();
+  } catch {}
+
+  // Điều hướng sang trang lịch hẹn
+  window.dispatchEvent(
+    new CustomEvent("app:navigate", { detail: { to: `/appointments` } })
+  );
+}
   // ----------------- RENDER -----------------
   return (
     <AnimatePresence>
@@ -737,6 +797,29 @@ export default function PatientModal({
                     ? "Xử lý chẩn đoán"
                     : "Hồ sơ bệnh nhân"}
                 </h3>
+                {patient && (
+  <div className="mt-1 flex items-center gap-2 flex-wrap text-[12px]">
+    <Chip tone="slate" className="!px-2.5">
+      Mã BN: <b>{patient.pid || patient.id}</b>
+    </Chip>
+    <Chip tone="sky" dot="sky" className="!px-2.5">
+      Hôm nay: <b>{mapTodayStatusLabel(patient.trang_thai_hom_nay || patient.status || "") || "—"}</b>
+    </Chip>
+    {(patient.ngay_trang_thai || patient.statusDate) && (
+      <Chip tone="slate" className="!px-2.5">
+        Ngày: {String(patient.ngay_trang_thai || patient.statusDate).slice(0,10)}
+      </Chip>
+    )}
+    <Chip tone="emerald" dot="emerald" className="!px-2.5">
+      TK: {(patient.trang_thai_tai_khoan || "hoat_dong").replaceAll("_"," ")}
+    </Chip>
+    {patient.sinh_hieu && (
+      <Chip tone="sky" dot="sky" className="!px-2.5" title={patient.sinh_hieu}>
+        ♥ sinh hiệu
+      </Chip>
+    )}
+  </div>
+)}
                 <motion.button
                   whileHover={{ scale: 1.05, rotate: 90 }}
                   whileTap={{ scale: 0.95 }}
@@ -816,7 +899,18 @@ export default function PatientModal({
                           </div>
                         )}
                       </motion.div>
-                      <StatusPill s={patient?.status} />
+                      <div className="flex flex-col items-end gap-2">
+                        <StatusPill s={patient?.status} />
+                        <button
+                          type="button"
+                          onClick={handleCreateAppointmentFromView}
+                          className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-gradient-to-tr from-teal-100 to-emerald-200 px-3 py-1.5 text-sm font-semibold text-emerald-900 shadow hover:shadow-md hover:-translate-y-0.5 transition"
+                          title="Tạo lịch hẹn cho bệnh nhân này"
+                          id="patient-create-appt-btn"
+                        >
+                           Tạo lịch hẹn
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid lg:grid-cols-2 gap-4">
@@ -1022,6 +1116,7 @@ export default function PatientModal({
                         <input
                           ref={firstRef}
                           value={form.id || ""}
+                          readOnly={mode === "edit"}  
                           onChange={(e) => change("id", e.target.value)}
                           required
                           className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
@@ -1082,42 +1177,47 @@ export default function PatientModal({
                           className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
                         />
                       </label>
-                      <label className="text-sm font-semibold text-slate-700">
-                        Bảo hiểm
-                        <select
-                          value={form.insurance || ""}
-                          onChange={(e) => change("insurance", e.target.value)}
-                          className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
-                        >
-                          <option value="">—</option>
-                          <option value="Có">Có</option>
-                          <option value="Không">Không</option>
-                        </select>
-                      </label>
+                      <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+  Sinh hiệu
+  <textarea
+    rows={3}
+    value={form.sinh_hieu || ""}
+    onChange={(e) => change("sinh_hieu", e.target.value)}
+    className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
+  />
+</label>
+
+<label className="text-sm font-semibold text-slate-700">
+  Trạng thái tài khoản
+  <select
+    value={form.trang_thai_tai_khoan || "hoat_dong"}
+    onChange={(e) => change("trang_thai_tai_khoan", e.target.value)}
+    className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
+  >
+    {ACCOUNT_STATUSES.map((s) => (
+      <option key={s} value={s}>{s.replaceAll("_"," ")}</option>
+    ))}
+  </select>
+</label>
                       <label className="text-sm font-semibold text-slate-700">
                         Trạng thái
-                        <select
-                          value={form.status || STATUSES.WAIT_INTAKE}
-                          onChange={(e) => change("status", e.target.value)}
-                          className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
-                        >
-                          {mode === "add" ? (
-                            <>
-                              <option>{STATUSES.WAIT_INTAKE}</option>
-                              <option>{STATUSES.SCHEDULED_APPT}</option>
-                            </>
-                          ) : (
-                            <>
-                              <option>{STATUSES.WAIT_INTAKE}</option>
-                              <option>{STATUSES.WAIT_EXAM}</option>
-                              <option>{STATUSES.WAIT_PROC}</option>
-                              <option>{STATUSES.SCHEDULED_APPT}</option>
-                              <option>{STATUSES.SCHEDULED_FUP}</option>
-                              <option>{STATUSES.DONE}</option>
-                            </>
-                          )}
-                        </select>
+
+                        {/* hidden để submit đúng giá trị */}
+                        <input
+                          type="hidden"
+                          name="status"
+                          value={mode === "add" ? STATUSES.WAIT_INTAKE : (form.status || STATUSES.WAIT_INTAKE)}
+                        />
+
+                        <input
+                          type="text"
+                          readOnly
+                          aria-readonly="true"
+                          value={mode === "add" ? STATUSES.WAIT_INTAKE : (form.status || STATUSES.WAIT_INTAKE)}
+                          className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 bg-slate-100 text-slate-600 shadow-sm"
+                        />
                       </label>
+
                     </motion.div>
 
                     {extras.length > 0 && (
@@ -1705,9 +1805,12 @@ export default function PatientModal({
         </header>
         <div className="p-4 pt-2 overflow-y-auto max-h-[60vh] scrollbar-none">
           <div className="space-y-2">
-            {DEPARTMENTS.map((dept) => (
+          {departments.map((dept) => {
+              const rooms = Array.isArray(dept.rooms) ? dept.rooms : [];
+              const doctors = Array.isArray(dept.doctors) ? dept.doctors : [];
+              return (
               <motion.button
-                key={dept.id}
+                key={dept.id || dept.name}
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
                 onClick={() => {
@@ -1725,10 +1828,10 @@ export default function PatientModal({
                   {dept.name}
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
-                  {dept.rooms.length} phòng • {dept.doctors.length} bác sĩ
+                {rooms.length} phòng • {doctors.length} bác sĩ
                 </div>
               </motion.button>
-            ))}
+            )})}
           </div>
         </div>
       </motion.div>

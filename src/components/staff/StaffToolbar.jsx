@@ -1,198 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import React from "react";
+import { motion } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
-
-/* Icon button mini */
-function IconBtn({ children, title, onClick, active, btnRef }) {
-  return (
-    <button
-      ref={btnRef}
-      type="button"
-      title={title}
-      onClick={onClick}
-      className={
-        "relative inline-flex items-center justify-center rounded-xl px-3 py-1.5 text-sm font-semibold ring-1 transition " +
-        (active
-          ? "bg-sky-600 text-white ring-sky-500 hover:bg-sky-700"
-          : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50")
-      }
-    >
-      {children}
-      {active && (
-        <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-white ring-2 ring-sky-600" />
-      )}
-    </button>
-  );
-}
-
-/* Popover lọc – bám theo vị trí nút Lọc */
-function FilterPopover({
-  anchorEl,
-  open,
-  q,
-  setQ,
-  statusFilter,
-  setStatusFilter,
-  role,
-  nurseKind,
-  setNurseKind,
-  onClose,
-}) {
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 420 });
-
-  useEffect(() => {
-    function place() {
-      if (!anchorEl) return;
-      const r = anchorEl.getBoundingClientRect();
-      setPos({
-        top: r.bottom + 8,
-        left: Math.max(12, Math.min(window.innerWidth - 12 - 420, r.right - 420)), // canh phải nút
-        width: Math.min(420, window.innerWidth - 24),
-      });
-    }
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
-  }, [anchorEl, open]);
-
-  const statusTabs = useMemo(
-    () => [
-      ["all", "Tất cả"],
-      ["online", "Đang làm"],
-      ["offline", "Tạm nghỉ"],
-    ],
-    []
-  );
-
-  const nurseTabs = useMemo(
-    () => [
-      ["all", "Tất cả"],
-      ["clinical", "Lâm sàng"],
-      ["administrative", "Hành chính"],
-    ],
-    []
-  );
-
-  const statusIndex = statusTabs.findIndex(([v]) => v === statusFilter);
-  const nurseIndex = nurseTabs.findIndex(([v]) => v === nurseKind);
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            className="fixed inset-0 z-40"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-          />
-          <motion.section
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 420, damping: 32 }}
-            className="fixed z-50 rounded-2xl bg-white ring-1 ring-slate-200 shadow-xl overflow-hidden"
-            style={{ top: pos.top, left: pos.left, width: pos.width }}
-            role="dialog"
-            aria-modal="true"
-          >
-            <header className="px-4 py-2 text-slate-800 font-bold">Bộ lọc</header>
-            <div className="p-4 pt-2 space-y-3">
-              <div>
-                <div className="text-sm text-slate-600 mb-1">Từ khóa</div>
-                <label className="relative block">
-                  <input
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    placeholder="🔎  Mã / Họ tên / SĐT / Email / Phòng…"
-                    className="w-full rounded-xl px-3 py-2 bg-white focus:ring-2 ring-1 ring-slate-200 outline-none focus:ring-sky-400"
-                  />
-                  {q && (
-                    <button
-                      type="button"
-                      onClick={() => setQ("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      aria-label="Xóa"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </label>
-              </div>
-
-              <div>
-                <div className="text-sm text-slate-600 mb-1">Trạng thái</div>
-                <div className="relative inline-flex rounded-xl ring-1 ring-slate-200 p-0.5">
-                  <motion.div
-                    layout
-                    layoutId="status-switch"
-                    className="absolute top-0.5 bottom-0.5 rounded-lg bg-cyan-50"
-                    style={{
-                      width: `${100 / statusTabs.length}%`,
-                      left: statusIndex * (100 / statusTabs.length) + "%",
-                    }}
-                    transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                  />
-                  {statusTabs.map(([val, label]) => (
-                    <button
-                      key={val}
-                      role="tab"
-                      aria-selected={statusFilter === val}
-                      onClick={() => setStatusFilter(val)}
-                      className={
-                        "relative w-32 z-10 px-3 py-1.5 font-semibold " +
-                        (statusFilter === val ? "text-cyan-700" : "text-slate-700")
-                      }
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {role === "nurse" && (
-                <div>
-                  <div className="text-sm text-slate-600 mb-1">Loại y tá</div>
-                  <div className="relative inline-flex rounded-xl ring-1 ring-slate-200 p-0.5">
-                    <motion.div
-                      layout
-                      layoutId="nurse-switch"
-                      className="absolute top-0.5 bottom-0.5 rounded-lg bg-teal-50"
-                      style={{
-                        width: `${100 / nurseTabs.length}%`,
-                        left: nurseIndex * (100 / nurseTabs.length) + "%",
-                      }}
-                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                    />
-                    {nurseTabs.map(([val, label]) => (
-                      <button
-                        key={val}
-                        role="tab"
-                        aria-selected={nurseKind === val}
-                        onClick={() => setNurseKind(val)}
-                        className={
-                          "relative w-32 z-10 px-3 py-1.5 font-semibold " +
-                          (nurseKind === val ? "text-teal-700" : "text-slate-700")
-                        }
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.section>
-        </>
-      )}
-    </AnimatePresence>
-  );
-}
 
 export default function StaffToolbar({
   role,
@@ -203,92 +11,119 @@ export default function StaffToolbar({
   setStatusFilter,
   nurseKind,
   setNurseKind,
+  dept,
+  setDept,
+  onReset,
+  filterOpen,
+  setFilterOpen,
   online,
   idle,
   deptsCount,
-  filterOpen,
-  setFilterOpen,
-  onReset,
+  filterBtnRef,
 }) {
-  const filterBtnRef = useRef(null);
-
-  // Vai trò – ngoài cùng bên phải
-  const roleTabs = [
-    ["doctor", "Bác sĩ"],
-    ["nurse", "Y tá"],
+  const tabs = [
+    { key: "doctor", label: "Bác sĩ" },
+    { key: "nurse", label: "Y tá" },
   ];
-  const roleIndex = roleTabs.findIndex(([v]) => v === role);
 
   return (
-    <div className="relative flex items-center gap-2">
-      {/* chips thống kê bên trái (giữ gọn) */}
-      <div className="hidden sm:flex items-center gap-2">
-        <Chip dot="emerald"><b>{online}</b> đang làm việc</Chip>
-        <Chip dot="amber"><b>{idle}</b> tạm nghỉ</Chip>
-        <Chip dot="cyan"><b>{deptsCount}</b> đơn vị</Chip>
-      </div>
-
-      {/* đẩy sang phải */}
-      <div className="flex-1" />
-
-      {/* 2 nút: Reset + Lọc – đặt KẾ thanh vai trò (bên trái) */}
+    <div className="mt-0 flex flex-wrap items-center gap-2 mb-0">
+      {/* Counters */}
       <div className="flex items-center gap-2">
-        <IconBtn title="Đặt lại bộ lọc" onClick={onReset}>⟲</IconBtn>
-        <IconBtn
-          btnRef={filterBtnRef}
-          title="Lọc"
-          onClick={() => setFilterOpen((v) => !v)}
-          active={filterOpen || q.trim() !== "" || statusFilter !== "all" || (role === "nurse" && nurseKind !== "all")}
+        {/* Đổi dot="indigo" thành "teal" cho đồng bộ theme */}
+        <Chip dot="teal">
+          Tổng nhân sự:
+          <b className="ml-1 text-teal-900">{online + idle}</b>
+        </Chip>
+        <Chip dot="emerald">
+          Online:
+          <b className="ml-1 text-emerald-900">{online}</b>
+        </Chip>
+        <Chip dot="amber">
+          Đang rảnh:
+          <b className="ml-1 text-amber-900">{idle}</b>
+        </Chip>
+        <Chip dot="slate">
+          Khoa:
+          <b className="ml-1 text-slate-900">{deptsCount}</b>
+        </Chip>
+      </div>
+
+      {/* Search + tabs + filter */}
+      <div className="ml-auto flex items-center gap-2">
+        
+
+        <button
+          type="button"
+          onClick={onReset}
+          className="btn text-xs text-slate-500 hover:text-teal-700 ml-1 transition-colors"
+          title="Làm mới"
         >
-          🔻 Lọc
-        </IconBtn>
-      </div>
+          ↻
+        </button>
 
-      {/* Thanh vai trò – ngoài cùng bên phải */}
-      <div
-        className="relative inline-flex rounded-xl ring-1 ring-slate-200 p-0.5"
-        role="tablist"
-        aria-label="Chọn vai trò"
-      >
-        <motion.div
-          layout
-          layoutId="role-switch"
-          className="absolute top-0.5 bottom-0.5 rounded-lg bg-sky-50"
-          style={{
-            width: `${100 / roleTabs.length}%`,
-            left: roleIndex * (100 / roleTabs.length) + "%",
-          }}
-          transition={{ type: "spring", stiffness: 420, damping: 32 }}
-        />
-        {roleTabs.map(([val, label]) => (
-          <button
-            key={val}
-            role="tab"
-            aria-selected={role === val}
-            onClick={() => setRole(val)}
-            className={
-              "relative z-10 px-3 py-1.5 font-semibold " +
-              (role === val ? "text-sky-700" : "text-slate-700")
-            }
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+        <motion.button
+          ref={filterBtnRef}
+          type="button"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.98 }}
+          title="Bộ lọc nâng cao"
+          aria-label="Bộ lọc nâng cao"
+          onClick={() =>
+            setFilterOpen((prev) => (typeof prev === "boolean" ? !prev : true))
+          }
+          // THÊM 'relative' VÀO ĐÂY 👇
+          className={`relative inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold shadow-sm transition-colors
+            ${
+              filterOpen
+                ? "bg-teal-50 text-teal-800 border-teal-200 ring-1 ring-teal-200"
+                : "bg-gradient-to-tr from-white via-teal-50/50 to-white text-slate-700 hover:bg-teal-50"
+            }`}
+        >
+          <span className="text-teal-600">⚗️</span>
+          Lọc
+          {filterOpen && (
+            // Dấu chấm sẽ nằm chính xác ở góc trên bên phải của nút
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-teal-500 ring-2 ring-white" />
+          )}
+        </motion.button>
 
-      {/* Popover lọc – bám theo nút Lọc */}
-      <FilterPopover
-        anchorEl={filterBtnRef.current}
-        open={filterOpen}
-        q={q}
-        setQ={setQ}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        role={role}
-        nurseKind={nurseKind}
-        setNurseKind={setNurseKind}
-        onClose={() => setFilterOpen(false)}
-      />
+        {/* Role tabs */}
+        <div
+          className="relative inline-flex p-1 overflow-hidden rounded-xl ring-1 ring-slate-200 bg-slate-50/50"
+          role="tablist"
+          aria-label="Nhóm nhân sự"
+        >
+          {tabs.map((t) => {
+            const active = role === t.key;
+            return (
+              <button
+                key={t.key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setRole(t.key)}
+                // Thay text-indigo thành text-teal
+                className={`relative z-10 px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors rounded-lg ${
+                  active
+                    ? "text-teal-700"
+                    : "text-slate-600 hover:text-teal-600"
+                }`}
+                title={t.label}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="staffRoleTabPill"
+                    // Thay bg-indigo-50 thành bg-white + shadow (hoặc bg-teal-100)
+                    className="absolute inset-0 rounded-lg bg-white shadow-sm ring-1 ring-slate-200/50"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className="relative">{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

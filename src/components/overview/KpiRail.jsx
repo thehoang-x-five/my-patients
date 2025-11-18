@@ -1,55 +1,74 @@
+import React from "react";
 import { FadeIn } from "../ui/Supports.jsx";
 import KpiCard from "./KpiCard.jsx";
-import React from 'react';
+
+/**
+ * Dải 4 KPI trên cùng Dashboard.
+ * Dùng grid + items-stretch để các card cao bằng nhau.
+ */
 export default function KpiRail({ kpi }) {
+  const safe = kpi || {};
+
   return (
-    <section className="grid grid-cols-4 xl:grid-cols-4 lg:grid-cols-4 sm:grid-cols-2 gap-3 ">
+    <section
+      className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 items-stretch"
+      aria-label="Chỉ số chính trong ngày"
+    >
       <FadeIn>
         <KpiCard
           title="Bệnh nhân trong ngày"
-          value={kpi.patientsToday.value}
-          delta={kpi.patientsToday.delta}
+          value={safe.patientsToday?.value}
+          delta={safe.patientsToday?.delta}
           deltaTone="ok"
-          meta={kpi.patientsToday.meta}
-          data24={kpi.patientsToday.spark}
+          meta={safe.patientsToday?.meta}
+          data24={safe.patientsToday?.spark}
           barColor="#10b981"
-          link={{ href: "/patients?date=today", label: "Xem danh sách BN" }}
+          link={{ href: "/patients?view=today", label: "Xem danh sách" }}
         />
       </FadeIn>
-      <FadeIn delay={0.05}>
+
+      <FadeIn>
         <KpiCard
           title="Lịch hẹn hôm nay"
-          value={kpi.appointments.value}
-          delta={kpi.appointments.delta}
+          value={safe.appointments?.value}
+          delta={safe.appointments?.delta}
           deltaTone="info"
-          meta={kpi.appointments.meta}
-          data24={kpi.appointments.spark}
+          meta={safe.appointments?.meta}
+          data24={safe.appointments?.spark}
           barColor="#0ea5e9"
-          link={{ href: "/appointments?date=today", label: "Quản lý lịch hẹn" }}
+          link={{
+            href: "/appointments?view=today",
+            label: "Xem lịch chi tiết",
+          }}
         />
       </FadeIn>
-      <FadeIn delay={0.1}>
+
+      <FadeIn>
+        <KpiCard
+          title="Lượt khám hôm nay"
+          value={safe.exams?.value}
+          delta={safe.exams?.delta}
+          deltaTone="info"
+          meta={safe.exams?.meta}
+          data24={safe.exams?.spark}
+          barColor="#f97316"
+          link={{
+            href: "/examination?date=today",
+            label: "Xem danh sách khám",
+          }}
+        />
+      </FadeIn>
+
+      <FadeIn>
         <KpiCard
           title="Doanh thu hôm nay"
-          value={kpi.revenue.value}
-          delta={kpi.revenue.delta}
+          value={safe.revenue?.value}
+          delta={safe.revenue?.delta}
           deltaTone="ok"
-          meta={kpi.revenue.meta}
-          data24={kpi.revenue.spark}
-          barColor="#6366f1"
-          link={{ href: "/reports?period=today", label: "Xem báo cáo ngày" }}
-        />
-      </FadeIn>
-      <FadeIn delay={0.15}>
-        <KpiCard
-          title="Điểm hài lòng (CSAT)"
-          value={kpi.satisfaction.value}
-          delta={kpi.satisfaction.delta}
-          deltaTone="warn"
-          meta={kpi.satisfaction.meta}
-          data24={kpi.satisfaction.spark}
-          barColor="#f59e0b"
-          link={{ href: "/chat?date=today", label: "Phản hồi chi tiết" }}
+          meta={safe.revenue?.meta}
+          data24={safe.revenue?.spark}
+          barColor="#eab308"
+          link={{ href: "/history?tab=billing", label: "Xem giao dịch" }}
         />
       </FadeIn>
     </section>

@@ -1,104 +1,251 @@
+
 // src/components/staff/StaffCard.jsx
 import React from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Avatar from "./Avatar.jsx";
 
-const dayKey = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
+const NURSE_WORK_ROLE_LABEL = {
+  lam_sang: "Y tá lâm sàng",
+  can_lam_sang: "Y tá cận lâm sàng",
+  hanh_chinh: "Y tá hành chính",
+};
+
+const STAFFING_LABEL = {
+  dang_cong_tac: "Đang công tác",
+  tam_nghi: "Tạm nghỉ",
+  nghi_viec: "Nghỉ việc",
+};
+
+const getRoomToday = (item) => {
+  if (item.roomToday) return item.roomToday;
+  if (item.todayRoom) return item.todayRoom;
+  if (item.dutyRoomToday) return item.dutyRoomToday;
+
+  if (Array.isArray(item.dutyRooms)) {
+    const today = item.dutyRooms.find((x) => x.isToday);
+    if (today?.room) return today.room;
+  }
+
+  if (item.doctorRoom) return item.doctorRoom;
+
+  return "—";
+};
+
+const getStatusVisual = (statusRaw) => {
+  const status = statusRaw || "offline";
+
+  if (status === "online") {
+    return {
+      label: "online",
+      className: "bg-emerald-50 text-emerald-600 ring-emerald-200/60",
+    };
+  }
+  if (status === "pause") {
+    return {
+      label: "pause",
+      className: "bg-amber-50 text-amber-600 ring-amber-200/60",
+    };
+  }
+  return {
+    label: "offline",
+    className: "bg-slate-50 text-slate-400 ring-slate-200/60",
+  };
+};
+
+const getNurseWorkRole = (item) => {
+  // Ưu tiên field vai_tro_cong_tac từ BE
+  let key = item.vai_tro_cong_tac;
+
+  // Fallback từ roleType cũ
+  if (!key && item.roleType === "clinical") key = "lam_sang";
+  if (!key && item.roleType === "administrative") key = "hanh_chinh";
+
+  return NURSE_WORK_ROLE_LABEL[key] || "—";
+};
 
 export default function StaffCard({ item, role, onDetail, onSchedule }) {
-  const online = item.status === "online";
-  const apptCount = item?.apptCount ?? item?.appointmentsToday ?? item?.appts ?? item?.appointments ?? 0;
+  const statusView = getStatusVisual(item.status);
+  const apptCount =
+    item?.apptCount ??
+    item?.appointmentsToday ??
+    item?.appts ??
+    item?.appointments ??
+    0;
 
-  const today = dayKey();
-  // server nên trả sẵn field roomToday hoặc dutyRooms[today]
-  const roomToday = item.roomToday ?? item?.dutyRooms?.[today] ?? "—";
+  const roomToday = getRoomToday(item);
   const isAdminNurse = role === "nurse" && item.roleType === "administrative";
+  const isDoctor = role === "doctor";
+  const isNurse = role === "nurse";
 
-  const primaryLabel = isAdminNurse
-    ? "Đơn vị phụ trách"
-    : role === "doctor"
-    ? "Lịch hẹn hôm nay"
-    : "Phòng phụ trách";
+  let primaryLabel;
+  let primaryValue;
+  let secondaryLabel;
+  let secondaryValue;
 
-  const primaryValue = isAdminNurse
-    ? (item.managedDepartments?.length || 0)
-    : role === "doctor"
-    ? apptCount
-    : (item.rooms ?? (item.managedRooms?.length || 0));
+  if (isDoctor) {
+    primaryLabel = "Phòng phụ trách";
+    primaryValue = item.doctorRoom || roomToday || "—";
+    secondaryLabel = "Lịch hẹn hôm nay";
+    secondaryValue = apptCount;
+  }else if (isAdminNurse) {
+    primaryLabel = "Vai trò công tác";
+    primaryValue = getNurseWorkRole(item);
+    secondaryLabel = "Bàn hôm nay";
+    secondaryValue = roomToday;
+  } 
+  else if (isNurse) {
+    primaryLabel = "Vai trò công tác";
+    primaryValue = getNurseWorkRole(item);
+    secondaryLabel = "Phòng hôm nay";
+    secondaryValue = roomToday;
+  } else {
+    primaryLabel = "Phòng phụ trách";
+    primaryValue = roomToday;
+    secondaryLabel = "Lịch hẹn hôm nay";
+    secondaryValue = apptCount;
+  }
+   
 
-  const todayLabel = isAdminNurse ? "Bàn hôm nay" : "Phòng hôm nay";
-
+    const todayChipLabel = isDoctor
+    ? "Phòng phụ trách"
+    : isAdminNurse
+    ? "Bàn hôm nay"
+    : isNurse
+    ? "Phòng hôm nay"
+    : "Phòng";
   return (
     <motion.article
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2, scale: 1.005 }}
-      className="group rounded-2xl bg-white ring-1 ring-slate-200/90 shadow-sm transition p-4 hover:shadow-xl hover:ring-sky-200 hover:bg-gradient-to-b hover:from-white hover:to-sky-50"
+      className="relative group rounded-2xl bg-white ring-1 ring-slate-200/90 shadow-sm hover:shadow-md hover:ring-teal-200 hover:bg-gradient-to-b hover:from-white hover:to-teal-50 transition p-4"
     >
-      <header className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <Avatar name={item.name} />
-          <div>
-            <b className="block leading-5 text-slate-900 break-words max-w-[140px]">{item.name}</b>
-            <div className="text-slate-500 text-xs">{item.dept}</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className="px-2 py-1 rounded-full text-xs font-bold ring-1 bg-sky-50 text-sky-700 ring-sky-200"
-            title={todayLabel}
-          >
-            📍 {roomToday}
-          </span>
+      {/* Badges góc phải */}
+      <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5 z-10">
+        <span
+          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 transition uppercase tracking-wide ${statusView.className}`}
+        >
+          {statusView.label}
+        </span>
+        <span
+          className="px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 bg-teal-50 text-teal-600 ring-teal-200/50 whitespace-nowrap"
+          title={todayChipLabel}
+        >
+          📍 {roomToday}
+        </span>
+      </div>
 
-          <span
-            className={`px-2 py-1 rounded-full text-xs font-bold ring-1 ${
-              online
-                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                : "bg-amber-50 text-amber-700 ring-amber-200"
-            }`}
-          >
-            {online ? "Đang làm việc" : "Tạm nghỉ"}
-          </span>
+      <header className="flex items-start gap-3">
+        <Avatar item={item} size={40} />
+        <div className="flex-1 min-w-0 pr-24">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-slate-900 truncate">
+              {item.name}
+            </h3>
+            {item.degree && (
+              <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-slate-200">
+                {item.degree}
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 text-xs text-slate-600 flex items-center gap-1">
+            <span>{item.dept || "Chưa gán khoa"}</span>
+            {item.specialties?.length ? (
+              <>
+                <span className="text-slate-400">•</span>
+                <span className="truncate text-slate-500">
+                  {item.specialties.join(", ")}
+                </span>
+              </>
+            ) : null}
+          </p>
         </div>
       </header>
 
-      <ul className="mt-3 text-sm text-slate-700">
-        <li><span className="text-slate-500">Mã:</span> <b>{item.id}</b></li>
-        <li className="truncate">
-          <span className="text-slate-500">Email:</span>{" "}
-          <a className="text-sky-700 hover:underline" href={`mailto:${item.email}`}>{item.email}</a>
-        </li>
-        <li>
-          <span className="text-slate-500">SĐT:</span>{" "}
-          <a className="text-sky-700 hover:underline" href={`tel:${item.phone}`}>{item.phone}</a>
-        </li>
+      <ul className="mt-3 text-xs text-slate-600 space-y-0.5">
+        {item.skills?.length ? (
+          <li className="flex gap-1">
+            <span className="mt-0.5">✨</span>
+            <span className="line-clamp-2">
+              {item.skills.join(" · ")}
+            </span>
+          </li>
+        ) : null}
+        {item.email && (
+          <li className="flex gap-1">
+            <span>✉️</span>
+            <a
+              href={`mailto:${encodeURIComponent(
+                String(item.email).trim()
+              )}`}
+              className="text-teal-600 hover:underline decoration-teal-300"
+            >
+              {item.email}
+            </a>
+          </li>
+        )}
+        {item.phone && (
+          <li className="flex gap-1">
+            <span>📞</span>
+            <a
+              href={`tel:${encodeURIComponent(
+                String(item.phone).trim()
+              )}`}
+              className="text-teal-600 hover:underline decoration-teal-300"
+            >
+              {item.phone}
+            </a>
+          </li>
+        )}
       </ul>
 
+      {/* Thống kê */}
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <div className="rounded-xl ring-1 ring-slate-200 p-2 bg-white/60 group-hover:bg-sky-50 transition">
+        <div className="rounded-xl ring-1 ring-slate-100 p-2 bg-white/60 group-hover:bg-teal-50/50 group-hover:ring-teal-100 transition">
           <div className="text-slate-500 text-xs">{primaryLabel}</div>
-          <div className="text-xl font-extrabold text-slate-900">{primaryValue}</div>
+          <div className="text-ml font-extrabold text-slate-900">
+            {primaryValue}
+          </div>
         </div>
-        <div className="rounded-xl ring-1 ring-slate-200 p-2 bg-white/60 group-hover:bg-sky-50 transition">
-          <div className="text-slate-500 text-xs">{todayLabel}</div>
-          <div className="text-xl font-extrabold text-slate-900">{roomToday}</div>
+        <div className="rounded-xl ring-1 ring-slate-100 p-2 bg-white/60 group-hover:bg-teal-50/50 group-hover:ring-teal-100 transition">
+          <div className="text-slate-500 text-xs">{secondaryLabel}</div>
+          <div className="text-ml font-extrabold text-slate-900">
+            {secondaryValue}
+          </div>
         </div>
       </div>
 
       <footer className="mt-3 flex items-center justify-between">
         <Button
-          className="bg-gradient-to-tr from-sky-100 via-cyan-100 to-sky-50 !py-1 !px-2"
+          className="bg-gradient-to-tr from-teal-100 via-cyan-100 to-teal-50 text-teal-800 hover:from-teal-200 hover:via-cyan-200 hover:to-teal-100 transition !py-1 !px-3 shadow-sm ring-1 ring-teal-200/50"
           onClick={() => onDetail?.(item)}
-          aria-label="Xem chi tiết nhân sự"
         >
-          Xem chi tiết
+          Chi tiết
         </Button>
-        <div className="flex items-center gap-2">
-          <a className="inline-flex items-center justify-center rounded-xl ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50 px-2 py-1" href={`tel:${item.phone}`} title="Gọi" aria-label="Gọi">📞</a>
-          <a className="inline-flex items-center justify-center rounded-xl ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50 px-2 py-1" href={`mailto:${item.email}`} title="Email" aria-label="Email">✉️</a>
-          <Button variant="outline" className="!py-1 !px-2" onClick={() => onSchedule?.(item)} title="Lịch" aria-label="Xem lịch">📅</Button>
+
+        <div className="flex items-center gap-1.5">
+          {item.phone && (
+            <a
+              className="inline-flex items-center justify-center rounded-full ring-1 ring-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 transition px-2 py-1 text-xs font-medium"
+              href={
+                item.phone
+                  ? `tel:${encodeURIComponent(
+                      String(item.phone).trim()
+                    )}`
+                  : "#"
+              }
+            >
+              Gọi
+            </a>
+          )}
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-full ring-1 ring-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 transition px-2 py-1 text-xs font-medium"
+            onClick={() => onSchedule?.(item)}
+          >
+            Lịch trực
+          </button>
         </div>
       </footer>
     </motion.article>

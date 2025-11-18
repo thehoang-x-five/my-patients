@@ -29,7 +29,9 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
 
   const alreadyPicked = (code) => rows.some((r) => r.code === code);
   function addDrug(d) {
-    if (!alreadyPicked(d.code)) setRows((s) => [...s, { ...d, dose: "", qty: "" }]);
+    if (!alreadyPicked(d.code)) {
+      setRows((s) => [...s, { ...d, dose: "", qty: 1 }]); // 👈 thay "" -> 1
+    }
   }
   function removeDrug(code) { setRows((s) => s.filter((x) => x.code !== code)); }
 
@@ -181,9 +183,23 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
               <div className="text-xs text-slate-500">Gợi ý: Enter để thêm thuốc đầu, Ctrl+Enter hoặc F9 để xác nhận.</div>
               <div className="flex items-center gap-2">
                 <Button type="button" onClick={onClose}>Huỷ</Button>
-                <Button type="button" className="btn-primary" disabled={!rows.length} aria-disabled={!rows.length} onClick={() => onPickMany?.(rows)}>
-                  {rows.length ? `Thêm ${rows.length} thuốc` : "Kê"}
-                </Button>
+                <Button
+  type="button"
+  className="btn-primary"
+  disabled={!rows.length}
+  aria-disabled={!rows.length}
+  onClick={() =>
+    onPickMany?.(
+      rows.map((r) => ({
+        ...r,
+        qty: Number.parseInt(String(r.qty || 0), 10) || 0,
+      }))
+    )
+  }
+>
+  {rows.length ? `Thêm ${rows.length} thuốc` : "Kê"}
+</Button>
+                  
               </div>
             </footer>
           </motion.div>

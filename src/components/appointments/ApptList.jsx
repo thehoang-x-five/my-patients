@@ -1,17 +1,28 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
+import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments.js";
+function getApptChipColor(status) {
+  switch (status) {
+    case APPT_STATUS.DA_XAC_NHAN:
+      return { tone: "emerald", dot: "emerald" };   // xanh
+    case APPT_STATUS.DANG_CHO:
+      return { tone: "amber", dot: "amber" };       // vàng
+    case APPT_STATUS.DA_CHECKIN:
+      return { tone: "sky", dot: "sky" };           // xanh dương
+    case APPT_STATUS.DA_HUY:
+      return { tone: "rose", dot: "rose" };         // đỏ/hồng
+    default:
+      return { tone: "slate", dot: "slate" };
+  }
+}
+function TimeRange({ start = "08:00" }) {
+  const [h = 8, m = 0] = String(start)
+    .split(":")
+    .map((n) => Number(n) || 0);
 
-function TimeRange({ start = "08:00", duration = 30 }) {
-  const [h, m] = start.split(":").map(Number);
-  const from = new Date(0, 0, 0, h, m);
-  const to = new Date(from.getTime() + duration * 60000);
   const pad = (n) => String(n).padStart(2, "0");
-  return (
-    <>
-      {pad(from.getHours())}:{pad(from.getMinutes())}–{pad(to.getHours())}:{pad(to.getMinutes())}
-    </>
-  );
+  return <>{pad(h)}:{pad(m)}</>;
 }
 
 export default function ApptList({
@@ -50,7 +61,7 @@ export default function ApptList({
 
   if (!items.length) {
     return (
-      <section className={`p-6 rounded-2xl text-slate-500 ring-1 ring-violet-200/60 bg-white ${stretch ? "h-full flex flex-col min-h-0" : ""}`}>
+      <section className={`p-6 rounded-2xl text-slate-500 ring-1 ring-violet-200/60 bg-white  ${stretch ? "h-full flex flex-col min-h-0" : ""}`}>
         Chưa có lịch hẹn.
       </section>
     );
@@ -61,10 +72,13 @@ export default function ApptList({
       <div className={`${stretch ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"} p-4 pt-1`}>
         <div className="flex flex-col gap-2">
         {items.map((a, i) => {
-            const id = a.id ?? a.code ?? a.pid ?? a.patient;
-            // Disallow check-in for canceled, no-show, or completed
-            const blocked = ["Đã hủy", "Không đến", "Đã hoàn thành"];
-            const canCheckIn = !blocked.includes(a.status) && !a.checkedIn;
+  const id = a.id ?? a.code ?? a.pid ?? a.patient;
+
+  const statusCode = a.status;
+  
+  const { tone, dot } = getApptChipColor(statusCode);
+  const statusLabel = APPT_STATUS_LABEL[statusCode] || "—";
+  const canCheckIn = statusCode === APPT_STATUS.DA_XAC_NHAN;
 
             return (
               <motion.article
@@ -87,16 +101,18 @@ export default function ApptList({
                     <TimeRange start={a.time} duration={a.duration} />
                   </div>
                   <span
-                    className={`absolute top-1 right-0 w-2 h-2 rounded-full transition-transform duration-300 group-hover:scale-110 ${
-                      a.checkedIn
-                        ? "bg-sky-500"
-                        : a.status === "Đã xác nhận"
-                        ? "bg-emerald-500"
-                        : a.status === "Đang chờ"
-                        ? "bg-amber-500"
-                        : "bg-slate-400"
-                    }`}
-                  />
+  className={`absolute top-1 right-0 w-2 h-2 rounded-full transition-transform duration-300 group-hover:scale-110 ${
+    statusCode === APPT_STATUS.DA_CHECKIN
+      ? "bg-sky-500"
+      : statusCode === APPT_STATUS.DA_XAC_NHAN
+      ? "bg-emerald-500"
+      : statusCode === APPT_STATUS.DANG_CHO
+      ? "bg-amber-500"
+      : statusCode === APPT_STATUS.DA_HUY
+      ? "bg-rose-400"
+      : "bg-slate-400"
+  }`}
+/>
                 </div>
 
                 <div className="min-w-0 space-y-2">
@@ -113,7 +129,11 @@ export default function ApptList({
                       <Chip tone={a.type === "Tái khám" ? "violet" : "slate"} className="text-[11px] px-2 py-0.5">
                         {a.type}
                       </Chip>
-
+                      {a.phone && (
+  <div className="text-xs text-slate-600">
+    📞 {a.phone}
+  </div>
+)}
                       <Chip tone="slate" className="text-[11px] px-2 py-0.5">{a.doctor}</Chip>
                       <Chip tone="slate" className="text-[11px] px-2 py-0.5">{a.dept}</Chip>
                     </div>
@@ -122,14 +142,13 @@ export default function ApptList({
                       {a.checkedIn && <Chip tone="sky" dot="sky" className="text-xs">Đã check-in</Chip>}
 
                       {!a.checkedIn && (
-                        <Chip
-                          tone={a.status === "Đã xác nhận" ? "emerald" : a.status === "Đang chờ" ? "amber" : "slate"}
-                          dot={a.status === "Đã xác nhận" ? "emerald" : a.status === "Đang chờ" ? "amber" : "slate"}
-                          className="text-xs"
-                        >
-                          {a.status}
-                        </Chip>
-                      )}
+  <Chip
+  tone={tone} dot={dot}
+    className="text-xs"
+  >
+    {statusLabel}
+  </Chip>
+)}
 
                       <motion.button
                        type="button"

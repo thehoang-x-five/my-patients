@@ -4,263 +4,353 @@ import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Avatar from "./Avatar.jsx";
 
-const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const dayKey = () => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
+const NURSE_WORK_ROLE_LABEL = {
+  lam_sang: "Y tá lâm sàng",
+  can_lam_sang: "Y tá cận lâm_sang",
+  hanh_chinh: "Y tá hành chính",
+};
 
-export default function StaffDetail({ open, item, role, schedule, roomToday, weekRoom, onClose }) {
-  if (!item) return null;
+const getStatusVisual = (statusRaw) => {
+  const status = statusRaw || "offline";
 
-  const apptCount = item?.apptCount ?? item?.appointmentsToday ?? item?.appts ?? item?.appointments ?? 0;
-  const isAdminNurse = role === "nurse" && item.roleType === "administrative";
-  const today = dayKey();
-  const shiftToday = schedule?.[today] ?? "—";
+  if (status === "online") {
+    return {
+      label: "online",
+      className: "bg-emerald-50 text-emerald-600 ring-emerald-200/60",
+    };
+  }
+  if (status === "pause") {
+    return {
+      label: "pause",
+      className: "bg-amber-50 text-amber-600 ring-amber-200/60",
+    };
+  }
+  return {
+    label: "offline",
+    className: "bg-slate-50 text-slate-400 ring-slate-200/60",
+  };
+};
+
+const getNurseWorkRole = (item) => {
+  let key = item.vai_tro_cong_tac;
+  if (!key && item.roleType === "clinical") key = "lam_sang";
+  if (!key && item.roleType === "administrative") key = "hanh_chinh";
+  return NURSE_WORK_ROLE_LABEL[key] || "—";
+};
+
+export default function StaffDetail({
+  open,
+  item,
+  role,
+  schedule,   // { Mon: "Sáng", Tue: "Chiều", ... }
+  roomToday,  // "Nội 101" / "Quầy tiếp nhận 1"
+  onClose,
+}) {
+  if (!open || !item) return null;
+
+  const apptCount =
+    item?.apptCount ??
+    item?.appointmentsToday ??
+    item?.appts ??
+    item?.appointments ??
+    0;
+
+  const certCount =
+    item?.so_nam_kinh_nghiem ?? item?.years ?? 0;
+
+  const statusView = getStatusVisual(item.status);
   const managedRooms = item.managedRooms || [];
-  const certCount = (item.certificates || []).length;
-  const weekShifts = Object.values(schedule || {}).filter((s) => s && s !== "Nghỉ").length;
 
+  const isDoctor = role === "doctor";
+  const isNurse = role === "nurse";
+
+  const roleLabel = isDoctor
+    ? "Bác sĩ"
+    : isNurse
+    ? "Y tá"
+    : "Nhân sự y tế";
+
+  const nurseWorkRole = isNurse ? getNurseWorkRole(item) : null;
+
+  // Số ca trực tuần này cho Y tá: đếm ca != "Nghỉ" / "—"
+  const weeklyShiftCount =
+    isNurse && schedule
+      ? Object.values(schedule).filter(
+          (s) => s && s !== "Nghỉ" && s !== "—"
+        ).length
+      : 0;
+
+  function Tile({ label, value }) {
+    return (
+      <div className="rounded-lg ring-1 ring-slate-200 p-2 bg-white hover:bg-teal-50 transition">
+        <div className="text-[11px] text-slate-500">{label}</div>
+        <div className="text-sm font-semibold text-slate-900 truncate">
+          {value}
+        </div>
+      </div>
+    );
+  }
+
+  function StatTile({ label, value }) {
+    return (
+      <motion.div
+        whileHover={{ scale: 1.03 }}
+        className="rounded-xl p-3 border border-teal-200 bg-teal-50 hover:bg-teal-50/80 hover:border-teal-300 transition"
+      >
+        <div className="text-xs text-teal-700">{label}</div>
+        <div className="text-lg font-semibold text-teal-900">
+          {value}
+        </div>
+      </motion.div>
+    );
+  }
+
+  const Card = ({ children, className = "" }) => (
+    <motion.section
+      whileHover={{ y: -2, scale: 1.002 }}
+      transition={{ duration: 0.2 }}
+      className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-teal-200 hover:shadow ${className}`}
+    >
+      {children}
+    </motion.section>
+  );
+
+  // ===== JSX =====
   return (
     <AnimatePresence>
       {open && (
         <>
+          {/* Backdrop */}
           <motion.div
-            className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
+
+          {/* Wrapper */}
           <motion.div
             className="fixed inset-0 z-50 p-4 grid place-items-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
+            {/* Modal */}
             <motion.section
-              initial={{ y: 14, scale: 0.98, opacity: 0 }}
+              initial={{ y: 14, scale: 0.985, opacity: 0 }}
               animate={{ y: 0, scale: 1, opacity: 1 }}
-              exit={{ y: 14, scale: 0.98, opacity: 0 }}
-              className="w-[min(1000px,100%)] max-h-[86vh] overflow-auto scrollbar-none bg-white rounded-2xl ring-1 ring-slate-200/80 shadow-2xl"
+              exit={{ y: 14, scale: 0.985, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 360, damping: 26 }}
+              className="w-full max-w-3xl max-h-[90vh] rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Chi tiết nhân sự"
             >
-              <div className="sticky top-0 z-10 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b border-slate-100">
-                <header className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar name={item.name} />
-                    <div>
-                      <h3 className="text-lg font-extrabold">{item.name}</h3>
-                      <div className="text-slate-500 text-sm">
-                        {item.dept} • {item.id}
-                      </div>
+              {/* HEADER */}
+              <header className="sticky top-0 z-10 backdrop-blur-sm bg-gradient-to-r from-teal-50/80 to-cyan-50/80 border-b border-slate-200 p-4 flex items-start gap-3">
+                <Avatar item={item} size="lg" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <h2 className="text-base font-semibold text-slate-900 truncate">
+                        {item.name}
+                      </h2>
+                      <p className="text-xs text-slate-500 truncate">
+                        {item.degree ? item.degree + " • " : ""}
+                        {item.dept || "Chưa gán khoa"}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ${statusView.className}`}
+                      >
+                        Trạng thái: {statusView.label}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-1 rounded-full text-xs font-bold ring-1 bg-sky-50 text-sky-700 ring-sky-200">
-                      📍 {roomToday || "—"}
-                    </span>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-bold ring-1 ${
-                        item.status === "online"
-                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                          : "bg-amber-50 text-amber-700 ring-amber-200"
-                      }`}
-                    >
-                      {item.status === "online" ? "Đang làm việc" : "Tạm nghỉ"}
-                    </span>
-                    <Button onClick={onClose} aria-label="Đóng">✕</Button>
-                  </div>
-                </header>
-              </div>
+                </div>
 
-              <div className="p-4 grid md:grid-cols-2 gap-3">
-                {/* Tổng quan */}
-                <section className="rounded-xl p-3 ring-1 ring-slate-200/80">
-                  <b className="block mb-2">Tổng quan</b>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <Tile label="Đơn vị" value={item.dept} />
-                    <Tile label="Phòng/Office" value={item.office || "—"} />
-                    <Tile label="Học vị" value={item.degree || "—"} />
-                    <Tile label="Kinh nghiệm" value={`${item.years || 0} năm`} />
-                  </div>
-                </section>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onClose}
+                  className="rounded-xl"
+                >
+                  ✕
+                </Button>
+              </header>
 
-                {/* Phân công */}
-                <section className="rounded-xl p-3 ring-1 ring-slate-200/80">
-                  <b className="block mb-2">Phân công</b>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <Tile label="Ngôn ngữ" value={(item.languages || []).join(", ") || "—"} />
-                    <Tile label="Ngày làm việc" value={(item.workdays || []).join(", ") || "—"} />
-                    <Tile
-                      label={isAdminNurse ? "Đơn vị phụ trách" : role === "doctor" ? "Lịch hẹn hôm nay" : "Số phòng quản lý"}
-                      value={isAdminNurse ? (item.managedDepartments?.length || 0) : role === "doctor" ? apptCount : (item.rooms ?? managedRooms.length)}
-                    />
-                    <Tile label="Chuyên môn" value={(item.specialties || []).join(", ") || "—"} />
-                  </div>
-                </section>
-
-                {/* Ghi chú */}
-                <section className="rounded-xl p-3 ring-1 ring-slate-200/80">
-                  <b className="block mb-2">Ghi chú</b>
-                  <ul className="list-disc pl-5 text-sm space-y-1">
-                    {(item.notes && item.notes.length ? item.notes : ["—"]).map((n, i) => (
-                      <li key={i}>{n}</li>
-                    ))}
-                  </ul>
-                </section>
-
-                {/* Liên hệ */}
-                <section className="rounded-xl p-3 ring-1 ring-slate-200/80">
-                  <b className="block mb-2">Liên hệ</b>
-                  <div className="text-sm space-y-1">
-                    <div>Email: <a className="text-sky-700 hover:underline" href={`mailto:${item.email}`}>{item.email}</a></div>
-                    <div>SĐT: <a className="text-sky-700 hover:underline" href={`tel:${item.phone}`}>{item.phone}</a></div>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <Button variant="outline" onClick={() => window.open(`tel:${item.phone}`, "_self")}>📞 Gọi</Button>
-                    <Button variant="outline" onClick={() => window.open(`mailto:${item.email}`, "_self")}>✉️ Email</Button>
-                  </div>
-                </section>
-
-                {/* Chỉ số */}
-                <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
-                  <b className="block mb-2">Chỉ số</b>
-                  <div className="grid md:grid-cols-4 grid-cols-2 gap-2">
-                    <StatTile label="Ca trong tuần" value={weekShifts} />
-                    <StatTile label="Chứng chỉ" value={certCount} />
-                    <StatTile label="Phòng quản lý" value={managedRooms.length} />
-                    <StatTile label="Trực hôm nay" value={`${shiftToday}`} />
-                  </div>
-                </section>
-
-                {/* Phòng quản lý (BS/điều dưỡng lâm sàng) */}
-                {!isAdminNurse && (
-                  <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
-                    <b className="block mb-2">Phòng quản lý</b>
-                    <div className="flex flex-wrap gap-2">
-                      {(managedRooms.length ? managedRooms : ["—"]).map((r) => (
-                        <span key={r} className="inline-flex items-center rounded-full px-2 py-1 text-xs ring-1 ring-cyan-200 bg-cyan-50 text-cyan-700 hover:ring-cyan-300 hover:bg-cyan-100 transition">{r}</span>
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {/* Hành chính */}
-                {isAdminNurse && (
-                  <>
-                    <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
-                      <b className="block mb-2">KPI hành chính</b>
-                      <div className="grid md:grid-cols-4 grid-cols-2 gap-2">
-                        <StatTile label="Hồ sơ xử lý hôm nay" value={item.adminHandledToday ?? 0} />
-                        <StatTile label="SLA" value={item.adminSLA ?? "—"} />
-                        <StatTile label="HS chờ duyệt" value={item.docsPending ?? 0} />
-                        <StatTile label="Bàn hôm nay" value={roomToday || "—"} />
+              {/* BODY */}
+              <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-3 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)] gap-3">
+                  {/* Cột trái: hành chính + chuyên môn + kỹ năng */}
+                  <section className="space-y-3">
+                    <Card>
+                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                        Thông tin hành chính
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Tile label="Họ tên" value={item.name} />
+                        <Tile
+                          label="Mã nhân viên"
+                          value={item.ma_nhan_vien || "—"}
+                        />
+                        <Tile
+                          label="Khoa"
+                          value={item.dept || "Chưa gán khoa"}
+                        />
+                        <Tile label="Vai trò" value={roleLabel} />
                       </div>
-                    </section>
+                    </Card>
 
-                    <section className="rounded-xl p-3 ring-1 ring-slate-200/80">
-                      <b className="block mb-2">Đơn vị phụ trách</b>
-                      <div className="flex flex-wrap gap-2">
-                        {(item.managedDepartments || ["—"]).map((d) => (
-                          <span key={d} className="inline-flex items-center rounded-full px-2 py-1 text-xs ring-1 ring-cyan-200 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 hover:ring-cyan-300 transition">{d}</span>
+                    <Card>
+                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                        Chuyên môn
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Tile label="Học vị" value={item.degree || "—"} />
+                        <Tile
+                          label="Chuyên khoa"
+                          value={
+                            (item.specialties || []).join(", ") || "—"
+                          }
+                        />
+                      </div>
+                    </Card>
+
+                    <Card>
+                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                        Kỹ năng
+                      </h3>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(item.skills && item.skills.length > 0
+                          ? item.skills
+                          : ["—"]
+                        ).map((s, i) => (
+                          <span
+                            key={s + i}
+                            className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] text-teal-700 bg-teal-50 ring-1 ring-teal-200 hover:bg-teal-100 hover:ring-teal-300 transition"
+                          >
+                            {s}
+                          </span>
                         ))}
                       </div>
-                    </section>
-
-                    <section className="rounded-xl p-3 ring-1 ring-slate-200/80">
-                      <b className="block mb-2">Nhiệm vụ</b>
-                      <ul className="list-disc pl-5 text-sm space-y-1">
-                        {(item.responsibilities || ["—"]).map((t, i) => <li key={i}>{t}</li>)}
-                      </ul>
-                    </section>
-
-                    <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
-                      <b className="block mb-2">Quy trình</b>
-                      <div className="flex flex-wrap gap-2">
-                        {(item.procedures || ["—"]).map((p) => (
-                          <span key={p} className="inline-flex items-center rounded-full px-2 py-1 text-xs ring-1 ring-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:ring-sky-300 transition">{p}</span>
-                        ))}
-                      </div>
-                    </section>
-                  </>
-                )}
-
-                {/* Kỹ năng */}
-                <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
-                  <b className="block mb-2">Kỹ năng</b>
-                  <div className="flex flex-wrap gap-2">
-                    {(item.skills || []).map((s) => (
-                      <span key={s} className="inline-flex items-center rounded-full px-2 py-1 text-xs ring-1 ring-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:ring-sky-300 transition">{s}</span>
-                    ))}
-                  </div>
-                </section>
-
-                {/* Chứng chỉ */}
-                <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
-                  <b className="block mb-2">Chứng chỉ</b>
-                  <div className="flex flex-wrap gap-2">
-                    {(item.certificates || []).map((c) => (
-                      <span key={c} className="inline-flex items-center rounded-full px-2 py-1 text-xs ring-1 ring-cyan-200 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 hover:ring-cyan-300 transition">{c}</span>
-                    ))}
-                  </div>
-                </section>
-
-                {/* Tiểu sử */}
-                <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
-                  <b className="block mb-2">Tiểu sử</b>
-                  <div className="text-sm">{item.bio || "—"}</div>
-                </section>
-
-                {/* Lịch tuần nhanh */}
-                {weekRoom && schedule && (
-                  <section className="md:col-span-2 rounded-xl p-3 ring-1 ring-slate-200/80">
-                    <b className="block mb-2">Lịch tuần</b>
-                    <div className="overflow-auto">
-                      <table className="min-w-[640px] w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="text-left text-xs font-semibold text-slate-600 bg-slate-50">
-                            {WEEK.map((d) => (
-                              <th key={d} className="px-2 py-2">{d}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            {WEEK.map((d) => (
-                              <td key={d} className={`px-2 py-2 align-top ${d===today ? "bg-sky-50" : ""}`}>
-                                <div>Ca: <b>{schedule?.[d] ?? "—"}</b></div>
-                                <div>Phòng: <b>{weekRoom?.[d] ?? "—"}</b></div>
-                              </td>
-                            ))}
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
+                    </Card>
                   </section>
-                )}
+
+                  {/* Cột phải: liên hệ + thống kê + phòng/bàn trực hôm nay */}
+                  <section className="space-y-3">
+                    <Card>
+                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                        Liên hệ
+                      </h3>
+                      <div className="space-y-1 text-xs text-slate-600">
+                        <div>
+                          Email:{" "}
+                          <a
+                            className="text-teal-700 hover:underline"
+                            href={
+                              item.email
+                                ? `mailto:${item.email}`
+                                : "#"
+                            }
+                          >
+                            {item.email || "—"}
+                          </a>
+                        </div>
+                        <div>
+                          SĐT:{" "}
+                          <a
+                            className="text-teal-700 hover:underline"
+                            href={
+                              item.phone
+                                ? `tel:${item.phone}`
+                                : "#"
+                            }
+                          >
+                            {item.phone || "—"}
+                          </a>
+                        </div>
+                      </div>
+                    </Card>
+
+                    <Card>
+                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                        Thống kê nhanh
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <StatTile
+                          label="Số năm KN"
+                          value={certCount}
+                        />
+                        {isDoctor ? (
+                          <StatTile
+                            label="Lịch hẹn hôm nay"
+                            value={apptCount}
+                          />
+                        ) : isNurse ? (
+                          <StatTile
+                            label="Số ca trực tuần này"
+                            value={weeklyShiftCount}
+                          />
+                        ) : (
+                          <StatTile
+                            label="Lịch hẹn hôm nay"
+                            value={apptCount}
+                          />
+                        )}
+                      </div>
+                    </Card>
+
+                    <Card>
+                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                        {isDoctor
+                          ? "Phòng khám phụ trách"
+                          : isNurse
+                          ? "Phòng / bàn trực hôm nay"
+                          : "Phòng / bàn"}
+                      </h3>
+                      <div className="flex flex-wrap gap-1.5 text-xs text-slate-700">
+                        {isDoctor && (item.doctorRoom || roomToday) && (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition">
+                            PK: {item.doctorRoom || roomToday}
+                          </span>
+                        )}
+
+                        {isNurse && (roomToday || managedRooms.length) ? (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition">
+                            {roomToday || managedRooms[0] || "—"}
+                          </span>
+                        ) : null}
+
+                        {!isDoctor && !isNurse && (
+                          (managedRooms.length ? managedRooms : ["—"]).map(
+                            (r, i) => (
+                              <span
+                                key={r + i}
+                                className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition"
+                              >
+                                {r}
+                              </span>
+                            )
+                          )
+                        )}
+                      </div>
+                    </Card>
+                  </section>
+                </div>
               </div>
+
+              {/* FOOTER */}
+              <footer className="sticky bottom-0 z-10 px-4 py-3 border-t border-slate-100 flex justify-end backdrop-blur-sm bg-white/80">
+                <Button variant="ghost" size="sm" onClick={onClose}>
+                  Đóng
+                </Button>
+              </footer>
             </motion.section>
           </motion.div>
         </>
       )}
     </AnimatePresence>
-  );
-}
-
-function Tile({ label, value }) {
-  return (
-    <div className="rounded-lg ring-1 ring-slate-200 p-2 bg-white hover:bg-sky-50 transition">
-      <div className="text-slate-500">{label}</div>
-      <b>{value}</b>
-    </div>
-  );
-}
-function StatTile({ label, value }) {
-  return (
-    <div className="rounded-xl ring-1 ring-slate-200 p-3 bg-gradient-to-br from-white to-sky-50 hover:from-sky-50 hover:to-white transition">
-      <div className="text-slate-500 text-xs">{label}</div>
-      <div className="text-xl font-extrabold text-slate-900 mt-1">{value}</div>
-    </div>
   );
 }

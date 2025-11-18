@@ -1,16 +1,28 @@
-import React from 'react';
+import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import Button from "../ui/Button.jsx";
-import { isServiceDept } from "../../data/history.js";
+import { isServiceDept } from "../../api/history.js";
 
 export default function HistoryDetailModal({ open, type, row, onClose }) {
-  if (!row) return null;
+  if (!open || !row) return null;
+
   const isVisit = type === "visit";
+  const isTxn = type === "txn";
   const isServiceVisit =
     isVisit && (row.type === "service" || isServiceDept(row.dept));
 
-  // Kích thước modal: nhỏ hơn cho giao dịch
+  const dateObj = row.date ? new Date(row.date) : null;
+  const dateStr = dateObj
+    ? dateObj.toLocaleDateString("vi-VN")
+    : "—";
+  const timeStr = dateObj
+    ? dateObj.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+
   const shellSize = isVisit ? "max-w-4xl" : "max-w-xl";
 
   return (
@@ -23,7 +35,9 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
           exit={{ opacity: 0 }}
           role="dialog"
           aria-modal="true"
-          aria-label={isVisit ? "Chi tiết khám bệnh" : "Chi tiết giao dịch"}
+          aria-label={
+            isVisit ? "Chi tiết khám bệnh" : "Chi tiết giao dịch"
+          }
         >
           <motion.div
             className={`w-full ${shellSize} rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200/80`}
@@ -33,16 +47,28 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
             transition={{ type: "spring", stiffness: 380, damping: 32 }}
           >
             {/* Header */}
-            <header className="flex items-center justify-between px-5 py-4 border-b border-slate-200 sticky top-0 bg-white/90 backdrop-blur rounded-t-2xl">
+            <header className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-gradient-to-r from-indigo-50 via-violet-50 to-indigo-50">
               <div>
-                <h3 className="text-lg font-extrabold">
-                  {isVisit ? "Chi tiết khám bệnh" : "Chi tiết giao dịch"}
-                </h3>
+                <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                  {isVisit ? "Khám bệnh" : "Giao dịch"}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <h2 className="text-sm font-bold text-slate-900">
+                    {row.name || row.ptName || "—"}
+                  </h2>
+                  {row.id || row.ptId ? (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-900/5 text-slate-600">
+                      Mã BN: {row.id || row.ptId}
+                    </span>
+                  ) : null}
+                  {isTxn && (row.invoiceId || row.invoice) && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-200">
+                      HĐ: {row.invoiceId || row.invoice}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Lúc:{" "}
-                  {row.date
-                    ? new Date(row.date).toLocaleDateString("vi-VN")
-                    : "—"}
+                  Thời gian: {dateStr} • {timeStr}
                 </p>
               </div>
               <Button onClick={onClose} aria-label="Đóng">
@@ -50,16 +76,18 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
               </Button>
             </header>
 
-            {/* Body: cuộn trong khung */}
+            {/* Body */}
             <div className="px-5 py-4 max-h-[70vh] overflow-y-auto scrollbar-none">
-              <div className="grid gap-5">
-                {/* 1) Thông tin BN */}
+              <div className="grid gap-5 text-sm">
+                {/* 1) Thông tin BN / Giao dịch */}
                 <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
-                  <div className="grid lg:grid-cols-2 gap-4 text-sm">
+                  <div className="grid lg:grid-cols-2 gap-4">
                     <Field
                       label="Mã BN"
                       value={
-                        <Underlined to={`/patients?pid=${row.id || row.ptId}`}>
+                        <Underlined
+                          to={`/patients?pid=${row.id || row.ptId}`}
+                        >
                           {row.id || row.ptId || "—"}
                         </Underlined>
                       }
@@ -68,14 +96,46 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                       label="Họ và tên"
                       value={row.name || row.ptName || "—"}
                     />
+
                     {isVisit ? (
                       <>
-                        <Field label="Khoa" value={row.dept || "—"} />
-                        <Field label="Bác sĩ" value={row.doctor || "—"} />
+                        <Field
+                          label="Khoa/Phòng"
+                          value={row.dept || "—"}
+                        />
+                        <Field
+                          label="Bác sĩ"
+                          value={row.doctor || "—"}
+                        />
+                        <Field
+                          label="Loại lượt"
+                          value={
+                            isServiceVisit ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+                                Dịch vụ
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+                                Khám thường
+                              </span>
+                            )
+                          }
+                        />
                       </>
                     ) : (
                       <>
-                        <Field label="Nội dung" value={row.content || "—"} />
+                        <Field
+                          label="Mã hoá đơn"
+                          value={row.invoiceId || row.invoice || "—"}
+                        />
+                        <Field
+                          label="Loại"
+                          value={renderKindChip(row.kind)}
+                        />
+                        <Field
+                          label="Trạng thái"
+                          value={renderStatusChip(row.status)}
+                        />
                         <Field
                           label="Số tiền"
                           value={`${Number(
@@ -90,13 +150,18 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                 {isVisit ? (
                   <>
                     {/* 2) Kết quả khám */}
-                    {(row.note || (row.examRows && row.examRows.length)) && (
+                    {(row.note ||
+                      (row.examRows && row.examRows.length)) && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                         <b className="block mb-2">Kết quả khám</b>
                         {row.note && (
                           <div className="mb-3 text-sm">
-                            <span className="text-slate-500">Tóm tắt: </span>
-                            <span className="font-medium">{row.note}</span>
+                            <span className="text-slate-500">
+                              Tóm tắt:{" "}
+                            </span>
+                            <span className="font-medium">
+                              {row.note}
+                            </span>
                           </div>
                         )}
                         {(row.examRows || []).length > 0 && (
@@ -105,14 +170,23 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                               <thead className="text-left text-slate-500 bg-slate-50">
                                 <tr>
                                   <th className="px-3 py-2 w-12">#</th>
-                                  <th className="px-3 py-2 w-56">Mục khám</th>
-                                  <th className="px-3 py-2">Kết quả</th>
+                                  <th className="px-3 py-2 w-56">
+                                    Mục khám
+                                  </th>
+                                  <th className="px-3 py-2">
+                                    Kết quả
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {row.examRows.map((r, i) => (
-                                  <tr key={i} className="odd:bg-slate-50/40">
-                                    <td className="px-3 py-2">{i + 1}</td>
+                                  <tr
+                                    key={i}
+                                    className="odd:bg-slate-50/40"
+                                  >
+                                    <td className="px-3 py-2">
+                                      {i + 1}
+                                    </td>
                                     <td className="px-3 py-2 font-semibold">
                                       {r.label || "-"}
                                     </td>
@@ -128,38 +202,28 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                       </section>
                     )}
 
-                    {/* 3) Kết quả dịch vụ */}
-                    {(row.services || []).length > 0 && (
-                      <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
-                        <b className="block mb-2">Kết quả dịch vụ</b>
-                        <ul className="divide-y divide-slate-100">
-                          {row.services.map((s, i) => (
-                            <li
-                              key={s.code || i}
-                              className="py-2 flex items-start justify-between gap-4"
-                            >
-                              <div className="font-medium">{s.name}</div>
-                              <div className="text-sm text-slate-600">
-                                {s.result || "—"}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    )}
-
-                    {/* 4) Chẩn đoán & Điều trị */}
+                    {/* 3) Chẩn đoán & kế hoạch */}
                     {row.diagnosis && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
-                        <b className="block mb-2">Chẩn đoán & Điều trị</b>
-                        <div className="grid md:grid-cols-2 gap-3 text-sm">
+                        <b className="block mb-2">
+                          Chẩn đoán & Kế hoạch điều trị
+                        </b>
+                        <div className="grid md:grid-cols-2 gap-3">
                           <Field
                             label="Chẩn đoán sơ bộ"
-                            value={row.diagnosis.pre || "—"}
+                            value={
+                              row.diagnosis.pre ||
+                              row.diagnosis.main ||
+                              "—"
+                            }
                           />
                           <Field
                             label="Chẩn đoán xác định"
-                            value={row.diagnosis.final || "—"}
+                            value={
+                              row.diagnosis.final ||
+                              row.diagnosis.sub ||
+                              "—"
+                            }
                           />
                           <FieldFull
                             label="Phác đồ điều trị"
@@ -173,74 +237,143 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                       </section>
                     )}
 
+                    {/* 4) Dịch vụ thực hiện */}
+                    {(row.services || []).length > 0 && (
+                      <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
+                        <b className="block mb-2">Dịch vụ thực hiện</b>
+                        <div className="overflow-x-auto rounded-lg ring-1 ring-slate-200/70">
+                          <table className="min-w-full text-sm">
+                            <thead className="text-left text-slate-500 bg-slate-50">
+                              <tr>
+                                <th className="px-3 py-2 w-16">
+                                  Mã
+                                </th>
+                                <th className="px-3 py-2">Tên dịch vụ</th>
+                                <th className="px-3 py-2 text-right">
+                                  Giá
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {row.services.map((s, i) => (
+                                <tr
+                                  key={s.code || i}
+                                  className="odd:bg-slate-50/40"
+                                >
+                                  <td className="px-3 py-2 font-mono text-xs">
+                                    {s.code || "-"}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {s.name || "-"}
+                                  </td>
+                                  <td className="px-3 py-2 text-right">
+                                    {Number(
+                                      s.price ?? 0
+                                    ).toLocaleString("vi-VN")}{" "}
+                                    đ
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+                    )}
+
                     {/* 5) Đơn thuốc */}
                     {isServiceVisit ? (
                       <section className="rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 text-amber-800">
                         Lần khám dịch vụ không phát sinh đơn thuốc.
                       </section>
-                    ) : row.prescriptionId ? (
+                    ) : row.prescriptionId || row.rxId ? (
                       <section className="rounded-xl ring-1 ring-sky-200 bg-sky-50 p-3 text-sm">
                         Có đơn thuốc:{" "}
                         <Underlined
-                          to={`/prescriptions?view=${row.prescriptionId}`}
+                          to={`/prescriptions?view=${
+                            row.prescriptionId || row.rxId
+                          }`}
                         >
-                          {row.prescriptionId}
+                          {row.prescriptionId || row.rxId}
                         </Underlined>
-                        <div className="text-xs text-slate-500">
-                          Bấm để mở chi tiết trong mục Đơn thuốc
-                        </div>
                       </section>
-                    ) : (
-                      <section className="rounded-xl ring-1 ring-slate-200/70 p-3 text-sm">
-                        Không thấy thông tin đơn thuốc.
-                      </section>
-                    )}
+                    ) : null}
 
                     {/* Link hồ sơ BN */}
                     <div className="text-sm">
-                      <Underlined to={`/patients?pid=${row.id || row.ptId}`}>
+                      <Underlined
+                        to={`/patients?pid=${row.id || row.ptId}`}
+                      >
                         Xem hồ sơ bệnh nhân
                       </Underlined>
                     </div>
                   </>
                 ) : (
                   <>
-                    {/* Giao dịch */}
-                    {(row.drugsFee != null || row.rxId) && (
-                      <section className="rounded-xl ring-1 ring-emerald-200 bg-emerald-50 p-3 text-sm">
-                        Phí đơn thuốc:{" "}
-                        <b>
-                          {Number(row.drugsFee || 0).toLocaleString("vi-VN")} đ
-                        </b>
-                        {row.rxId && (
-                          <>
-                            {" "}
-                            • Mã đơn:{" "}
-                            <Underlined to={`/prescriptions?view=${row.rxId}`}>
-                              {row.rxId}
+                    {/* Giao dịch: chi tiết thêm */}
+                    <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
+                      <b className="block mb-2">Thông tin giao dịch</b>
+                      <div className="grid md:grid-cols-2 gap-3">
+                        <Field
+                          label="Ngày"
+                          value={dateStr}
+                        />
+                        <Field
+                          label="Giờ"
+                          value={timeStr}
+                        />
+                        <Field
+                          label="Phương thức"
+                          value={renderMethodChip(row.method)}
+                        />
+                        <Field
+                          label="Nhân sự thu"
+                          value={
+                            row.staffName || row.nhanSuThu?.hoTen || "—"
+                          }
+                        />
+                        <FieldFull
+                          label="Nội dung"
+                          value={row.content || "—"}
+                        />
+                      </div>
+                    </section>
+
+                    {/* Liên kết tham chiếu */}
+                    {(row.examId ||
+                      row.clsId ||
+                      row.rxId) && (
+                      <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
+                        <b className="block mb-2">Tham chiếu</b>
+                        <div className="flex flex-wrap gap-2 text-sm">
+                          {row.examId && (
+                            <Underlined
+                              to={`/examination?visit=${row.examId}`}
+                            >
+                              Phiếu khám LS: {row.examId}
                             </Underlined>
-                          </>
-                        )}
+                          )}
+                          {row.clsId && (
+                            <Underlined
+                              to={`/examination?cls=${row.clsId}`}
+                            >
+                              Phiếu CLS: {row.clsId}
+                            </Underlined>
+                          )}
+                          {row.rxId && (
+                            <Underlined
+                              to={`/prescriptions?view=${row.rxId}`}
+                            >
+                              Đơn thuốc: {row.rxId}
+                            </Underlined>
+                          )}
+                        </div>
                       </section>
                     )}
 
-                    <section className="rounded-xl ring-1 ring-slate-200/70 p-4 grid md:grid-cols-2 gap-3 text-sm">
-                      <Field
-                        label="Mã hoá đơn"
-                        value={row.invoiceId || row.invoice || "—"}
-                      />
-                      <Field
-                        label="Trạng thái"
-                        value={
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full ring-1 text-xs bg-emerald-50 text-emerald-700 ring-emerald-200">
-                            Hoàn tất
-                          </span>
-                        }
-                      />
-                    </section>
-
                     <div className="text-sm">
-                      <Underlined to={`/patients?pid=${row.id || row.ptId}`}>
+                      <Underlined
+                        to={`/patients?pid=${row.id || row.ptId}`}
+                      >
                         Xem hồ sơ bệnh nhân
                       </Underlined>
                     </div>
@@ -248,11 +381,6 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                 )}
               </div>
             </div>
-
-            {/* Footer */}
-            <footer className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 sticky bottom-0 bg-white/90 backdrop-blur rounded-b-2xl">
-              <Button onClick={onClose}>Đóng</Button>
-            </footer>
           </motion.div>
         </motion.div>
       )}
@@ -260,7 +388,91 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
   );
 }
 
-/* ---------- Sub components ---------- */
+/* ========== Helpers trong file ========== */
+
+function renderStatusChip(status) {
+  const v = (status || "").toLowerCase();
+  if (v === "da_thu" || v === "done") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+        Đã thu
+      </span>
+    );
+  }
+  if (v === "da_huy" || v === "cancelled") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 ring-1 ring-rose-200">
+        Đã hủy
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-600 ring-1 ring-slate-200">
+      Không rõ
+    </span>
+  );
+}
+
+function renderKindChip(kind) {
+  const v = (kind || "").toLowerCase();
+  if (v === "kham_lam_sang") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+        Khám lâm sàng
+      </span>
+    );
+  }
+  if (v === "can_lam_sang") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 ring-1 ring-violet-200">
+        Cận lâm sàng
+      </span>
+    );
+  }
+  if (v === "thuoc") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+        Thuốc
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-600 ring-1 ring-slate-200">
+      Khác
+    </span>
+  );
+}
+
+function renderMethodChip(method) {
+  const v = (method || "").toLowerCase();
+  if (!v || v === "tien_mat") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-700 ring-1 ring-slate-200">
+        Tiền mặt
+      </span>
+    );
+  }
+  if (v === "chuyen_khoan" || v === "transfer") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+        Chuyển khoản
+      </span>
+    );
+  }
+  if (v === "pos") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200">
+        POS
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-600 ring-1 ring-slate-200">
+      {method}
+    </span>
+  );
+}
+
 function Field({ label, value }) {
   return (
     <div className="grid grid-cols-[140px,1fr] gap-2">
@@ -269,6 +481,7 @@ function Field({ label, value }) {
     </div>
   );
 }
+
 function FieldFull({ label, value }) {
   return (
     <div className="md:col-span-2 grid grid-cols-[140px,1fr] gap-2">
@@ -277,6 +490,7 @@ function FieldFull({ label, value }) {
     </div>
   );
 }
+
 function Underlined({ to, children }) {
   return (
     <Link

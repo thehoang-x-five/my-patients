@@ -15,7 +15,6 @@ const links = [
   ["/prescriptions", "Đơn thuốc", "prescriptions"],
   ["/history", "Lịch sử", "history"],
   ["/notifications", "Thông báo", "notifications"],
-  ["/chat", "Live chat", "live chat"],
   ["/reports", "Báo cáo", "reports"],
 ];
 

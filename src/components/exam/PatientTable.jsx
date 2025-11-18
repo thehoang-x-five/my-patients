@@ -1,6 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import Button from "../ui/Button.jsx";
+
 
 function InitialAvatar({ name = "", id = "" }) {
   const seed = (name || id || "A").charCodeAt(0) % 5;
@@ -84,24 +84,72 @@ const pillTone = {
 
 function StatusPills({ item }) {
   const pills = [];
-  if (item.tag === "serviceReturn" || /tiếp tục khám/i.test(item.status || "")) pills.push({ t: "Tiếp tục khám", tone: "teal" });
-  if (item.priority === "emergency") pills.push({ t: "Khẩn", tone: "rose" });
-  if (item.source === "walkin") pills.push({ t: "Walk-in", tone: "slate" });
-  if (item.early) pills.push({ t: "Đến sớm", tone: "sky" });
-  if (item.late) pills.push({ t: "Đến trễ", tone: "amber" });
-  if (!pills.length) pills.push({ t: "Đúng giờ", tone: "teal" });
 
+  const queueType = item.loai_hang_doi || item.queueType || item.visitType;
+  const source = item.nguon || item.source; // walkin | appointment | service_return
+
+  // 1) Loại khám: Khám LS / CLS
+  if (queueType === "can_lam_sang" || queueType === "cls") {
+    pills.push(
+      <span
+        key="type-cls"
+        className="inline-flex items-center rounded-full bg-sky-50 text-sky-700 text-[11px] font-semibold px-2 py-0.5"
+      >
+        ● CLS
+      </span>
+    );
+  } else {
+    pills.push(
+      <span
+        key="type-ls"
+        className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold px-2 py-0.5"
+      >
+        ● Khám LS
+      </span>
+    );
+  }
+
+ 
+ // chỉ hiển thị chip nguồn khi là LS
+ if (queueType !== "can_lam_sang" && queueType !== "cls") {
+  // 2) Nguồn: Hẹn khám / Walk-in / Trả từ dịch vụ
+  if (source === "appointment") {
+    pills.push(
+      <span
+        key="src-appt"
+        className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold px-2 py-0.5"
+      >
+        Tái khám
+      </span>
+    );
+  } else if (source === "walkin") {
+    pills.push(
+      <span
+        key="src-walkin"
+        className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold px-2 py-0.5"
+      >
+        Walk-in
+      </span>
+    );
+  } else if (source === "service_return") {
+    pills.push(
+      <span
+        key="src-return"
+        className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold px-2 py-0.5"
+      >
+        Trả từ dịch vụ
+      </span>
+    );
+  }
+
+}
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {pills.map((c, i) => (
-        <span key={i} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${pillTone[c.tone].wrap}`}>
-          <i className={`w-1.5 h-1.5 rounded-full ${pillTone[c.tone].dot}`} />
-          {c.t}
-        </span>
-      ))}
+    <div className="flex flex-wrap items-center gap-1.5">
+      {pills}
     </div>
   );
 }
+
 
 function tone(item, active) {
   if (active) return "teal";
@@ -127,7 +175,7 @@ function ActionButton({ active, onClick }) {
       aria-label={active ? "Đang khám" : "Gọi vào"}
       title={active ? "Đang khám" : "Gọi vào"}
     >
-      {active ? "Đang khám…" : "Gọi vào"}
+      {active ? "Đang khám" : "Gọi vào"}
     </motion.button>
   );
 }
@@ -139,7 +187,7 @@ function getKey(p) {
 export default function PatientTable({ items = [], onStart, inProgress = new Set(), stretch = false }) {
   return (
     <section
-      className={`pt-2 bg-white rounded-2xl overflow-hidden shadow-soft border border-slate-200 ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
+      className={`pt-2 bg-white rounded-2xl overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
       role="region"
       aria-label="Danh sách chờ khám"
     >
@@ -199,9 +247,9 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                           {p.checkIn ? new Date(p.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
                         </span>
                       </Td>
-                      <Td><StatusPills item={p} /></Td>
-                      <Td><div className="truncate text-slate-700 max-w-[10rem] break-words">{p.note || p.symptoms || "—"}</div></Td>
-                      <Td last right><ActionButton active={active} onClick={() => onStart?.(p)} /></Td>
+                      <Td><StatusPills  item={p} /></Td>
+                      <Td><div className="truncate text-slate-700 max-w-[8rem] break-words">{p.note || p.symptoms || "—"}</div></Td>
+                      <Td last right ><div className="flex items-center justify-end gap-3"><ActionButton active={active} onClick={() => onStart?.(p)} /></div></Td>
                     </Row>
                   );
                 })

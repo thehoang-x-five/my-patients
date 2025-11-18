@@ -20,6 +20,7 @@ export default function Chip({
     emerald: "bg-emerald-50 ring-emerald-200",
     violet: "bg-violet-50 ring-violet-200",
     red:"bg-red-50 ring-red-200",
+    rose:"bg-rose-50 ring-rose-200",
   };
   const dotMap = {
     emerald: "bg-emerald-500",
@@ -53,7 +54,7 @@ export default function Chip({
   return (
     <motion.span
       whileHover={{ y: -1, boxShadow: `0 6px 18px rgba(${hoverRGB}, .18)` }}
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 ring-1 ${toneMap[tone] || toneMap.white} ${className}`}
+      className={`inline-flex text-sm items-center gap-2 rounded-full px-3 py-1.5 ring-1 ${toneMap[tone] || toneMap.white} ${className}`}
       {...rest}
     >
       {dot && <span className={`w-2 h-2 rounded-full ${dotMap[dot] || ""}`} />}

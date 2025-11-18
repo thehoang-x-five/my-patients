@@ -13,26 +13,34 @@ export default function ApptToolbar({
 }) {
   return (
     <div className="flex items-center gap-3 w-full">
-      {/* Chips thống kê trong ngày */}
-      <Chip dot="emerald" tone="white">
-        Đã xác nhận <b className="ml-1">{counts?.done ?? 0}</b>
-      </Chip>
-      <Chip dot="amber" tone="white">
-        Đang chờ <b className="ml-1">{counts?.pending ?? 0}</b>
-      </Chip>
-      <Chip dot="yellow" tone="white">
-        Ca hủy <b className="ml-1">{counts?.cancel ?? 0}</b>
-      </Chip>
-
-      {/* Thay thế “Hôm nay” bằng chip Giờ tiếp nhận */}
-      <Chip
-        dot={withinReception ? "emerald" : "slate"}
-        tone="white"
-        className="hidden sm:inline-flex"
-      >
-        Giờ tiếp nhận: {timeLabel} ({receptionHours.start}h-{receptionHours.end}h)
-      </Chip>
-
+    {/* Chips thống kê trong ngày */}
+    <Chip dot="emerald" tone="white">
+      Đã xác nhận <b className="ml-1">{counts?.confirmed ?? 0}</b>
+    </Chip>
+    <Chip dot="sky" tone="white">
+      Đã check-in <b className="ml-1">{counts?.checkedIn ?? 0}</b>
+    </Chip>
+    <Chip dot="amber" tone="white">
+      Đang chờ <b className="ml-1">{counts?.pending ?? 0}</b>
+    </Chip>
+    <Chip dot="red" tone="white">
+      Ca hủy <b className="ml-1">{counts?.cancel ?? 0}</b>
+    </Chip>
+  
+    {/* Chip giờ tiếp nhận như cũ */}
+    <Chip
+      dot={withinReception ? "emerald" : "slate"}
+      tone="white"
+      className="ml-2"
+    >
+      Giờ tiếp nhận:{" "}
+      <b className="ml-1">
+        {receptionHours?.start}h–{receptionHours?.end}h
+      </b>
+      <span className="ml-2 text-xs text-slate-500">
+        (hiện tại {timeLabel})
+      </span>
+    </Chip>
       {/* Switch view */}
       <div
         role="toolbar"
@@ -77,6 +85,7 @@ export default function ApptToolbar({
       {/* CTA tạo lịch */}
       <motion.button
         type="button"
+        id="appt-create-btn"
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         onClick={onOpenCreate}

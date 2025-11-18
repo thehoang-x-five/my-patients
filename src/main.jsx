@@ -18,7 +18,6 @@ const Prescriptions = React.lazy(() => import("./routes/Prescriptions.jsx"));
 const History = React.lazy(() => import("./routes/History.jsx"));
 const Notifications = React.lazy(() => import("./routes/Notifications.jsx"));
 const Reports = React.lazy(() => import("./routes/Reports.jsx"));
-const LiveChat = React.lazy(() => import("./routes/LiveChat.jsx"));
 const Settings = React.lazy(() => import("./routes/Settings.jsx"));
 
 const router = createBrowserRouter([
@@ -36,7 +35,6 @@ const router = createBrowserRouter([
       { path: "/history", element: <History /> },
       { path: "/notifications", element: <Notifications /> },
       { path: "/reports", element: <Reports /> },
-      { path: "/chat", element: <LiveChat /> },
       { path: "/settings", element: <Settings /> },
     ],
   },

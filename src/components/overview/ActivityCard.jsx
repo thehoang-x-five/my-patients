@@ -6,7 +6,7 @@ export default function ActivityCard({ items = [] }) {
   const rows = items.slice(0, 5);
 
   return (
-    <Card title="Hoạt động gần đây" tone="emerald">
+    <Card title="Hoạt động gần đây" tone="emerald" className="h-full">
       <Stagger className="space-y-2">
         {rows.map((it) => (
           <StaggerItem key={it.id}>

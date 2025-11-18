@@ -1,15 +1,25 @@
-// src/pages/Examination.jsx
 import React, { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+
 import ExamToolbar from "../components/exam/ExamToolbar.jsx";
 import PatientTable from "../components/exam/PatientTable.jsx";
 import ExamDetail from "../components/exam/ExamDetail.jsx";
+import QueueFilterPopover from "../components/exam/QueueFilterPopover.jsx";
+
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
-import { useQueueToday, useStartExam, useFinishRemove, subscribeQueue } from "../api/queue.js";
+import {
+  useQueueToday,
+  useStartExam,
+  useFinishRemove,
+  subscribeQueue,
+} from "../api/queue.js";
 import { useUpdatePatient } from "../api/patients.js";
-import { useCreateExamOrder, useCreateDiagnosis } from "../api/examination.js";
+import {
+  useCreateExamOrder,
+  useCreateDiagnosis,
+} from "../api/examination.js";
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function Examination() {
@@ -30,50 +40,103 @@ export default function Examination() {
   const [active, setActive] = useState(null);
   const [inProgress, setInProgress] = useState(() => new Set());
 
+  // Filter theo nguồn (walkin / appointment / service_return) + loại lượt (ls / cls)
+  const [filter, setFilter] = useState({ source: "all", kind: "all" });
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const waitingCount = useMemo(
+    () => patients.filter((p) => p.trang_thai === "cho_goi").length,
+    [patients]
+  );
+
   useEffect(() => {
     let off;
-    (async () => { off = await subscribeQueue(qc); })();
-    return () => { if (off) off(); };
+    (async () => {
+      off = await subscribeQueue(qc);
+    })();
+    return () => {
+      if (off) off();
+    };
   }, [qc]);
 
   const filtered = useMemo(() => {
+    let arr = [...patients];
+    const { source, kind } = filter;
+
+    if (source !== "all") {
+      arr = arr.filter(
+        (p) => (p.nguon || p.source || "walkin") === source
+      );
+    }
+
+    if (kind !== "all") {
+      arr = arr.filter((p) => {
+        const qt = p.loai_hang_doi || p.queueType || p.visitType;
+        const isCLS = qt === "can_lam_sang" || qt === "cls";
+        return kind === "cls" ? isCLS : !isCLS;
+      });
+    }
+
     const term = q.trim().toLowerCase();
-    if (!term) return patients;
-    return patients.filter((p) => {
-      const bag = [p.name, p.pid, p.id, p.doctor, p.dept].filter(Boolean).join(" ").toLowerCase();
-      return bag.includes(term);
-    });
-  }, [patients, q]);
+    if (term) {
+      arr = arr.filter((p) => {
+        const bag = [p.name, p.pid, p.id, p.doctor, p.dept, p.phone]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return bag.includes(term);
+      });
+    }
+
+    return arr;
+  }, [patients, filter, q]);
 
   const getKey = (p) => p?.id ?? p?.queueId ?? p?.pid;
 
   async function handleStart(p) {
     const key = getKey(p);
     if (!key) return;
-    setInProgress((prev) => { const s = new Set(prev); s.add(key); return s; });
+    setInProgress((prev) => {
+      const s = new Set(prev);
+      s.add(key);
+      return s;
+    });
     await startMut.mutateAsync(key);
     setActive(p);
   }
 
-  function handleBack() { setActive(null); }
+  function handleBack() {
+    setActive(null);
+  }
 
-  // Nếu muốn giữ callback (ExamDetail sẽ gọi các hàm này; hoặc ExamDetail tự gọi API — cả 2 đều ok)
+  // Gọi khi LS xuất phiếu khám (chỉ định CLS)
   async function handleExportOrder(patient, payload) {
     const key = getKey(patient);
     if (!key) return;
+
     await finishMut.mutateAsync(key);
-    setInProgress((prev) => { const s = new Set(prev); s.delete(key); return s; });
+    setInProgress((prev) => {
+      const s = new Set(prev);
+      s.delete(key);
+      return s;
+    });
 
     const pid = patient?.pid || patient?.id;
-    // Lưu order (server sẽ tự set status phù hợp & push queue realtime)
+
     await orderMut.mutateAsync({
       pid,
-      services: (payload?.orderRows || []).map((r) => ({ id: r.id, note: r.note })),
-      note: (payload?.orderRows || []).map((r) => r.note).filter(Boolean).join("; "),
+      services: (payload?.orderRows || []).map((r) => ({
+        id: r.id,
+        note: r.note,
+      })),
+      note: (payload?.orderRows || [])
+        .map((r) => r.note)
+        .filter(Boolean)
+        .join("; "),
       fromDoctor: patient?.doctor || "Bác sĩ phụ trách",
     });
 
-    // (tuỳ backend) cập nhật trạng thái patient
+    // Cập nhật trạng thái bệnh nhân (tùy backend, ở đây chỉ ví dụ)
     await updPatient.mutateAsync({
       pid,
       patch: { status: "Chờ tiếp nhận (dịch vụ)" },
@@ -82,11 +145,17 @@ export default function Examination() {
     setActive(null);
   }
 
+  // Gọi khi LS xuất phiếu chẩn đoán hoặc CLS "Hoàn tất CLS"
   async function handleExportDiagnosis(patient, payload) {
     const key = getKey(patient);
     if (!key) return;
+
     await finishMut.mutateAsync(key);
-    setInProgress((prev) => { const s = new Set(prev); s.delete(key); return s; });
+    setInProgress((prev) => {
+      const s = new Set(prev);
+      s.delete(key);
+      return s;
+    });
 
     const pid = patient?.pid || patient?.id;
 
@@ -94,7 +163,8 @@ export default function Examination() {
       pid,
       dx: payload?.dx || {},
       rx: payload?.rxRows || [],
-      services: payload?.services || (payload?.orderRows || []).map((r) => r.id),
+      services:
+        payload?.services || (payload?.orderRows || []).map((r) => r.id),
     });
 
     setActive(null);
@@ -113,9 +183,22 @@ export default function Examination() {
         className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
         style={{ "--topbar-h": `${topbar}px` }}
       >
-        <ExamToolbar todayCount={patients.length} q={q} onSearch={setQ} hideSearch={!!active} />
-
-        <div className="mt-3 flex-1 min-h-0">
+       {!active && (
+  <ExamToolbar
+    todayCount={patients.length}
+    waitingCount={waitingCount}
+    q={q}
+    onSearch={setQ}
+    hideSearch={false}
+    onOpenFilter={() => setFilterOpen(true)}
+    onReset={() => {
+      // reset giống Patients: xóa search + đưa filter về mặc định
+      setQ("");
+      setFilter({ source: "all", kind: "all" });
+    }}
+  />
+)}
+        <div className="mt-2 flex-1 min-h-0">
           <AnimatePresence mode="wait">
             {active ? (
               <motion.div
@@ -150,6 +233,14 @@ export default function Examination() {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Popover lọc (nguồn + loại lượt) giống Patients */}
+        <QueueFilterPopover
+          open={filterOpen}
+          onClose={() => setFilterOpen(false)}
+          values={filter}
+          setValues={setFilter}
+        />
       </div>
     </motion.main>
   );

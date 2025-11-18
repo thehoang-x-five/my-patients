@@ -4,7 +4,7 @@ import StaffCard from "./StaffCard.jsx";
 export default function StaffGrid({ items = [], role, onDetail, onSchedule }) {
   if (!items.length) {
     return (
-      <section className="p-6 text-slate-500 rounded-xl bg-white ring-1 ring-slate-200">
+      <section className="p-6 m-1 text-slate-500 rounded-xl bg-white ring-1 ring-slate-200">
         Không tìm thấy nhân sự phù hợp.
       </section>
     );
