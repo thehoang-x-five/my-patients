@@ -1,3 +1,4 @@
+// src/components/history/HistoryFilterPopover.jsx
 import React from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -60,14 +61,17 @@ function buildMonthGrid(year, month) {
 export default function HistoryFilterPopover({
   open,
   onClose,
-  values, // { dateFrom, dateTo, keyword }
+  values, // { dateFrom, dateTo, keyword, visitType, txnType }
   setValues, // function to mutate parent state
   anchorEl, // anchor element (Filter button)
+  tab = "visits",
 }) {
   const ref = useRef(null);
   const [kw, setKw] = useState(values?.keyword || "");
   const [start, setStart] = useState(() => parseYmd(values?.dateFrom));
   const [end, setEnd] = useState(() => parseYmd(values?.dateTo));
+  const [visitType, setVisitType] = useState(values?.visitType || "all"); // all | clinic | service
+  const [txnType, setTxnType] = useState(values?.txnType || "all");       // all | exam | cls | drug | other
 
   // months shown
   const initialLeft = useMemo(() => {
@@ -85,6 +89,8 @@ export default function HistoryFilterPopover({
     const e = parseYmd(values?.dateTo);
     setStart(s);
     setEnd(e);
+    setVisitType(values?.visitType || "all");
+    setTxnType(values?.txnType || "all");
     const base = s || new Date();
     const L = new Date(base.getFullYear(), base.getMonth(), 1);
     setLeftMonth(L);
@@ -112,7 +118,7 @@ export default function HistoryFilterPopover({
   const [pos, setPos] = useState({ top: 72, left: 0 });
   useLayoutEffect(() => {
     if (!open) return;
-    const r = anchorEl?.getBoundingClientRect();
+    const r = anchorEl?.getBoundingClientRect?.();
     const gap = 8;
     const maxW = 560; // compact width
     const left = Math.min(r ? r.left : 16, window.innerWidth - maxW - 12);
@@ -137,6 +143,8 @@ export default function HistoryFilterPopover({
       dateFrom: start ? toYmd(start) : "",
       dateTo: end ? toYmd(end) : "",
       keyword: kw,
+      visitType,
+      txnType,
       ...valuesOverride,
     };
     setValues(next);
@@ -170,6 +178,19 @@ export default function HistoryFilterPopover({
     setEnd(null);
     sync({ dateFrom: "", dateTo: "" });
   }
+
+  const visitTypeOptions = [
+    { code: "all", label: "Tất cả" },
+    { code: "clinic", label: "Khám thường" },
+    { code: "service", label: "Khám dịch vụ" },
+  ];
+
+  const incomeTypeOptions = [
+    { code: "all", label: "Tất cả" },
+    { code: "exam", label: "Thu khám" },
+    { code: "cls", label: "Thu CLS" },
+    { code: "drug", label: "Thu thuốc" },
+  ];
 
   return (
     <AnimatePresence>
@@ -254,7 +275,7 @@ export default function HistoryFilterPopover({
                   >
                     ‹
                   </button>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     Khoảng đã chọn:
                     <b>{start ? toYmd(start) : "—"}</b> đến{" "}
                     <b>{end ? toYmd(end) : "—"}</b>
@@ -280,7 +301,80 @@ export default function HistoryFilterPopover({
                   </button>
                 </div>
               </div>
-              {/* Không còn nút Làm mới / Áp dụng trong popover */}
+
+              {/* Lọc loại lượt – chỉ áp dụng khi tab là visits */}
+              {tab === "visits" && (
+                <div className="mt-1">
+                  <div className="text-xs font-semibold text-slate-500 mb-1">
+                    Loại lượt khám
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {visitTypeOptions.map((opt) => {
+                      const active = visitType === opt.code;
+                      return (
+                        <button
+                          key={opt.code}
+                          type="button"
+                          onClick={() => {
+                            setVisitType(opt.code);
+                            sync({ visitType: opt.code });
+                          }}
+                          className={[
+                            "px-3 py-1 rounded-full text-xs font-semibold border transition",
+                            active
+                              ? opt.code === "service"
+                                ? "bg-amber-50 border-amber-300 text-amber-700"
+                                : opt.code === "clinic"
+                                ? "bg-sky-50 border-sky-300 text-sky-700"
+                                : "bg-slate-900 text-white border-slate-900"
+                              : "bg-white border-slate-200 text-slate-600 hover:border-sky-300",
+                          ].join(" ")}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Lọc loại thu – chỉ áp dụng khi tab là transactions */}
+              {tab === "transactions" && (
+                <div className="mt-1">
+                  <div className="text-xs font-semibold text-slate-500 mb-1">
+                    Loại thu
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {incomeTypeOptions.map((opt) => {
+                      const active = txnType === opt.code;
+                      return (
+                        <button
+                          key={opt.code}
+                          type="button"
+                          onClick={() => {
+                            setTxnType(opt.code);
+                            sync({ txnType: opt.code });
+                          }}
+                          className={[
+                            "px-3 py-1 rounded-full text-xs font-semibold border transition",
+                            active
+                              ? opt.code === "exam"
+                                ? "bg-sky-50 border-sky-300 text-sky-700"
+                                : opt.code === "cls"
+                                ? "bg-cyan-50 border-cyan-300 text-cyan-700"
+                                : opt.code === "drug"
+                                ? "bg-teal-50 border-teal-300 text-teal-700"
+                                : "bg-slate-900 text-white border-slate-900"
+                              : "bg-white border-slate-200 text-slate-600 hover:border-sky-300",
+                          ].join(" ")}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>

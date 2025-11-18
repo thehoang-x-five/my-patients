@@ -1,3 +1,4 @@
+// src/components/history/HistoryDetailModal.jsx
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -13,15 +14,30 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
     isVisit && (row.type === "service" || isServiceDept(row.dept));
 
   const dateObj = row.date ? new Date(row.date) : null;
-  const dateStr = dateObj
-    ? dateObj.toLocaleDateString("vi-VN")
-    : "—";
+  const dateStr = dateObj ? dateObj.toLocaleDateString("vi-VN") : "—";
   const timeStr = dateObj
     ? dateObj.toLocaleTimeString("vi-VN", {
         hour: "2-digit",
         minute: "2-digit",
       })
     : "—";
+
+  const visitCode =
+    row.visitCode ||
+    row.code ||
+    row.historyId ||
+    row.maLuotKham ||
+    row.MaLuotKham ||
+    row.maLuot ||
+    row.MaLuot ||
+    null;
+
+  const patientCode =
+    row.id ||
+    row.ptId ||
+    row.maBenhNhan ||
+    row.MaBenhNhan ||
+    null;
 
   const shellSize = isVisit ? "max-w-4xl" : "max-w-xl";
 
@@ -35,34 +51,40 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
           exit={{ opacity: 0 }}
           role="dialog"
           aria-modal="true"
-          aria-label={
-            isVisit ? "Chi tiết khám bệnh" : "Chi tiết giao dịch"
-          }
+          aria-label={isVisit ? "Chi tiết khám bệnh" : "Chi tiết giao dịch"}
         >
           <motion.div
-            className={`w-full ${shellSize} rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200/80`}
+            className={`w-full ${shellSize} rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200/80 overflow-hidden`}
             initial={{ y: 18, scale: 0.98, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={{ y: -10, scale: 0.99, opacity: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 32 }}
           >
             {/* Header */}
-            <header className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-gradient-to-r from-indigo-50 via-violet-50 to-indigo-50">
+            <header className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-gradient-to-r from-sky-50 via-cyan-50 to-sky-50">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                <div className="text-xs font-semibold uppercase tracking-wide text-sky-600">
                   {isVisit ? "Khám bệnh" : "Giao dịch"}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <h2 className="text-sm font-bold text-slate-900">
                     {row.name || row.ptName || "—"}
                   </h2>
-                  {row.id || row.ptId ? (
+
+                  {patientCode && (
                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-900/5 text-slate-600">
-                      Mã BN: {row.id || row.ptId}
+                      Mã BN: {patientCode}
                     </span>
-                  ) : null}
+                  )}
+
+                  {isVisit && visitCode && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+                      Lượt khám: {visitCode}
+                    </span>
+                  )}
+
                   {isTxn && (row.invoiceId || row.invoice) && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-200">
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200">
                       HĐ: {row.invoiceId || row.invoice}
                     </span>
                   )}
@@ -85,11 +107,13 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     <Field
                       label="Mã BN"
                       value={
-                        <Underlined
-                          to={`/patients?pid=${row.id || row.ptId}`}
-                        >
-                          {row.id || row.ptId || "—"}
-                        </Underlined>
+                        patientCode ? (
+                          <Underlined to={`/patients?pid=${patientCode}`}>
+                            {patientCode}
+                          </Underlined>
+                        ) : (
+                          "—"
+                        )
                       }
                     />
                     <Field
@@ -99,20 +123,14 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
 
                     {isVisit ? (
                       <>
-                        <Field
-                          label="Khoa/Phòng"
-                          value={row.dept || "—"}
-                        />
-                        <Field
-                          label="Bác sĩ"
-                          value={row.doctor || "—"}
-                        />
+                        <Field label="Khoa/Phòng" value={row.dept || "—"} />
+                        <Field label="Bác sĩ" value={row.doctor || "—"} />
                         <Field
                           label="Loại lượt"
                           value={
                             isServiceVisit ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-                                Dịch vụ
+                                Khám dịch vụ
                               </span>
                             ) : (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
@@ -128,10 +146,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                           label="Mã hoá đơn"
                           value={row.invoiceId || row.invoice || "—"}
                         />
-                        <Field
-                          label="Loại"
-                          value={renderKindChip(row.kind)}
-                        />
+                        <Field label="Loại" value={renderKindChip(row.kind)} />
                         <Field
                           label="Trạng thái"
                           value={renderStatusChip(row.status)}
@@ -150,18 +165,13 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                 {isVisit ? (
                   <>
                     {/* 2) Kết quả khám */}
-                    {(row.note ||
-                      (row.examRows && row.examRows.length)) && (
+                    {(row.note || (row.examRows && row.examRows.length)) && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                         <b className="block mb-2">Kết quả khám</b>
                         {row.note && (
                           <div className="mb-3 text-sm">
-                            <span className="text-slate-500">
-                              Tóm tắt:{" "}
-                            </span>
-                            <span className="font-medium">
-                              {row.note}
-                            </span>
+                            <span className="text-slate-500">Tóm tắt: </span>
+                            <span className="font-medium">{row.note}</span>
                           </div>
                         )}
                         {(row.examRows || []).length > 0 && (
@@ -173,20 +183,16 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                                   <th className="px-3 py-2 w-56">
                                     Mục khám
                                   </th>
-                                  <th className="px-3 py-2">
-                                    Kết quả
-                                  </th>
+                                  <th className="px-3 py-2">Kết quả</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {row.examRows.map((r, i) => (
                                   <tr
                                     key={i}
-                                    className="odd:bg-slate-50/40"
+                                    className="odd:bg-slate-50/40 hover:bg-slate-100"
                                   >
-                                    <td className="px-3 py-2">
-                                      {i + 1}
-                                    </td>
+                                    <td className="px-3 py-2">{i + 1}</td>
                                     <td className="px-3 py-2 font-semibold">
                                       {r.label || "-"}
                                     </td>
@@ -245,9 +251,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                           <table className="min-w-full text-sm">
                             <thead className="text-left text-slate-500 bg-slate-50">
                               <tr>
-                                <th className="px-3 py-2 w-16">
-                                  Mã
-                                </th>
+                                <th className="px-3 py-2 w-16">Mã</th>
                                 <th className="px-3 py-2">Tên dịch vụ</th>
                                 <th className="px-3 py-2 text-right">
                                   Giá
@@ -258,7 +262,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                               {row.services.map((s, i) => (
                                 <tr
                                   key={s.code || i}
-                                  className="odd:bg-slate-50/40"
+                                  className="odd:bg-slate-50/40 hover:bg-slate-100"
                                 >
                                   <td className="px-3 py-2 font-mono text-xs">
                                     {s.code || "-"}
@@ -300,27 +304,21 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
 
                     {/* Link hồ sơ BN */}
                     <div className="text-sm">
-                      <Underlined
-                        to={`/patients?pid=${row.id || row.ptId}`}
-                      >
-                        Xem hồ sơ bệnh nhân
-                      </Underlined>
+                      {patientCode && (
+                        <Underlined to={`/patients?pid=${patientCode}`}>
+                          Xem hồ sơ bệnh nhân
+                        </Underlined>
+                      )}
                     </div>
                   </>
                 ) : (
                   <>
                     {/* Giao dịch: chi tiết thêm */}
-                    <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
+                    <section className=" rounded-xl ring-1 ring-slate-200/70 p-4">
                       <b className="block mb-2">Thông tin giao dịch</b>
                       <div className="grid md:grid-cols-2 gap-3">
-                        <Field
-                          label="Ngày"
-                          value={dateStr}
-                        />
-                        <Field
-                          label="Giờ"
-                          value={timeStr}
-                        />
+                        <Field label="Ngày" value={dateStr} />
+                        <Field label="Giờ" value={timeStr} />
                         <Field
                           label="Phương thức"
                           value={renderMethodChip(row.method)}
@@ -339,43 +337,29 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     </section>
 
                     {/* Liên kết tham chiếu */}
-                    {(row.examId ||
-                      row.clsId ||
-                      row.rxId) && (
+                    {(row.examId || row.clsId || row.rxId) && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                         <b className="block mb-2">Tham chiếu</b>
                         <div className="flex flex-wrap gap-2 text-sm">
                           {row.examId && (
-                            <Underlined
-                              to={`/examination?visit=${row.examId}`}
-                            >
-                              Phiếu khám LS: {row.examId}
-                            </Underlined>
+                            <div>Phiếu khám LS: {row.examId}</div>
                           )}
                           {row.clsId && (
-                            <Underlined
-                              to={`/examination?cls=${row.clsId}`}
-                            >
-                              Phiếu CLS: {row.clsId}
-                            </Underlined>
+                            <div>Phiếu CLS: {row.clsId}</div>
                           )}
                           {row.rxId && (
-                            <Underlined
-                              to={`/prescriptions?view=${row.rxId}`}
-                            >
-                              Đơn thuốc: {row.rxId}
-                            </Underlined>
+                            <div>Đơn thuốc: {row.rxId}</div>
                           )}
                         </div>
                       </section>
                     )}
 
                     <div className="text-sm">
-                      <Underlined
-                        to={`/patients?pid=${row.id || row.ptId}`}
-                      >
-                        Xem hồ sơ bệnh nhân
-                      </Underlined>
+                      {patientCode && (
+                        <Underlined to={`/patients?pid=${patientCode}`}>
+                          Xem hồ sơ bệnh nhân
+                        </Underlined>
+                      )}
                     </div>
                   </>
                 )}
@@ -388,7 +372,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
   );
 }
 
-/* ========== Helpers trong file ========== */
+/* ========== Helpers ========== */
 
 function renderStatusChip(status) {
   const v = (status || "").toLowerCase();
@@ -424,14 +408,14 @@ function renderKindChip(kind) {
   }
   if (v === "can_lam_sang") {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 ring-1 ring-violet-200">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200">
         Cận lâm sàng
       </span>
     );
   }
   if (v === "thuoc") {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 ring-1 ring-teal-200">
         Thuốc
       </span>
     );
@@ -461,7 +445,7 @@ function renderMethodChip(method) {
   }
   if (v === "pos") {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200">
         POS
       </span>
     );

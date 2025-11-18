@@ -1,6 +1,7 @@
+// src/components/history/HistoryTable.jsx
 import React from 'react';
-import Button from "../ui/Button.jsx";
 import { motion } from "framer-motion";
+import Button from "../ui/Button.jsx";
 
 export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
   const wrapperCls = stretch
@@ -30,12 +31,12 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
     </th>
   );
 
-  const Td = ({ children, first, last, left }) => (
+  const Td = ({ children, first, last, right }) => (
     <td
-      className={`px-3 py-2 align-top text-[13px] text-slate-700 ${
+      className={`px-3 py-2 align-top text-[13px] text-slate-700 group-hover:bg-white/60 ${
         first ? "whitespace-nowrap" : ""
       } ${last ? "text-right whitespace-nowrap" : ""} ${
-        left ? "text-right" : ""
+        right ? "text-right" : ""
       }`}
     >
       {children}
@@ -44,10 +45,18 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
 
   const Row = ({ children, i }) => (
     <motion.tr
-      initial={{ opacity: 0, y: 4 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: i * 0.01 }}
-      className={i % 2 === 0 ? "bg-white" : "bg-slate-50/40"}
+      transition={{ delay: i * 0.02 }}
+      whileHover={{ y: -2 }}
+      className="
+        group
+        odd:bg-slate-50/40
+        hover:bg-sky-100/50
+        focus-within:bg-sky-50/60
+        transition
+        shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)]
+      "
     >
       {children}
     </motion.tr>
@@ -87,14 +96,14 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
     }
     if (v === "can_lam_sang") {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 ring-1 ring-violet-200">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200">
           Cận lâm sàng
         </span>
       );
     }
     if (v === "thuoc") {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 ring-1 ring-teal-200">
           Thuốc
         </span>
       );
@@ -102,6 +111,22 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-600 ring-1 ring-slate-200">
         Khác
+      </span>
+    );
+  };
+
+  const renderVisitTypeChip = (row) => {
+    const t = (row.type || "").toLowerCase();
+    if (t === "service" || t === "dv" || t.includes("service")) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+          Khám dịch vụ
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+        Khám thường
       </span>
     );
   };
@@ -123,31 +148,56 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
     });
   };
 
+  const getVisitCode = (r) =>
+    r.visitCode ||
+    r.code ||
+    r.historyId ||
+    r.maLuotKham ||
+    r.MaLuotKham ||
+    r.maLuot ||
+    r.MaLuot ||
+    "—";
+
+  const getPatientCode = (r) =>
+    r.id ||
+    r.ptId ||
+    r.maBenhNhan ||
+    r.MaBenhNhan ||
+    "—";
+
   return (
     <div className={wrapperCls}>
       {tab === "visits" ? (
         <table className="min-w-full">
           <Thead>
-            <Th first>Ngày</Th>
-            <Th>Mã BN</Th>
-            <Th>Họ và tên</Th>
-            <Th>Khoa/Phòng</Th>
-            <Th>Bác sĩ</Th>
-            <Th>Ghi chú</Th>
-            <Th last>Chi tiết</Th>
+            <tr>
+              <Th first>Ngày</Th>
+              <Th>Giờ</Th>
+              <Th>Mã lượt khám</Th>
+              <Th>Mã BN</Th>
+              <Th>Họ và tên</Th>
+              <Th>Khoa/Phòng</Th>
+              <Th>Loại lượt</Th>
+              <Th>Bác sĩ</Th>
+              <Th>Ghi chú</Th>
+              <Th last>Chi tiết</Th>
+            </tr>
           </Thead>
           <tbody>
             {rows.map((r, i) => (
-              <Row key={`${r.id}-${i}`} i={i}>
+              <Row key={`${getVisitCode(r)}-${i}`} i={i}>
                 <Td first>
                   <span className="inline-flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shadow-[0_0_0_3px_rgba(56,189,248,.25)]" />
                     {formatDate(r.date)}
                   </span>
                 </Td>
-                <Td>{r.id}</Td>
-                <Td>{r.name}</Td>
-                <Td>{r.dept}</Td>
+                <Td>{formatTime(r.date)}</Td>
+                <Td>{getVisitCode(r)}</Td>
+                <Td>{getPatientCode(r)}</Td>
+                <Td>{r.name || r.ptName || "—"}</Td>
+                <Td>{r.dept || "—"}</Td>
+                <Td>{renderVisitTypeChip(r)}</Td>
                 <Td>{r.doctor || "—"}</Td>
                 <Td>
                   <span className="text-slate-600">{r.note || "—"}</span>
@@ -167,7 +217,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
             {!rows.length && (
               <tr>
                 <td
-                  colSpan="7"
+                  colSpan={10}
                   className="px-3 py-10 text-center text-slate-500"
                 >
                   Không có dữ liệu phù hợp.
@@ -179,34 +229,36 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
       ) : (
         <table className="min-w-full">
           <Thead>
-            <Th first>Ngày</Th>
-            <Th>Giờ</Th>
-            <Th>Mã BN</Th>
-            <Th>Họ và tên</Th>
-            <Th>Loại</Th>
-            <Th>Nội dung</Th>
-            <Th>Số tiền</Th>
-            <Th>Trạng thái</Th>
-            <Th>Mã HĐ</Th>
-            <Th last>Chi tiết</Th>
+            <tr>
+              <Th first>Ngày</Th>
+              <Th>Giờ</Th>
+              <Th>Mã BN</Th>
+              <Th>Họ và tên</Th>
+              <Th>Loại</Th>
+              <Th>Nội dung</Th>
+              <Th>Số tiền</Th>
+              <Th>Trạng thái</Th>
+              <Th>Mã HĐ</Th>
+              <Th last>Chi tiết</Th>
+            </tr>
           </Thead>
           <tbody>
             {rows.map((r, i) => (
               <Row key={`${r.invoiceId || r.id}-${i}`} i={i}>
                 <Td first>
                   <span className="inline-flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shadow-[0_0_0_3px_rgba(139,92,246,.25)]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_0_3px_rgba(6,182,212,.25)]" />
                     {formatDate(r.date)}
                   </span>
                 </Td>
                 <Td>{formatTime(r.date)}</Td>
-                <Td>{r.id}</Td>
-                <Td>{r.name}</Td>
+                <Td>{r.id || r.ptId || "—"}</Td>
+                <Td>{r.name || r.ptName || "—"}</Td>
                 <Td>{renderKindChip(r.kind || r.type)}</Td>
                 <Td>
-                  <span className="text-slate-600">{r.content}</span>
+                  <span className="text-slate-600">{r.content || "—"}</span>
                 </Td>
-                <Td left>
+                <Td right>
                   <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
                     {Number(r.amount ?? r.money ?? 0).toLocaleString("vi-VN")}đ
                   </span>
@@ -228,7 +280,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
             {!rows.length && (
               <tr>
                 <td
-                  colSpan="10"
+                  colSpan={10}
                   className="px-3 py-10 text-center text-slate-500"
                 >
                   Không có dữ liệu phù hợp.

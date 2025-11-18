@@ -436,7 +436,7 @@ export default function Prescriptions() {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
-                    className="flex-1 min-h-0 overflow-auto"
+                    className="card flex-1 min-h-0 overflow-auto"
                   >
                     <OrdersTable
                       items={filteredOrders}
@@ -452,7 +452,7 @@ export default function Prescriptions() {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
-                    className="flex-1 min-h-0 overflow-auto"
+                    className="card flex-1 min-h-0 overflow-auto"
                   >
                     <StockTable
                       items={filteredStock}
