@@ -319,15 +319,12 @@ export default function Patients() {
           filter.todayStatus.toLowerCase()
       );
     }
-
-    // viewMode: chỉ lấy những BN có NgayTrangThai == hôm nay
-    if (viewMode === "today") {
-      const t = todayStr();
-      arr = arr.filter((p) => {
-        const d = normStatusDate(p);
-        return d ? String(d).slice(0, 10) === t : false;
-      });
-    }
+    // viewMode: nếu đã gửi todayOnly=true lên server, server đã filter rồi
+    // Không cần filter lại ở FE vì server đã xử lý đúng
+    // Bỏ filter ở FE để hiển thị tất cả dữ liệu server trả về
+    // if (viewMode === "today") {
+    //   // Server đã filter, không cần filter lại
+    // }
 
     // keyword (fallback ở FE nếu BE chưa lọc)
     const kw = (filter.keyword || "").trim().toLowerCase();
