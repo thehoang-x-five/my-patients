@@ -22,6 +22,7 @@ import {
   EXTRA_FIELDS,
   useExamServices,
   useServiceInfo,
+  useCreateClinicalExam,
 } from "../../api/examination";
 
 // Hàng đợi (enqueue khám LS, CLS, quay lại khám)
@@ -618,6 +619,8 @@ const transactions = useMemo(() => {
   const { data: queueData } = useQueueToday();
   const queueItems = Array.isArray(queueData?.items) ? queueData.items : [];
 
+  // Hook để tạo phiếu khám lâm sàng
+  const createClinicalExamMut = useCreateClinicalExam();
   // Hook để tạo hóa đơn (thay thế addTransaction)
   const createInvoiceMut = useCreateInvoice();
 
@@ -775,14 +778,78 @@ const transactions = useMemo(() => {
       ),
     ].join("\n");
 
-    // Lịch sử khám sẽ được tạo tự động khi tạo phiếu khám qua API examination
-    // Không cần gọi addVisit nữa
+    // Map examExtras sang format API
+    const extraFields = {};
+    examExtras.forEach((e) => {
+      const key = e.key;
+      if (key === "di_ung") extraFields.DiUng = e.value;
+      else if (key === "chong_chi_dinh") extraFields.ChongChiDinh = e.value;
+      else if (key === "thuoc_dang_dung") extraFields.ThuocDangDung = e.value;
+      else if (key === "tieu_su_benh") extraFields.TieuSuBenh = e.value;
+      else if (key === "tien_su_phau_thuat") extraFields.TienSuPhauThuat = e.value;
+      else if (key === "nhom_mau") extraFields.NhomMau = e.value;
+      else if (key === "benh_man_tinh") extraFields.BenhManTinh = e.value;
+      else if (key === "sinh_hieu") extraFields.SinhHieu = e.value;
+    });
+
+    // Lấy MaKhoa, MaPhong, MaBacSi từ serviceInfo hoặc form
+    const maKhoa = serviceInfo?.MaKhoa || serviceInfo?.maKhoa || null;
+    const maPhong = serviceInfo?.MaPhong || serviceInfo?.maPhong || null;
+    const maBacSi = serviceInfo?.MaBacSi || serviceInfo?.maBacSi || null;
+
+    // Lấy MaNguoiLap từ user hiện tại
+    const getCurrentUserId = () => {
+      try {
+        // Thử lấy từ localStorage
+        const authData = localStorage.getItem("his-auth");
+        if (authData) {
+          const parsed = JSON.parse(authData);
+          if (parsed?.user?.id) return parsed.user.id;
+          if (parsed?.userId) return parsed.userId;
+          if (parsed?.maNhanSu) return parsed.maNhanSu;
+        }
+        // Thử lấy từ window.APP_USER
+        if (typeof window !== "undefined" && window.APP_USER) {
+          return window.APP_USER.id || window.APP_USER.userId || window.APP_USER.maNhanSu || "admin";
+        }
+      } catch (err) {
+        console.error("Lỗi khi lấy user ID:", err);
+      }
+      return "admin"; // Fallback
+    };
+
+    // Lấy MaDichVuKham từ template
+    const maDichVuKham = tpl?.id || tplId || null;
+
+    // Tạo phiếu khám lâm sàng
+    let maPhieuKham = null;
+    try {
+      const clinicalExamResult = await createClinicalExamMut.mutateAsync({
+        MaBenhNhan: pid,
+        MaKhoa: maKhoa,
+        MaPhong: maPhong,
+        MaBacSiKham: maBacSi,
+        MaNguoiLap: getCurrentUserId(),
+        MaDichVuKham: maDichVuKham,
+        HinhThucTiepNhan: isFollowupStatus ? "tai_kham" : "tiep_nhan_truc_tiep",
+        LoaiPhieuKham: exam.type || null,
+        TrieuChung: exam.symptoms || "",
+        GhiChu: examNote,
+        ...extraFields,
+      });
+      maPhieuKham = clinicalExamResult?.MaPhieuKham || clinicalExamResult?.maPhieuKham || clinicalExamResult?.id || null;
+    } catch (err) {
+      console.error("Lỗi khi tạo phiếu khám:", err);
+      toast.error("Không thể tạo phiếu khám. Vui lòng thử lại.");
+      return;
+    }
 
     // Tạo hóa đơn nếu có phí
     if (fee > 0) {
       try {
         await createInvoiceMut.mutateAsync({
           MaBenhNhan: pid,
+          MaPhieuKham: maPhieuKham,
           LoaiDotThu: "kham_lam_sang",
           SoTien: fee,
           NoiDung: `Phí khám (${exam.type})`,

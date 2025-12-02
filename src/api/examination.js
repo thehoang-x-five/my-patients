@@ -159,7 +159,9 @@ export async function createClinicalExam(payload = {}) {
       MaBacSiKham:
         payload.MaBacSiKham ?? payload.maBacSiKham ?? doctorId ?? null,
       MaNguoiLap:
-        payload.MaNguoiLap ?? payload.maNguoiLap ?? createdBy ?? null,
+        payload.MaNguoiLap ?? payload.maNguoiLap ?? createdBy ?? "admin",
+      MaDichVuKham:
+        payload.MaDichVuKham ?? payload.maDichVuKham ?? payload.serviceId ?? null,
   
       // Tuỳ chọn / enum
       HinhThucTiepNhan:
@@ -523,6 +525,25 @@ export function useSearchClinicalExams(filters, options = {}) {
     queryFn: () => searchClinicalExams(filters),
     enabled,
     ...options,
+  });
+}
+
+// Tạo phiếu khám lâm sàng
+export function useCreateClinicalExam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createClinicalExam,
+    onSuccess: (data, variables) => {
+      // Sau khi tạo phiếu khám -> cập nhật hàng đợi, lượt khám, bệnh nhân
+      qc.invalidateQueries({ queryKey: ["queue"] });
+      qc.invalidateQueries({ queryKey: ["visits"] });
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      // Invalidate chi tiết bệnh nhân nếu có MaBenhNhan
+      const pid = variables?.MaBenhNhan ?? variables?.maBenhNhan ?? variables?.pid;
+      if (pid) {
+        qc.invalidateQueries({ queryKey: ["patient", pid] });
+      }
+    },
   });
 }
 
