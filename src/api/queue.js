@@ -278,7 +278,7 @@ function normalizeQueueItem(raw = {}) {
 function buildTodayRange() {
   try {
     const now = new Date();
-    const start = new Date(now);
+    const start = new Date(now.getFullYear(), 11, 1); // Tháng 12 (index 11), ngày 1
     start.setHours(0, 0, 0, 0);
     return {
       FromTime: start.toISOString(),
@@ -380,6 +380,8 @@ function useQueueImpl() {
       const { FromTime, ToTime } = buildTodayRange();
       const body = cleanup({
         MaPhong: filter.MaPhong ?? filter.maPhong ?? filter.roomId ?? null,
+        Vaitro: filter.Vaitro ?? filter.vaitro ?? filter.role ?? null,
+        MaNhanSu: filter.MaNhanSu ?? filter.maNhanSu ?? filter.staffId ?? null,
         LoaiHangDoi:
           filter.LoaiHangDoi ??
           filter.loaiHangDoi ??
