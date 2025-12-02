@@ -553,19 +553,6 @@ export function useMarkServiceDone() {
     },
   });
 }
-// Lấy chi tiết bệnh nhân (bao gồm lịch sử khám & giao dịch) cho PatientModal
-export function usePatientDetail(id, options = {}) {
-  const enabled = (options.enabled ?? true) && !!id;
-
-  return useQuery({
-    queryKey: ["patientDetail", id],
-    queryFn: () => getPatientDetail(id),
-    enabled,
-    // Chuẩn hóa sang dạng FE dùng được
-    select: (dto) => normalizePatientDetail(dto),
-    ...(options || {}),
-  });
-}
 
 export function useMarkWaitDoctorReview() {
   const qc = useQueryClient();
