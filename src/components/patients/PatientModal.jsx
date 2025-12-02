@@ -35,8 +35,6 @@ import {
 } from "../../api/queue";
 // Lịch hẹn (nếu cần làm follow-up)
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments";
-// Billing (thu tiền)
-import { useCreateInvoice } from "../../api/billing";
 
 import PrintExamTicket from "../print/PrintExamTicket.jsx";
 
@@ -621,8 +619,6 @@ const transactions = useMemo(() => {
 
   // Hook để tạo phiếu khám lâm sàng
   const createClinicalExamMut = useCreateClinicalExam();
-  // Hook để tạo hóa đơn (thay thế addTransaction)
-  const createInvoiceMut = useCreateInvoice();
 
   const waitingByDept = useMemo(() => {
     const map = {};
@@ -687,20 +683,7 @@ const transactions = useMemo(() => {
       if (!services.length)
         return alert("Chưa có danh sách dịch vụ chỉ định.");
 
-      // Tạo hóa đơn cho dịch vụ
-      if (totalServiceFee > 0) {
-        try {
-          await createInvoiceMut.mutateAsync({
-            MaBenhNhan: pid,
-            LoaiDotThu: "can_lam_sang",
-            SoTien: totalServiceFee,
-            NoiDung: `Phí dịch vụ (${services.length} hạng mục)`,
-            PhuongThucThanhToan: "tien_mat",
-          });
-        } catch (err) {
-          console.error("Lỗi khi tạo hóa đơn dịch vụ:", err);
-        }
-      }
+      // Hóa đơn sẽ được tạo tự động bởi BE khi tạo phiếu khám
 
       const perNotes = services
         .map(
@@ -711,14 +694,8 @@ const transactions = useMemo(() => {
         )
         .join("\n");
 
-      enqueueService({
-        pid,
-        name,
-        services,
-        note: [exam.note || "", perNotes].filter(Boolean).join("\n"),
-        dept: "Cận lâm sàng",
-        doctor: "Khu dịch vụ",
-      });
+      // Hàng đợi sẽ được tạo tự động bởi BE khi tạo phiếu khám
+      // Không cần gọi enqueueService nữa
       markServiceDispatched(pid);
       onMutatePatient?.(pid, { status: "Chờ khám (dịch vụ)" });
 
@@ -844,30 +821,10 @@ const transactions = useMemo(() => {
       return;
     }
 
-    // Tạo hóa đơn nếu có phí
-    if (fee > 0) {
-      try {
-        await createInvoiceMut.mutateAsync({
-          MaBenhNhan: pid,
-          MaPhieuKham: maPhieuKham,
-          LoaiDotThu: "kham_lam_sang",
-          SoTien: fee,
-          NoiDung: `Phí khám (${exam.type})`,
-          PhuongThucThanhToan: "tien_mat",
-        });
-      } catch (err) {
-        console.error("Lỗi khi tạo hóa đơn:", err);
-      }
-    }
-
-    enqueueWalkin({
-      pid,
-      name,
-      dept,
-      doctor,
-      note: examNote,
-      symptoms: exam.symptoms || "",
-    });
+    // Hóa đơn sẽ được tạo tự động bởi BE khi tạo phiếu khám
+    // Hàng đợi sẽ được tạo tự động bởi BE khi tạo phiếu khám
+    // Không cần gọi enqueueWalkin nữa
+    
     onMutatePatient?.(pid, { status: STATUSES.WAIT_EXAM });
 
     window.dispatchEvent(
@@ -949,20 +906,7 @@ const transactions = useMemo(() => {
       35000;
     if (!isLate) lateFee = 0;
 
-    // Tạo hóa đơn nếu có phí trễ hẹn
-    if (lateFee > 0) {
-      try {
-        await createInvoiceMut.mutateAsync({
-          MaBenhNhan: pid,
-          LoaiDotThu: "kham_lam_sang",
-          SoTien: lateFee,
-          NoiDung: `Phí khám (Tái khám trễ hẹn)`,
-          PhuongThucThanhToan: "tien_mat",
-        });
-      } catch (err) {
-        console.error("Lỗi khi tạo hóa đơn tái khám:", err);
-      }
-    }
+    // Hóa đơn sẽ được tạo tự động bởi BE khi tạo phiếu khám
 
     enqueueFromAppointment(
       { ...fup, patient: name, code: pid, type: "followup" },
@@ -1027,22 +971,7 @@ const transactions = useMemo(() => {
       .join("\n");
 
     // Lịch sử khám sẽ được cập nhật khi hoàn tất chẩn đoán qua API examination
-
-    // Tạo hóa đơn cho thuốc
-    const drugTotal = Number(totalDrugAmount || 0);
-    if (drugTotal > 0) {
-      try {
-        await createInvoiceMut.mutateAsync({
-          MaBenhNhan: pid,
-          LoaiDotThu: "thuoc",
-          SoTien: drugTotal,
-          NoiDung: "Thuốc",
-          PhuongThucThanhToan: "tien_mat",
-        });
-      } catch (err) {
-        console.error("Lỗi khi tạo hóa đơn thuốc:", err);
-      }
-    }
+    // Hóa đơn sẽ được tạo tự động bởi BE khi cần
 
     if (/tái khám/i.test(d.followup || "")) {
       const date = (d.followupDate || "").slice(0, 10);
