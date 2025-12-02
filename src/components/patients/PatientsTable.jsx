@@ -321,7 +321,8 @@ export default function PatientsTable({
                 const accountActive = /hoat_dong|hoạt động|active|1/.test(
                   String(account).toLowerCase()
                 );
-                const hasTodayStatus = !!statusCode && !!isToday;
+                // Hiển thị status nếu có statusCode (không cần kiểm tra ngày)
+                const hasTodayStatus = !!statusCode;
 
                 const isWaitIntake =
                   statusCode === STATUSES.WAIT_INTAKE ||
