@@ -34,6 +34,8 @@ import {
 } from "../../api/queue";
 // Lịch hẹn (nếu cần làm follow-up)
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments";
+// Billing (thu tiền)
+import { useCreateInvoice } from "../../api/billing";
 
 import PrintExamTicket from "../print/PrintExamTicket.jsx";
 
@@ -616,6 +618,9 @@ const transactions = useMemo(() => {
   const { data: queueData } = useQueueToday();
   const queueItems = Array.isArray(queueData?.items) ? queueData.items : [];
 
+  // Hook để tạo hóa đơn (thay thế addTransaction)
+  const createInvoiceMut = useCreateInvoice();
+
   const waitingByDept = useMemo(() => {
     const map = {};
     queueItems.forEach((it) => {
@@ -665,7 +670,7 @@ const transactions = useMemo(() => {
     "—";
 
   // ----------------- LUỒNG KHÁM TRỰC TIẾP -----------------
-  function handleDirectExam() {
+  async function handleDirectExam() {
     const { id: pid, name } = form || {};
     if (!pid) return alert("Thiếu mã BN.");
 
@@ -679,14 +684,19 @@ const transactions = useMemo(() => {
       if (!services.length)
         return alert("Chưa có danh sách dịch vụ chỉ định.");
 
+      // Tạo hóa đơn cho dịch vụ
       if (totalServiceFee > 0) {
-        addTransaction(pid, {
-          date: new Date().toLocaleDateString("vi-VN"),
-          item: `Phí dịch vụ (${services.length} hạng mục)`,
-          amount: totalServiceFee,
-          status: "Đã thu",
-          ref: `SV-${Date.now()}`,
-        });
+        try {
+          await createInvoiceMut.mutateAsync({
+            MaBenhNhan: pid,
+            LoaiDotThu: "can_lam_sang",
+            SoTien: totalServiceFee,
+            NoiDung: `Phí dịch vụ (${services.length} hạng mục)`,
+            PhuongThucThanhToan: "tien_mat",
+          });
+        } catch (err) {
+          console.error("Lỗi khi tạo hóa đơn dịch vụ:", err);
+        }
       }
 
       const perNotes = services
@@ -765,24 +775,22 @@ const transactions = useMemo(() => {
       ),
     ].join("\n");
 
-    addVisit(pid, {
-      date: new Date().toISOString().slice(0, 10),
-      dept,
-      doctor,
-      room,
-      note: `Tiếp nhận trực tiếp • ${exam.type}\n${examNote}`,
-      by: "Lễ tân",
-      type: "Walk-in",
-    });
+    // Lịch sử khám sẽ được tạo tự động khi tạo phiếu khám qua API examination
+    // Không cần gọi addVisit nữa
 
+    // Tạo hóa đơn nếu có phí
     if (fee > 0) {
-      addTransaction(pid, {
-        date: new Date().toLocaleDateString("vi-VN"),
-        item: `Phí khám (${exam.type})`,
-        amount: fee,
-        status: "Đã thu",
-        ref: `WI${Date.now()}`,
-      });
+      try {
+        await createInvoiceMut.mutateAsync({
+          MaBenhNhan: pid,
+          LoaiDotThu: "kham_lam_sang",
+          SoTien: fee,
+          NoiDung: `Phí khám (${exam.type})`,
+          PhuongThucThanhToan: "tien_mat",
+        });
+      } catch (err) {
+        console.error("Lỗi khi tạo hóa đơn:", err);
+      }
     }
 
     enqueueWalkin({
@@ -827,7 +835,7 @@ const transactions = useMemo(() => {
   }
 
   // ----------------- LUỒNG TÁI KHÁM (giữ chỗ) -----------------
-  function handleFollowupExam() {
+  async function handleFollowupExam() {
     const { id: pid, name } = form || {};
     if (!pid) return alert("Thiếu mã BN.");
 
@@ -865,17 +873,7 @@ const transactions = useMemo(() => {
       ),
     ].join("\n");
 
-    addVisit(pid, {
-      date: new Date().toISOString().slice(0, 10),
-      dept,
-      doctor,
-      room,
-      note: `Tái khám • ${exam.type} • ${
-        isLate ? "ĐẾN TRỄ" : "ĐÚNG HẸN"
-      }\n${examNote}`,
-      by: "Điều dưỡng",
-      type: "Tái khám",
-    });
+    // Lịch sử khám sẽ được tạo tự động khi tạo phiếu khám
 
     let lateFee =
       tpl?.lateFee ??
@@ -884,14 +882,19 @@ const transactions = useMemo(() => {
       35000;
     if (!isLate) lateFee = 0;
 
+    // Tạo hóa đơn nếu có phí trễ hẹn
     if (lateFee > 0) {
-      addTransaction(pid, {
-        date: new Date().toLocaleDateString("vi-VN"),
-        item: `Phí khám (Tái khám trễ hẹn)`,
-        amount: lateFee,
-        status: "Đã thu",
-        ref: `FU-LATE-${Date.now()}`,
-      });
+      try {
+        await createInvoiceMut.mutateAsync({
+          MaBenhNhan: pid,
+          LoaiDotThu: "kham_lam_sang",
+          SoTien: lateFee,
+          NoiDung: `Phí khám (Tái khám trễ hẹn)`,
+          PhuongThucThanhToan: "tien_mat",
+        });
+      } catch (err) {
+        console.error("Lỗi khi tạo hóa đơn tái khám:", err);
+      }
     }
 
     enqueueFromAppointment(
@@ -937,7 +940,7 @@ const transactions = useMemo(() => {
   }
 
   // ----------------- HOÀN TẤT & THU PHÍ (THƯỜNG) -----------------
-  function handleFinishDoctor() {
+  async function handleFinishDoctor() {
     const pid = form?.id;
     if (!pid) return;
     const now = new Date().toISOString().slice(0, 10);
@@ -956,24 +959,22 @@ const transactions = useMemo(() => {
       .filter(Boolean)
       .join("\n");
 
-    addVisit(pid, {
-      date: now,
-      dept: booking.dept || exam.dept || "",
-      doctor: booking.doctor || "",
-      note: noteLines,
-      by: "Bác sĩ",
-      type: "Kết thúc khám",
-    });
+    // Lịch sử khám sẽ được cập nhật khi hoàn tất chẩn đoán qua API examination
 
+    // Tạo hóa đơn cho thuốc
     const drugTotal = Number(totalDrugAmount || 0);
     if (drugTotal > 0) {
-      addTransaction(pid, {
-        date: new Date().toLocaleDateString("vi-VN"),
-        item: "Thuốc",
-        amount: drugTotal,
-        status: "Đã thu",
-        ref: `RX-${Date.now()}`,
-      });
+      try {
+        await createInvoiceMut.mutateAsync({
+          MaBenhNhan: pid,
+          LoaiDotThu: "thuoc",
+          SoTien: drugTotal,
+          NoiDung: "Thuốc",
+          PhuongThucThanhToan: "tien_mat",
+        });
+      } catch (err) {
+        console.error("Lỗi khi tạo hóa đơn thuốc:", err);
+      }
     }
 
     if (/tái khám/i.test(d.followup || "")) {
@@ -1020,14 +1021,7 @@ const transactions = useMemo(() => {
       )
       .join("\n");
 
-    addVisit(pid, {
-      date: now,
-      dept: "Cận lâm sàng",
-      doctor: "Khu dịch vụ",
-      note: `Hoàn tất dịch vụ:\n${svcNote}`,
-      by: "Điều dưỡng CLS",
-      type: "Dịch vụ hoàn tất",
-    });
+    // Lịch sử khám sẽ được cập nhật khi hoàn tất dịch vụ qua API examination
 
     markServiceDone(pid);
     markWaitDoctorReview(pid);
