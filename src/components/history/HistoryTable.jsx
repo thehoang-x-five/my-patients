@@ -117,7 +117,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
 
   const renderVisitTypeChip = (row) => {
     const t = (row.type || "").toLowerCase();
-    if (t === "service" || t === "dv" || t.includes("service")) {
+    if (t === "service" || t === "dv"  ||t.includes("service")) {
       return (
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
           Khám dịch vụ
@@ -220,7 +220,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
                   colSpan={10}
                   className="px-3 py-10 text-center text-slate-500"
                 >
-                  Không có dữ liệu phù hợp.
+                  Không có bản ghi phù hợp.
                 </td>
               </tr>
             )}
@@ -283,7 +283,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
                   colSpan={10}
                   className="px-3 py-10 text-center text-slate-500"
                 >
-                  Không có dữ liệu phù hợp.
+                 Không có bản ghi phù hợp.
                 </td>
               </tr>
             )}

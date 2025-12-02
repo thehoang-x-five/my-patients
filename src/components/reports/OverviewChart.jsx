@@ -1,5 +1,6 @@
+// src/components/reports/OverviewChart.jsx
 import { motion } from "framer-motion";
-import React from 'react';
+import React from "react";
 import {
   Bar,
   CartesianGrid,
@@ -23,13 +24,15 @@ export default function OverviewChart({ rows = [], stretch = false }) {
     <motion.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`rounded-2xl bg-white ring-1 ring-slate-200/80 p-3 ${
+      className={`rounded-2xl bg-white ring-1 ring-slate-200/80 p-2 shadow-soft ${
         stretch ? "h-full flex flex-col min-h-0" : ""
       }`}
       role="region"
       aria-label="Biểu đồ tổng quan"
     >
-      <div className="mb-2 font-extrabold shrink-0">Biểu đồ tổng quan</div>
+      <div className="mb-2 font-extrabold shrink-0 text-slate-800">
+        Biểu đồ tổng quan
+      </div>
 
       <div
         className={stretch ? "flex-1 min-h-0" : "h-[clamp(260px,40svh,420px)]"}
@@ -44,20 +47,24 @@ export default function OverviewChart({ rows = [], stretch = false }) {
             <XAxis
               dataKey="date"
               type="category"
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 12, fill: "#64748b" }}
               tickFormatter={fmtVN}
               axisLine={{ stroke: "#e5e7eb" }}
             />
             <YAxis
               yAxisId="left"
-              tick={{ fontSize: 12 }}
-              tickFormatter={(v) => (v >= 1e9 ? `${v / 1e9}B` : `${v / 1e6}M`)}
+              tick={{ fontSize: 12, fill: "#64748b" }}
+              tickFormatter={(v) =>
+                v >= 1_000_000_000
+                  ? `${v / 1_000_000_000}B`
+                  : `${v / 1_000_000}M`
+              }
               axisLine={{ stroke: "#e5e7eb" }}
             />
             <YAxis
               yAxisId="right"
               orientation="right"
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 12, fill: "#64748b" }}
               domain={[0, "auto"]}
               axisLine={{ stroke: "#e5e7eb" }}
             />
@@ -66,43 +73,67 @@ export default function OverviewChart({ rows = [], stretch = false }) {
                 payload?.length ? `Ngày ${fmtVN(payload[0].payload.date)}` : ""
               }
               formatter={(v, n) =>
-                n === "Doanh thu" ? `${Number(v).toLocaleString("vi-VN")} đ` : v
+                n === "Doanh thu"
+                  ? `${Number(v).toLocaleString("vi-VN")} đ`
+                  : v
               }
               contentStyle={{
                 borderRadius: 10,
                 border: "1px solid #e2e8f0",
                 boxShadow: "0 6px 16px rgba(2,6,23,0.08)",
                 padding: "6px 10px",
+                background: "#ffffff",
               }}
             />
-            <Legend />
+            <Legend
+              wrapperStyle={{
+                paddingTop: 6,
+              }}
+            />
+
+            {/* Doanh thu: cột cyan sáng */}
             <Bar
               yAxisId="left"
               dataKey="revenue"
               name="Doanh thu"
-              fill="#6366f1"
+              fill="#67e8f9" // cyan 300 sáng hơn
               radius={[6, 6, 0, 0]}
-              isAnimationActive={false}
             />
+
+            {/* BN mới: line cyan */}
             <Line
               yAxisId="right"
-              dataKey="orders"
-              name="Bệnh nhân mới"
-              stroke="#10b981"
+              type="monotone"
+              dataKey="newPatients"
+              name="BN mới"
+              stroke="#06b6d4" // cyan 500
               strokeWidth={2}
               dot={false}
-              type="monotone"
-              isAnimationActive={false}
+              activeDot={{ r: 4 }}
             />
+
+            {/* Tái khám: line amber/nâu nhẹ */}
             <Line
               yAxisId="right"
+              type="monotone"
+              dataKey="revisits"
+              name="Tái khám"
+              stroke="#f59e0b" // amber 500
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+
+            {/* Tỷ lệ huỷ: line rose sáng */}
+            <Line
+              yAxisId="right"
+              type="monotone"
               dataKey="cancelRate"
               name="Tỷ lệ huỷ (%)"
-              stroke="#ef4444"
+              stroke="#fb7185" // rose 400
               strokeWidth={2}
               dot={false}
-              type="monotone"
-              isAnimationActive={false}
+              activeDot={{ r: 4 }}
             />
           </ComposedChart>
         </ResponsiveContainer>

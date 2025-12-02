@@ -207,13 +207,18 @@ export default function ExamDetail({
       });
       return;
     }
-
     await dxMut.mutateAsync({
-      pid,
-      dx: payload.dx,
-      rx: payload.rxRows,
-      services: payload.services,
-    });
+            pid,
+            dx: payload?.dx || {},
+            rx: payload?.rxRows || [],
+            services:
+              payload?.services || (payload?.orderRows || []).map((r) => r.id),
+            // CLS: cho phép đính kèm kết quả + file nếu có
+            files: payload?.files,
+            result: payload?.result,
+            note: payload?.note,
+          });
+
   }
 
   function onPickMany(list) {
@@ -391,14 +396,25 @@ export default function ExamDetail({
         <motion.div
           {...fadeIn}
           className="flex-1 bg-cyan-50/10 min-h-0 overflow-y-auto scrollbar-none px-1 pt-3 pb-0"
+          
         >
+          <div className="grid md:grid-cols-2 gap-3">
+        <motion.div whileHover={{ y: -1 }} className="rounded-2xl p-3 bg-white shadow-sm border border-slate-200">
+          <b className="block mb-1 text-slate-900">Thông tin chi tiết</b>
+          <div className="text-sm max-h-40 overflow-y-auto scrollbar-none break-words">{patient.note || "—"}</div>
+        </motion.div>
+        <motion.div whileHover={{ y: -1 }} className="rounded-2xl p-3 bg-white shadow-sm border border-slate-200">
+          <b className="block mb-1 text-slate-900">Ghi chú vào khám</b>
+          <div className="text-sm max-h-40 overflow-y-auto scrollbar-none break-words">{patient.note || "—"}</div>
+        </motion.div>
+      </div>
           {/* ================== MODE KHÁM LÂM SÀNG (LS) ================== */}
           {!isCLS && (
             <>
               {/* Phiếu khám (Chỉ định dịch vụ) */}
               <motion.section
                 {...fadeIn}
-                className="rounded-2xl p-4 mt-0 bg-white shadow-sm border border-slate-200"
+                className="rounded-2xl p-4 mt-3  bg-white shadow-sm border border-slate-200"
               >
                 <h4 className="font-extrabold mb-2 text-slate-900">
                   Phiếu khám (Chỉ định dịch vụ)
@@ -824,7 +840,7 @@ export default function ExamDetail({
               {/* Thông tin lượt CLS */}
               <motion.section
                 {...fadeIn}
-                className="rounded-2xl p-4 mt-0 bg-white shadow-sm border border-slate-200"
+                className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200"
               >
                 <h4 className="font-extrabold mb-2 text-slate-900">
                   Thực hiện cận lâm sàng

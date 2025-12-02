@@ -15,7 +15,7 @@ import {
   useFinishRemove,
   subscribeQueue,
 } from "../api/queue.js";
-import { useUpdatePatient } from "../api/patients.js";
+
 import {
   useCreateExamOrder,
   useCreateDiagnosis,
@@ -32,20 +32,28 @@ export default function Examination() {
   const { data: patients = [] } = useQueueToday();
   const startMut = useStartExam();
   const finishMut = useFinishRemove();
-  const updPatient = useUpdatePatient();
   const orderMut = useCreateExamOrder();
   const dxMut = useCreateDiagnosis();
 
-  const [q, setQ] = useState("");
   const [active, setActive] = useState(null);
   const [inProgress, setInProgress] = useState(() => new Set());
 
-  // Filter theo nguồn (walkin / appointment / service_return) + loại lượt (ls / cls)
-  const [filter, setFilter] = useState({ source: "all", kind: "all" });
+  // Filter theo nguồn (walkin / appointment / service_return) + loại lượt (ls / cls) + search
+  const [filter, setFilter] = useState({
+    source: "all",
+    kind: "all",
+    search: "",
+  });
   const [filterOpen, setFilterOpen] = useState(false);
 
+  // Lấy số đang chờ và đang khám từ BE (trang_thai) cho chuẩn
   const waitingCount = useMemo(
     () => patients.filter((p) => p.trang_thai === "cho_goi").length,
+    [patients]
+  );
+
+  const inProgressCount = useMemo(
+    () => patients.filter((p) => p.trang_thai === "dang_kham").length,
     [patients]
   );
 
@@ -61,7 +69,7 @@ export default function Examination() {
 
   const filtered = useMemo(() => {
     let arr = [...patients];
-    const { source, kind } = filter;
+    const { source, kind, search } = filter;
 
     if (source !== "all") {
       arr = arr.filter(
@@ -77,7 +85,7 @@ export default function Examination() {
       });
     }
 
-    const term = q.trim().toLowerCase();
+    const term = (search || "").trim().toLowerCase();
     if (term) {
       arr = arr.filter((p) => {
         const bag = [p.name, p.pid, p.id, p.doctor, p.dept, p.phone]
@@ -89,7 +97,7 @@ export default function Examination() {
     }
 
     return arr;
-  }, [patients, filter, q]);
+  }, [patients, filter]);
 
   const getKey = (p) => p?.id ?? p?.queueId ?? p?.pid;
 
@@ -136,11 +144,7 @@ export default function Examination() {
       fromDoctor: patient?.doctor || "Bác sĩ phụ trách",
     });
 
-    // Cập nhật trạng thái bệnh nhân (tùy backend, ở đây chỉ ví dụ)
-    await updPatient.mutateAsync({
-      pid,
-      patch: { status: "Chờ tiếp nhận (dịch vụ)" },
-    });
+   
 
     setActive(null);
   }
@@ -165,6 +169,9 @@ export default function Examination() {
       rx: payload?.rxRows || [],
       services:
         payload?.services || (payload?.orderRows || []).map((r) => r.id),
+        files: payload?.files,
+      result: payload?.result,
+      note: payload?.note,
     });
 
     setActive(null);
@@ -183,21 +190,19 @@ export default function Examination() {
         className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
         style={{ "--topbar-h": `${topbar}px` }}
       >
-       {!active && (
-  <ExamToolbar
-    todayCount={patients.length}
-    waitingCount={waitingCount}
-    q={q}
-    onSearch={setQ}
-    hideSearch={false}
-    onOpenFilter={() => setFilterOpen(true)}
-    onReset={() => {
-      // reset giống Patients: xóa search + đưa filter về mặc định
-      setQ("");
-      setFilter({ source: "all", kind: "all" });
-    }}
-  />
-)}
+        {!active && (
+          <ExamToolbar
+            todayCount={patients.length}
+            waitingCount={waitingCount}
+            inProgressCount={inProgressCount}
+            onOpenFilter={() => setFilterOpen(true)}
+            onReset={() => {
+              // reset giống Patients: xóa search + đưa filter về mặc định
+              setFilter({ source: "all", kind: "all", search: "" });
+            }}
+          />
+        )}
+
         <div className="mt-2 flex-1 min-h-0">
           <AnimatePresence mode="wait">
             {active ? (
@@ -234,7 +239,7 @@ export default function Examination() {
           </AnimatePresence>
         </div>
 
-        {/* Popover lọc (nguồn + loại lượt) giống Patients */}
+        {/* Popover lọc (search + nguồn + loại lượt) */}
         <QueueFilterPopover
           open={filterOpen}
           onClose={() => setFilterOpen(false)}

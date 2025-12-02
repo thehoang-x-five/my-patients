@@ -28,9 +28,9 @@ export default function PatientsToolbar({
       <Chip dot="sky">Chờ khám <b className="ml-1">{waitExam}</b></Chip>
       <Chip dot="amber">Chờ xử lý <b className="ml-1">{waitProc}</b></Chip>
       <Chip dot="red">Chờ tiếp nhận <b className="ml-1">{waitIntake}</b></Chip>
-      
-<Chip dot="cyan">Đang khám <b className="ml-1">{inExam}</b></Chip>
-<Chip dot="rose">Hủy <b className="ml-1">{cancelled}</b></Chip>
+
+      <Chip dot="cyan">Đang khám <b className="ml-1">{inExam}</b></Chip>
+      <Chip dot="rose">Hủy <b className="ml-1">{cancelled}</b></Chip>
       <div className="ml-auto flex items-center gap-2">
       <div className="inline-flex rounded-xl ring-1 ring-emerald-200 bg-white overflow-hidden">
   <button
@@ -48,7 +48,7 @@ export default function PatientsToolbar({
 </div>
 
 
-        <button type="button" onClick={onResetFilters} className="btn" title="Làm mới bộ lọc">⟲</button>
+        <button type="button" onClick={onResetFilters} className="inline-flex items-center justify-center rounded-2xl bg-white ring-1 ring-slate-200 px-3 py-1.5 text-[12px] text-slate-600 hover:ring-green-400 hover:text-green-700 transition" title="Làm mới bộ lọc">⟲</button>
 
         <button
           ref={filterBtnRef}
@@ -57,7 +57,7 @@ export default function PatientsToolbar({
           title="Lọc & Tìm kiếm"
           onClick={onOpenFilter}
           data-popover-anchor="patients-filter"
-          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-tr from-teal-50 to-emerald-100 px-2.5 py-2 text-sm font-semibold text-slate-700 shadow-soft hover:-translate-y-px active:translate-y-0 transition"
+          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gradient-to-tr from-teal-50 to-emerald-100 px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-soft hover:-translate-y-px active:translate-y-0 transition"
         >
           <img src="/loc.png" alt="Lọc" className="w-5 h-5" />
           Lọc
@@ -67,7 +67,7 @@ export default function PatientsToolbar({
           id="patients-add-btn"
           onClick={onAdd}
           type="button"
-          className="inline-flex items-center gap-2 rounded-xl border border-transparent px-4 py-2 text-sm font-semibold text-white shadow-soft hover:-translate-y-px transition bg-gradient-to-tr from-teal-600 to-emerald-500"
+          className="inline-flex items-center gap-2 rounded-xl border border-transparent px-3 py-1.5 text-sm font-semibold text-white shadow-soft hover:-translate-y-px transition bg-gradient-to-tr from-teal-600 to-emerald-500"
         >
           + Thêm
         </button>

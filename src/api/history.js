@@ -1,18 +1,8 @@
 // src/api/history.js
-// API & hooks cho trang Lịch sử (Khám bệnh + Giao dịch)
-
-import axios from "axios";
+// API & hooks cho trang Lịch sử (Khám bệnh  Giao dịch)
 import { useQuery } from "@tanstack/react-query";
+import { http } from "./http.js";
 import { on } from "./realtime.js";
-import { mockEnabled } from "./mockData.js";
-import { mockHistoryApi } from "./historyMock.js";
-
-const api = axios.create({
-  // baseURL: "/api",
-  withCredentials: true,
-});
-
-/* ===================== HELPERS ===================== */
 
 // xác định khoa dịch vụ cho FE
 export function isServiceDept(dept) {
@@ -22,6 +12,31 @@ export function isServiceDept(dept) {
   ).toLowerCase();
   return text.includes("dịch vụ") || text.includes("dv ");
 }
+
+function ensureArray(payload) {
+  if (!payload) return [];
+
+  // trường hợp trả về luôn mảng
+  if (Array.isArray(payload)) return payload;
+
+  // PagedResult kiểu thường: { items: [...] }
+  if (Array.isArray(payload.items)) return payload.items;
+
+  // PagedResult kiểu BE của bạn: { Items: [...], Page, PageSize, TotalItems }
+  if (Array.isArray(payload.Items)) return payload.Items;
+
+  // Trường hợp bọc thêm 1 lớp { data: ... }
+  if (payload.data) {
+    const inner = payload.data;
+
+    if (Array.isArray(inner)) return inner;
+    if (Array.isArray(inner.items)) return inner.items;
+    if (Array.isArray(inner.Items)) return inner.Items;
+  }
+
+  return [];
+}
+
 
 // thống kê hôm nay cho toolbar
 export function todayStats(visits = [], txns = []) {
@@ -52,130 +67,326 @@ export function todayStats(visits = [], txns = []) {
 }
 
 // ===== Normalizers cho data trả về từ BE (Entities) =====
+// Chuẩn theo:
+// - HistoryController.SearchVisits  GetVisitDetail (HistoryVisitRecordDto / HistoryVisitDetailDto)
+// - BillingController.SearchInvoices (InvoiceHistoryRecordDto) :contentReference[oaicite:0]{index=0}
 
 function normalizeVisit(dto = {}) {
   return {
+    // mã lượt khám – dùng để gọi API chi tiết
+    visitCode:
+      dto.MaLuotKham ??
+      dto.maLuotKham ??
+      "",
+
+    // thời gian
     date:
-      dto.date ||
-      dto.ngayKham ||
-      dto.NgayKham ||
-      dto.thoiGian ||
-      dto.ThoiGian ||
+      dto.ThoiGian ??
+      dto.thoiGian ??
       null,
+
+    // bệnh nhân
     id:
-      dto.id ||
-      dto.maBenhNhan ||
-      dto.MaBenhNhan ||
-      dto.benhNhan?.maBenhNhan ||
-      dto.BenhNhan?.MaBenhNhan ||
+      dto.MaBenhNhan ??
+      dto.maBenhNhan ??
       "",
     name:
-      dto.name ||
-      dto.tenBenhNhan ||
-      dto.TenBenhNhan ||
-      dto.benhNhan?.hoTen ||
-      dto.BenhNhan?.HoTen ||
+      dto.TenBenhNhan ??
+      dto.tenBenhNhan ??
       "",
+
+    // khoa & bác sĩ
     dept:
-      dto.dept ||
-      dto.tenKhoa ||
-      dto.TenKhoa ||
-      dto.khoa?.tenKhoa ||
-      dto.Khoa?.TenKhoa ||
+      dto.TenKhoa ??
+      dto.tenKhoa ??
       "",
+    deptId:
+      dto.MaKhoa ??
+      dto.maKhoa ??
+      null,
     doctor:
-      dto.doctor ||
-      dto.bacSi ||
-      dto.BacSi ||
-      dto.bacSiKham?.hoTen ||
-      dto.BacSiKham?.HoTen ||
+      dto.TenBacSi ??
+      dto.tenBacSi ??
       "",
-    note: dto.note || dto.ghiChu || dto.GhiChu || "",
-    diagnosis: dto.diagnosis || dto.chanDoan || dto.ChanDoan || {},
-    examRows: dto.examRows || [],
-    services: dto.services || [],
-    fees: dto.fees || {},
-    prescriptionId: dto.prescriptionId || dto.maDonThuoc || dto.MaDonThuoc,
-    type: dto.type || dto.loaiLuot || dto.LoaiLuot || "clinic",
+    doctorId:
+      dto.MaBacSi ??
+      dto.maBacSi ??
+      null,
+
+    // loại lượt + flag khám dịch vụ
+    type:
+      dto.LoaiLuot ??
+      dto.loaiLuot ??
+      "",
+    isService:
+      dto.LaKhamDichVu ??
+      dto.laKhamDichVu ??
+      false,
+
+    // ghi chú
+    note:
+      dto.GhiChu ??
+      dto.ghiChu ??
+      "",
+
+    // liên kết tới phiếu/đơn để mở chi tiết
+    examId:
+      dto.MaPhieuKhamLs ??
+      dto.maPhieuKhamLs ??
+      null,
+    clsId:
+      dto.MaPhieuKhamCls ??
+      dto.maPhieuKhamCls ??
+      dto.MaPhieuTongHopCls ??
+      dto.maPhieuTongHopCls ??
+      null,
+    rxId:
+      dto.MaDonThuoc ??
+      dto.maDonThuoc ??
+      null,
+    finalDiagnosisId:
+      dto.MaPhieuChanDoanCuoi ??
+      dto.maPhieuChanDoanCuoi ??
+      null,
+  };
+}
+
+
+
+
+function normalizeVisitDetail(dto = {}) {
+  // Lấy khung chung từ list (ngày, BN, khoa, bác sĩ, type, isServiceVisit, examId, clsId, rxId...)
+  const base = normalizeVisit(dto);
+
+  // ----- 1) Chẩn đoán -----
+  const chanDoanDto = dto.chanDoan || dto.ChanDoan || null;
+  const diagnosis = chanDoanDto
+    ? {
+        // Chẩn đoán sơ bộ
+        pre:
+          chanDoanDto.chanDoanSoBo ||
+          chanDoanDto.ChanDoanSoBo ||
+          "",
+
+        // Chẩn đoán xác định
+        final:
+          chanDoanDto.chanDoanXacDinh ||
+          chanDoanDto.ChanDoanXacDinh ||
+          "",
+
+        // Phác đồ điều trị
+        plan:
+          chanDoanDto.phacDoDieuTri ||
+          chanDoanDto.PhacDoDieuTri ||
+          "",
+
+        // Tư vấn & dặn dò
+        advice:
+          chanDoanDto.tuVanDanDo ||
+          chanDoanDto.TuVanDanDo ||
+          "",
+      }
+    : null;
+
+  // ----- 2) Kết quả khám (examRows) -----
+  const examRowsRaw =
+    dto.ketQuaKham ||
+    dto.KetQuaKham ||
+    [];
+
+  const examRows = examRowsRaw.map((r) => ({
+    // Nhãn chỉ số / nội dung
+    label:
+      r.label ||
+      r.Label ||
+      r.tenChiSo ||
+      r.TenChiSo ||
+      "",
+    // Giá trị kết quả
+    value:
+      r.value ||
+      r.Value ||
+      r.ketQua ||
+      r.KetQua ||
+      "",
+  }));
+
+  // ----- 3) Dịch vụ thực hiện (services) -----
+  const servicesRaw =
+    dto.ketQuaDichVu ||
+    dto.KetQuaDichVu ||
+    [];
+
+  const services = servicesRaw.map((s) => ({
+    code: s.maDichVu || s.MaDichVu || "",
+    name: s.tenDichVu || s.TenDichVu || "",
+    result: s.ketQua || s.KetQua || "",
+    price:
+      s.donGia ||
+      s.DonGia ||
+      s.thanhTien ||
+      s.ThanhTien ||
+      0,
+  }));
+
+  // ----- 4) Gộp lại cho FE -----
+  return {
+    ...base,
+    // Ưu tiên tóm tắt khám, fallback về ghi chú hoặc base.note
+    note:
+      dto.tomTatKham ||
+      dto.TomTatKham ||
+      dto.ghiChu ||
+      dto.GhiChu ||
+      base.note,
+    diagnosis,
+    examRows,
+    services,
   };
 }
 
 function normalizeTransaction(dto = {}) {
-  const thoiGian =
-    dto.thoiGian || dto.ThoiGian || dto.date || dto.ngayThu || dto.NgayThu;
-  const date = thoiGian ? new Date(thoiGian).toISOString() : null;
+  const soTienRaw =
+    dto.SoTien ??
+    dto.soTien ??
+    dto.TienThuoc ??
+    dto.tienThuoc ??
+    0;
 
-  const soTien = dto.soTien || dto.SoTien || dto.amount || dto.money || 0;
+  const amount = Number(soTienRaw) || 0;
 
   return {
-    invoiceId: dto.maHoaDon || dto.MaHoaDon || dto.invoiceId || dto.id,
-    date,
+    // khóa chính hóa đơn (dùng mở modal chi tiết)
+    invoiceId:
+      dto.MaHoaDon ??
+      dto.maHoaDon ??
+      "",
+
+    // thời gian thu
+    date:
+      dto.ThoiGian ??
+      dto.thoiGian ??
+      null,
+
+    // bệnh nhân
     id:
-      dto.maBenhNhan ||
-      dto.MaBenhNhan ||
-      dto.idBenhNhan ||
-      dto.IdBenhNhan ||
-      dto.ptId ||
+      dto.MaBenhNhan ??
+      dto.maBenhNhan ??
       "",
     name:
-      dto.benhNhan?.hoTen ||
-      dto.BenhNhan?.HoTen ||
-      dto.tenBenhNhan ||
-      dto.TenBenhNhan ||
-      dto.name ||
+      dto.TenBenhNhan ??
+      dto.tenBenhNhan ??
       "",
-    amount: soTien,
-    money: soTien,
-    content: dto.noiDung || dto.NoiDung || dto.content || "",
-    kind: dto.loaiDotthu || dto.LoaiDotthu || dto.kind || "kham_lam_sang",
-    status: dto.trangThai || dto.TrangThai || dto.status || "da_thu",
+
+    // loại đợt thu, nội dung, trạng thái, phương thức
+    kind:
+      dto.LoaiDotThu ??
+      dto.loaiDotThu ??
+      "",
+    content:
+      dto.NoiDung ??
+      dto.noiDung ??
+      "",
+    status:
+      dto.TrangThai ??
+      dto.trangThai ??
+      "",
     method:
-      dto.phuongThucThanhToan ||
-      dto.PhuongThucThanhToan ||
-      dto.method ||
-      "tien_mat",
-    staffId: dto.maNhanSuThu || dto.MaNhanSuThu || dto.staffId || "",
-    staffName:
-      dto.nhanSuThu?.hoTen ||
-      dto.NhanSuThu?.HoTen ||
-      dto.tenNhanSuThu ||
-      dto.TenNhanSuThu ||
-      dto.staffName ||
+      dto.PhuongThucThanhToan ??
+      dto.phuongThucThanhToan ??
       "",
-    examId: dto.maPhieuKham || dto.MaPhieuKham || null,
-    clsId: dto.maPhieuKhamCls || dto.MaPhieuKhamCls || null,
-    rxId: dto.maDonThuoc || dto.MaDonThuoc || dto.rxId || null,
+
+    // thu ngân
+    staffId:
+      dto.MaNhanSuThu ??
+      dto.maNhanSuThu ??
+      "",
+    staffName:
+      dto.TenNhanSuThu ??
+      dto.tenNhanSuThu ??
+      "",
+
+    // số tiền (FE thường dùng cả amount & money)
+    amount,
+    money: amount,
+
+    // link sang các entity khác
+    examId:
+      dto.MaPhieuKham ??
+      dto.maPhieuKham ??
+      null,
+    clsId:
+      dto.MaPhieuKhamCls ??
+      dto.maPhieuKhamCls ??
+      null,
+    rxId:
+      dto.MaDonThuoc ??
+      dto.maDonThuoc ??
+      null,
   };
 }
 
+
 /* ===================== RAW FETCHERS ===================== */
 
-export async function getHistoryVisits() {
-  if (mockEnabled) {
-    // Mock trả về đúng shape FE luôn
-    const list = await mockHistoryApi.listVisits();
-    return list;
-  }
+// Lấy danh sách lượt khám (search) – khớp HistoryController.SearchVisits
 
-  const res = await api.get("/history/visits");
-  const data = res.data;
-  const list = data?.items || data || [];
+// Lấy danh sách lượt khám
+export async function getHistoryVisits() {
+  const filter = {
+    maBenhNhan: null,
+    fromTime: null,
+    toTime: null,
+    loaiLuot: null,
+    keyword: null,
+    onlyToday: null,
+    page: 1,
+    pageSize: 500,
+  };
+
+  const res = await http.post("/history/visits/search", filter);
+  const list = ensureArray(res?.data);
+  // debug nếu cần
   return list.map(normalizeVisit);
 }
 
+// Lấy lịch sử giao dịch
 export async function getHistoryTransactions() {
-  if (mockEnabled) {
-    const list = await mockHistoryApi.listTransactions();
-    return list;
-  }
+  const filter = {
+    maBenhNhan: null,
+    fromTime: null,
+    toTime: null,
+    loaiDotThu: null,
+    trangThai: null,
+    phuongThucThanhToan: null,
+    keyword: null,
+    page: 1,
+    pageSize: 500,
+  };
 
-  const res = await api.get("/history/transactions");
-  const data = res.data;
-  const list = data?.items || data || [];
+  const res = await http.post("/billing/invoices/search", filter);
+  const list = ensureArray(res?.data);
   return list.map(normalizeTransaction);
 }
 
+// Lấy chi tiết 1 lượt khám – khớp HistoryController.GetVisitDetail
+export async function getHistoryVisitDetail(maLuotKham) {
+  if (!maLuotKham) {
+    throw new Error("Thiếu mã lượt khám");
+  }
+  const res = await http.get(
+    `/history/visits/${encodeURIComponent(maLuotKham)}`
+  );
+  const dto = res.data;
+  return normalizeVisitDetail(dto);
+}
+
+
+
+
+
 /* ===================== HOOKS (TanStack Query) ===================== */
+
 
 export function useHistoryVisits(options = {}) {
   return useQuery({
@@ -185,7 +396,16 @@ export function useHistoryVisits(options = {}) {
     ...options,
   });
 }
-
+export function useHistoryVisitDetail(maLuotKham, options = {}) {
+  const { enabled, ...rest } = options;
+  return useQuery({
+    queryKey: ["history", "visit-detail", maLuotKham],
+    queryFn: () => getHistoryVisitDetail(maLuotKham),
+    enabled: enabled ?? !!maLuotKham,
+    staleTime: 60_000,
+    ...rest,
+  });
+}
 export function useHistoryTransactions(options = {}) {
   return useQuery({
     queryKey: ["history", "transactions"],
@@ -194,6 +414,7 @@ export function useHistoryTransactions(options = {}) {
     ...options,
   });
 }
+
 
 /* ===================== REALTIME (SignalR) ===================== */
 

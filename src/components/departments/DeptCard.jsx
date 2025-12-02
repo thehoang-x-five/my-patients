@@ -1,11 +1,38 @@
 import React from 'react';
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
+import Avatar from "../ui/Avatar.jsx";
+const avatar=[];
+function randomInRange(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+for (let i = 1; i <= 6; i++) {
+  avatar[i]="../../../public/"+i.toString()+".jpg";
+}
+function isClsType(type) {
+  const v = String(type || "").toLowerCase();
+  return (
+    v.includes("cls") ||
+    v.includes("cận lâm sàng") ||
+    v.includes("can_lam_sang") ||
+    v.includes("dv")
+  );
+}
 
 // --- Hàm tiện ích (không đổi) ---
 function kindBadge(type) {
-  if (type === "phong_dich_vu") return { text: "Phòng CLS", cls: "bg-violet-50 text-violet-700 ring-violet-200" };
-  return { text: "Phòng khám LS", cls: "bg-indigo-50 text-indigo-700 ring-indigo-200" };
+  const v = type;
+  if (isClsType(v)) {
+    return {
+      text: "Phòng CLS",
+      cls: "bg-violet-50 text-violet-700 ring-violet-200",
+    };
+  }
+  return {
+    text: "Phòng khám LS",
+    cls: "bg-indigo-50 text-indigo-700 ring-indigo-200",
+  };
 }
 function StatusBadge({ active }) {
   return (
@@ -45,11 +72,14 @@ const detailVariants = {
 export default function DeptCard({ dept, onOpenDetail, onOpenSchedule, pulse = false }) {
   const room = dept.room || { number: "—", status: false };
   const isActive = !!room.status;
+ 
   const waiting = dept.waitingPatients || 0;
   const done = dept.examinedPatients || 0;
   const total = waiting + done;
   const hasNurse = !!(dept.nurseInCharge && String(dept.nurseInCharge).trim());
-  const kb = kindBadge(room.type);
+  const kb = kindBadge(
+    room.type || dept.roomType || dept.loaiPhong || dept.loai_phong
+  );
 
   return (
     <motion.article
@@ -61,19 +91,15 @@ export default function DeptCard({ dept, onOpenDetail, onOpenSchedule, pulse = f
       // Xóa transition, initial, animate prop cũ vì đã dùng variants
       className={[
         "relative group rounded-2xl bg-white/95 ring-1 ring-slate-200 shadow-sm",
-        "hover:shadow-xl hover:ring-indigo-300 hover:bg-gradient-to-b hover:from-white hover:to-indigo-50/70",
+        "hover:shadow-xl hover:ring-indigo-100 hover:bg-gradient-to-b hover:from-white hover:to-indigo-50/70",
         "p-3",
-        pulse ? "flash-once ring-2 ring-indigo-400" : ""
+        pulse ? "flash-once ring-2 ring-indigo-50" : ""
       ].join(" ")}
     >
       {/* Header */}
       <motion.header variants={detailVariants} className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl grid place-items-center font-extrabold 
-                         bg-indigo-50 text-slate-800 ring-1 ring-indigo-100
-                         group-hover:bg-indigo-100 group-hover:ring-indigo-200 group-hover:scale-105 transition-all">
-            {dept.short || "P"}
-          </div>
+        <Avatar src={avatar[randomInRange(1, 6)]} item={dept} size={40} />
           <div className="flex-1">
             <b className="leading-5 text-[15px] text-slate-900 block">Phòng {room.number}</b>
             <div className="text-slate-500 text-xs mt-0.5">

@@ -48,7 +48,7 @@ export default function ApptToolbar({
       >
         <button
           type="button"
-          className={`relative z-10 px-3 py-1.5 font-semibold transition ${
+          className={`relative z-10 px-3 py-1 font-semibold transition ${
             view === "list" ? "text-violet-700" : "text-slate-700"
           }`}
           aria-pressed={view === "list"}
@@ -65,7 +65,7 @@ export default function ApptToolbar({
         </button>
         <button
           type="button"
-          className={`relative z-10 px-3 py-1.5 font-semibold transition ${
+          className={`relative z-10 px-3 py-1 font-semibold transition ${
             view === "cal" ? "text-violet-700" : "text-slate-700"
           }`}
           aria-pressed={view === "cal"}
@@ -89,7 +89,7 @@ export default function ApptToolbar({
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         onClick={onOpenCreate}
-        className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 text-white font-semibold shadow-md hover:shadow-lg transition"
+        className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 text-white font-semibold shadow-md hover:shadow-lg transition"
       >
         + Tạo lịch hẹn
       </motion.button>

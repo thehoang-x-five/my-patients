@@ -71,7 +71,7 @@ export default function ScheduleModal({ open, dept, todayDuty, weekDays, todayKe
       className="rounded-xl ring-1 ring-slate-200 bg-gradient-to-b from-white to-slate-50 p-3 
                  hover:shadow-md cursor-default"
     >
-      <div className="text-sm">ĐD: <b>{slot.nurse || "—"}</b></div>
+      <div className="text-sm"> <b>{slot.nurse || "—"}</b></div>
       <div className="text-xs text-slate-600">Ca: <b>{slot.ca_truc || "—"}</b> • {slot.gio_bat_dau || "—"}–{slot.gio_ket_thuc || "—"}</div>
     </motion.div>
   );
@@ -83,7 +83,7 @@ export default function ScheduleModal({ open, dept, todayDuty, weekDays, todayKe
       // Hiệu ứng này đã nhẹ sẵn (chỉ đổi màu nền)
       className="text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-default"
     >
-      <div>ĐD: <b>{slot.nurse}</b></div>
+      <div className="text-sm"> <b>{slot.nurse}</b></div>
       <div className="text-xs text-slate-600">Ca: <b>{slot.ca_truc}</b> • {slot.gio_bat_dau}–{slot.gio_ket_thuc}</div>
     </li>
   );
@@ -145,8 +145,8 @@ export default function ScheduleModal({ open, dept, todayDuty, weekDays, todayKe
                 >
                   {/* BS cố định (1/3) */}
                   <div className="lg:col-span-1">
-                    <Tile className="flex items-center justify-between">
-                      <b className="text-slate-800">Bác sĩ phụ trách (cố định)</b>
+                    <Tile className="flex items-center gap-2">
+                      <b className="text-slate-800">Bác sĩ phụ trách (cố định):</b>
                       <span className="text-sm font-semibold text-indigo-800">{fixedDoctor}</span>
                     </Tile>
                   </div>

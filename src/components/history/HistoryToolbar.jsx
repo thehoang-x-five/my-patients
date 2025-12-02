@@ -63,13 +63,13 @@ export default function HistoryToolbar({
               <b>{tSum.toLocaleString("vi-VN")} đ</b>
             </Chip>
             <Chip dot="sky">
-              Thu khám:&nbsp;<b>{tExam}</b>
+              Khám LS:&nbsp;<b>{tExam}</b>
             </Chip>
             <Chip dot="cyan">
-              Thu CLS:&nbsp;<b>{tCls}</b>
+              Khám CLS:&nbsp;<b>{tCls}</b>
             </Chip>
             <Chip dot="teal">
-              Thu thuốc:&nbsp;<b>{tDrug}</b>
+              Thuốc:&nbsp;<b>{tDrug}</b>
             </Chip>
             {tOther > 0 && (
               <Chip dot="slate">

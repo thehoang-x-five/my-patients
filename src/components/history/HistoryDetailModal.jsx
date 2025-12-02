@@ -3,17 +3,43 @@ import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import Button from "../ui/Button.jsx";
-import { isServiceDept } from "../../api/history.js";
+import { isServiceDept,useHistoryVisitDetail } from "../../api/history.js";
 
 export default function HistoryDetailModal({ open, type, row, onClose }) {
-  if (!open || !row) return null;
+  
 
   const isVisit = type === "visit";
   const isTxn = type === "txn";
-  const isServiceVisit =
-    isVisit && (row.type === "service" || isServiceDept(row.dept));
+ // Mã lượt khám (dùng cho API detail)
+  const visitCode =
+    row &&
+    (row.visitCode ||
+      row.code ||
+      row.historyId ||
+      row.maLuotKham ||
+      row.MaLuotKham ||
+      row.maLuot ||
+      row.MaLuot ||
+      null);
 
-  const dateObj = row.date ? new Date(row.date) : null;
+  // Gọi API chi tiết khi là lượt khám  modal mở
+  const { data: visitDetail, isLoading: loadingDetail } =
+    useHistoryVisitDetail(visitCode, {
+      enabled: open && isVisit && !!visitCode,
+    });
+
+  if (!open || !row) return null;
+
+  // Nếu đã có detail thì ưu tiên, fallback về row từ list
+  const data = isVisit && visitDetail ? visitDetail : row;
+
+  const isServiceVisit =
+    isVisit &&
+    (data.isServiceVisit ||
+      data.type === "service" ||
+      isServiceDept(data.dept));
+
+  const dateObj = data.date ? new Date(data.date) : null;
   const dateStr = dateObj ? dateObj.toLocaleDateString("vi-VN") : "—";
   const timeStr = dateObj
     ? dateObj.toLocaleTimeString("vi-VN", {
@@ -22,21 +48,13 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
       })
     : "—";
 
-  const visitCode =
-    row.visitCode ||
-    row.code ||
-    row.historyId ||
-    row.maLuotKham ||
-    row.MaLuotKham ||
-    row.maLuot ||
-    row.MaLuot ||
-    null;
+ 
 
   const patientCode =
-    row.id ||
-    row.ptId ||
-    row.maBenhNhan ||
-    row.MaBenhNhan ||
+    data.id ||
+    data.ptId ||
+    data.maBenhNhan ||
+    data.MaBenhNhan ||
     null;
 
   const shellSize = isVisit ? "max-w-4xl" : "max-w-xl";
@@ -68,7 +86,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <h2 className="text-sm font-bold text-slate-900">
-                    {row.name || row.ptName || "—"}
+                    {data.name || data.ptName || "—"}
                   </h2>
 
                   {patientCode && (
@@ -83,9 +101,9 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     </span>
                   )}
 
-                  {isTxn && (row.invoiceId || row.invoice) && (
+                  {isTxn && (data.invoiceId || data.invoice) && (
                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200">
-                      HĐ: {row.invoiceId || row.invoice}
+                      HĐ: {data.invoiceId || data.invoice}
                     </span>
                   )}
                 </div>
@@ -118,13 +136,13 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     />
                     <Field
                       label="Họ và tên"
-                      value={row.name || row.ptName || "—"}
+                      value={data.name || data.ptName || "—"}
                     />
 
                     {isVisit ? (
                       <>
-                        <Field label="Khoa/Phòng" value={row.dept || "—"} />
-                        <Field label="Bác sĩ" value={row.doctor || "—"} />
+                        <Field label="Khoa/Phòng" value={data.dept || "—"} />
+                        <Field label="Bác sĩ" value={data.doctor || "—"} />
                         <Field
                           label="Loại lượt"
                           value={
@@ -144,17 +162,17 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                       <>
                         <Field
                           label="Mã hoá đơn"
-                          value={row.invoiceId || row.invoice || "—"}
+                          value={data.invoiceId || data.invoice || "—"}
                         />
-                        <Field label="Loại" value={renderKindChip(row.kind)} />
+                        <Field label="Loại" value={renderKindChip(data.kind)} />
                         <Field
                           label="Trạng thái"
-                          value={renderStatusChip(row.status)}
+                          value={renderStatusChip(data.status)}
                         />
                         <Field
                           label="Số tiền"
                           value={`${Number(
-                            row.money ?? row.amount ?? 0
+                            data.money ?? data.amount ?? 0
                           ).toLocaleString("vi-VN")} đ`}
                         />
                       </>
@@ -165,16 +183,19 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                 {isVisit ? (
                   <>
                     {/* 2) Kết quả khám */}
-                    {(row.note || (row.examRows && row.examRows.length)) && (
+                    {(data.note ||
+                      (data.examRows && data.examRows.length) ||
+                      (isVisit && loadingDetail)) && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                         <b className="block mb-2">Kết quả khám</b>
-                        {row.note && (
+                        
+                        {data.note && (
                           <div className="mb-3 text-sm">
                             <span className="text-slate-500">Tóm tắt: </span>
-                            <span className="font-medium">{row.note}</span>
+                            <span className="font-medium">{data.note}</span>
                           </div>
                         )}
-                        {(row.examRows || []).length > 0 && (
+                        {(data.examRows || []).length > 0 && (
                           <div className="overflow-x-auto rounded-lg ring-1 ring-slate-200/70">
                             <table className="min-w-full text-sm">
                               <thead className="text-left text-slate-500 bg-slate-50">
@@ -187,7 +208,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                                 </tr>
                               </thead>
                               <tbody>
-                                {row.examRows.map((r, i) => (
+                              {data.examRows.map((r, i) => (
                                   <tr
                                     key={i}
                                     className="odd:bg-slate-50/40 hover:bg-slate-100"
@@ -209,7 +230,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     )}
 
                     {/* 3) Chẩn đoán & kế hoạch */}
-                    {row.diagnosis && (
+                    {data.diagnosis && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                         <b className="block mb-2">
                           Chẩn đoán & Kế hoạch điều trị
@@ -218,33 +239,33 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                           <Field
                             label="Chẩn đoán sơ bộ"
                             value={
-                              row.diagnosis.pre ||
-                              row.diagnosis.main ||
+                              data.diagnosis.pre ||
+                              data.diagnosis.main ||
                               "—"
                             }
                           />
                           <Field
                             label="Chẩn đoán xác định"
                             value={
-                              row.diagnosis.final ||
-                              row.diagnosis.sub ||
+                              data.diagnosis.final ||
+                              data.diagnosis.sub ||
                               "—"
                             }
                           />
                           <FieldFull
                             label="Phác đồ điều trị"
-                            value={row.diagnosis.plan || "—"}
+                            value={data.diagnosis.plan || "—"}
                           />
                           <FieldFull
                             label="Tư vấn & Dặn dò"
-                            value={row.diagnosis.advice || "—"}
+                            value={data.diagnosis.advice || "—"}
                           />
                         </div>
                       </section>
                     )}
 
                     {/* 4) Dịch vụ thực hiện */}
-                    {(row.services || []).length > 0 && (
+                    {(data.services || []).length > 0 && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                         <b className="block mb-2">Dịch vụ thực hiện</b>
                         <div className="overflow-x-auto rounded-lg ring-1 ring-slate-200/70">
@@ -259,7 +280,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                               </tr>
                             </thead>
                             <tbody>
-                              {row.services.map((s, i) => (
+                              {data.services.map((s, i) => (
                                 <tr
                                   key={s.code || i}
                                   className="odd:bg-slate-50/40 hover:bg-slate-100"
@@ -289,15 +310,15 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                       <section className="rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 text-amber-800">
                         Lần khám dịch vụ không phát sinh đơn thuốc.
                       </section>
-                    ) : row.prescriptionId || row.rxId ? (
+                    ) : data.prescriptionId || data.rxId ? (
                       <section className="rounded-xl ring-1 ring-sky-200 bg-sky-50 p-3 text-sm">
                         Có đơn thuốc:{" "}
                         <Underlined
                           to={`/prescriptions?view=${
-                            row.prescriptionId || row.rxId
+                            data.prescriptionId || data.rxId
                           }`}
                         >
-                          {row.prescriptionId || row.rxId}
+                          {data.prescriptionId || data.rxId}
                         </Underlined>
                       </section>
                     ) : null}
@@ -321,34 +342,34 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                         <Field label="Giờ" value={timeStr} />
                         <Field
                           label="Phương thức"
-                          value={renderMethodChip(row.method)}
+                          value={renderMethodChip(data.method)}
                         />
                         <Field
                           label="Nhân sự thu"
                           value={
-                            row.staffName || row.nhanSuThu?.hoTen || "—"
+                            data.staffName || data.nhanSuThu?.hoTen || "—"
                           }
                         />
                         <FieldFull
                           label="Nội dung"
-                          value={row.content || "—"}
+                          value={data.content || "—"}
                         />
                       </div>
                     </section>
 
                     {/* Liên kết tham chiếu */}
-                    {(row.examId || row.clsId || row.rxId) && (
+                    {(data.examId || data.clsId || data.rxId) && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                         <b className="block mb-2">Tham chiếu</b>
                         <div className="flex flex-wrap gap-2 text-sm">
-                          {row.examId && (
-                            <div>Phiếu khám LS: {row.examId}</div>
+                          {data.examId && (
+                            <div>Phiếu khám LS: {data.examId}</div>
                           )}
-                          {row.clsId && (
-                            <div>Phiếu CLS: {row.clsId}</div>
+                          {data.clsId && (
+                            <div>Phiếu CLS: {data.clsId}</div>
                           )}
-                          {row.rxId && (
-                            <div>Đơn thuốc: {row.rxId}</div>
+                          {data.rxId && (
+                            <div>Đơn thuốc: {data.rxId}</div>
                           )}
                         </div>
                       </section>

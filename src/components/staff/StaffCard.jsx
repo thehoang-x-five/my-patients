@@ -3,7 +3,15 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
-import Avatar from "./Avatar.jsx";
+import Avatar from "../ui/Avatar.jsx";
+const avatar=[];
+function randomInRange(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+for (let i = 1; i <= 6; i++) {
+  avatar[i]="../../../public/"+i.toString()+".jpg";
+}
 
 const NURSE_WORK_ROLE_LABEL = {
   lam_sang: "Y tá lâm sàng",
@@ -35,13 +43,13 @@ const getRoomToday = (item) => {
 const getStatusVisual = (statusRaw) => {
   const status = statusRaw || "offline";
 
-  if (status === "online") {
+  if (status == "online") {
     return {
       label: "online",
       className: "bg-emerald-50 text-emerald-600 ring-emerald-200/60",
     };
   }
-  if (status === "pause") {
+  if (status == "pause") {
     return {
       label: "pause",
       className: "bg-amber-50 text-amber-600 ring-amber-200/60",
@@ -54,16 +62,47 @@ const getStatusVisual = (statusRaw) => {
 };
 
 const getNurseWorkRole = (item) => {
-  // Ưu tiên field vai_tro_cong_tac từ BE
-  let key = item.vai_tro_cong_tac;
+  const raw =
+    item?.vai_tro_cong_tac ||
+    item?.loaiYTa ||
+    item?.loai_y_ta ||
+    item?.nurseType ||
+    item?.nurse_kind;
 
-  // Fallback từ roleType cũ
-  if (!key && item.roleType === "clinical") key = "lam_sang";
-  if (!key && item.roleType === "administrative") key = "hanh_chinh";
+  let key = raw;
+
+  if (raw) {
+    const s = raw.toString().toLowerCase().trim();
+
+    // Lâm sàng
+   if (s == "lam_sang" || s == "y_ta_lam_sang" || s == "ls"|| s.includes("lâm sàng")) {
+      key = "lam_sang";
+    }
+    // Cận lâm sàng
+    else if (
+      s == "can_lam_sang" ||
+      s == "y_ta_can_lam_sang" ||
+      s == "cls" ||
+      s.includes("cận lâm")
+    ) {
+      key = "can_lam_sang";
+    }
+    // Hành chính
+    else if (
+      s == "hanh_chinh" ||
+      s == "y_ta_hanh_chinh" ||
+      s == "hanhchinh" ||
+      s.includes("hành chính")
+    ) {
+      key = "hanh_chinh";
+    }
+  }
+
+  if (!key && item?.roleType == "clinical") key = "lam_sang";
+  if (!key && item?.roleType == "administrative") key = "hanh_chinh";
 
   return NURSE_WORK_ROLE_LABEL[key] || "—";
 };
-
 export default function StaffCard({ item, role, onDetail, onSchedule }) {
   const statusView = getStatusVisual(item.status);
   const apptCount =
@@ -74,9 +113,9 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
     0;
 
   const roomToday = getRoomToday(item);
-  const isAdminNurse = role === "nurse" && item.roleType === "administrative";
-  const isDoctor = role === "doctor";
-  const isNurse = role === "nurse";
+  const isAdminNurse = role == "nurse" && item.roleType == "administrative";
+  const isDoctor = role == "doctor"||role == "bac_si";
+  const isNurse = role == "nurse"||role == "y_ta";
 
   let primaryLabel;
   let primaryValue;
@@ -137,7 +176,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
       </div>
 
       <header className="flex items-start gap-3">
-        <Avatar item={item} size={40} />
+        <Avatar src={avatar[randomInRange(1, 6)]} item={item} size={40} />
         <div className="flex-1 min-w-0 pr-24">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-slate-900 truncate">
@@ -204,13 +243,13 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
       <div className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-xl ring-1 ring-slate-100 p-2 bg-white/60 group-hover:bg-teal-50/50 group-hover:ring-teal-100 transition">
           <div className="text-slate-500 text-xs">{primaryLabel}</div>
-          <div className="text-ml font-extrabold text-slate-900">
+          <div className="text-sm font-bold text-slate-900">
             {primaryValue}
           </div>
         </div>
         <div className="rounded-xl ring-1 ring-slate-100 p-2 bg-white/60 group-hover:bg-teal-50/50 group-hover:ring-teal-100 transition">
           <div className="text-slate-500 text-xs">{secondaryLabel}</div>
-          <div className="text-ml font-extrabold text-slate-900">
+          <div className="text-sm font-bold text-slate-900">
             {secondaryValue}
           </div>
         </div>

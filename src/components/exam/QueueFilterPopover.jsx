@@ -28,6 +28,7 @@ export default function QueueFilterPopover({
 
   const source = values?.source ?? "all";
   const kind = values?.kind ?? "all";
+  const search = values?.search ?? "";
 
   const anchorNode =
     anchorEl && anchorEl.current ? anchorEl.current : anchorEl || null;
@@ -38,7 +39,7 @@ export default function QueueFilterPopover({
     if (!el) return;
     const r = el.getBoundingClientRect();
     const vw = window.innerWidth;
-    const width = 279
+    const width = 375;
     const left = Math.min(Math.max(r.right - width, 12), vw - width - 12);
     const top = r.bottom + 8;
     setPos({ top, left, width });
@@ -80,7 +81,7 @@ export default function QueueFilterPopover({
           >
             <div className="px-3 py-2 bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border-b border-emerald-100">
               <div className="text-[13px] font-extrabold text-emerald-800 flex items-center gap-2">
-                <span className="inline-flex w-5 h-5 rounded-lg bg-emerald-100 ring-1 ring-emerald-200 items-center justify-center">
+                <span className="inline-flex w-5 h-5 rounded-lg bg-emerald-50 text-[11px] text-emerald-700 border border-emerald-100 ring-1 ring-emerald-200 items-center justify-center">
                   ⚗️
                 </span>
                 Lọc hàng chờ
@@ -88,6 +89,38 @@ export default function QueueFilterPopover({
             </div>
 
             <div className="p-3 space-y-3 text-[13px]">
+              <div>
+                Tìm kiếm
+                <div className="mt-1">
+                  <div className="relative">
+                    <input
+                      value={search}
+                      aria-label="Tìm kiếm bệnh nhân"
+                      onChange={(e) =>
+                        setValues((v) => ({ ...v, search: e.target.value }))
+                      }
+                      placeholder="Tìm theo tên / mã BN / SĐT…"
+                      className="w-full rounded-2xl border border-slate-200 bg-white pl-7 pr-7 py-1.5 text-[13px] text-slate-800 placeholder:text-slate-400 focus:border-transparent focus:ring-2 focus:ring-teal-500"
+                    />
+                    <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                      🔍
+                    </span>
+                    {search && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setValues((v) => ({ ...v, search: "" }))
+                        }
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                        aria-label="Xóa tìm kiếm"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div>
                 Nguồn
                 <div className="mt-1 flex flex-wrap gap-1.5">

@@ -2,7 +2,16 @@
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
-import Avatar from "./Avatar.jsx";
+import { useStaffDetailQuery } from "../../api/staff.js";
+import Avatar from "../ui/Avatar.jsx";
+const avatar=[];
+function randomInRange(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+for (let i = 1; i <= 6; i++) {
+  avatar[i]="../../../public/"+i.toString()+".jpg";
+}
 
 const NURSE_WORK_ROLE_LABEL = {
   lam_sang: "Y tá lâm sàng",
@@ -13,13 +22,13 @@ const NURSE_WORK_ROLE_LABEL = {
 const getStatusVisual = (statusRaw) => {
   const status = statusRaw || "offline";
 
-  if (status === "online") {
+  if (status == "online") {
     return {
       label: "online",
       className: "bg-emerald-50 text-emerald-600 ring-emerald-200/60",
     };
   }
-  if (status === "pause") {
+  if (status == "pause") {
     return {
       label: "pause",
       className: "bg-amber-50 text-amber-600 ring-amber-200/60",
@@ -32,37 +41,110 @@ const getStatusVisual = (statusRaw) => {
 };
 
 const getNurseWorkRole = (item) => {
-  let key = item.vai_tro_cong_tac;
-  if (!key && item.roleType === "clinical") key = "lam_sang";
-  if (!key && item.roleType === "administrative") key = "hanh_chinh";
-  return NURSE_WORK_ROLE_LABEL[key] || "—";
-};
+    const raw =
+      item?.vai_tro_cong_tac ||
+      item?.loaiYTa ||
+      item?.loai_y_ta ||
+      item?.nurseType ||
+      item?.nurse_kind;
+  
+    let key = raw;
+  
+    if (raw) {
+      const s = raw.toString().toLowerCase().trim();
+  
+      // Lâm sàng
+     if (s == "lam_sang" || s == "y_ta_lam_sang" || s == "ls"|| s.includes("lâm sàng")) {
+        key = "lam_sang";
+      }
+      // Cận lâm sàng
+      else if (
+        s == "can_lam_sang" ||
+        s == "y_ta_can_lam_sang" ||
+        s == "cls" ||
+        s.includes("cận lâm")
+      ) {
+        key = "can_lam_sang";
+      }
+      // Hành chính
+      else if (
+        s == "hanh_chinh" ||
+        s == "y_ta_hanh_chinh" ||
+        s == "hanhchinh" ||
+        s.includes("hành chính")
+      ) {
+        key = "hanh_chinh";
+      }
+    }
+  
+    if (!key && item?.roleType == "clinical") key = "lam_sang";
+    if (!key && item?.roleType == "administrative") key = "hanh_chinh";
+  
+    return NURSE_WORK_ROLE_LABEL[key] || "—";
+  };
+  export default function StaffDetail({
+      open,
+      item,
+      role,
+      schedule,   // { Mon: "Sáng", Tue: "Chiều", ... }
+      roomToday,  // "Nội 101" / "Quầy tiếp nhận 1"
+      weekRoom,   // (duty?.week) nếu cần dùng sau
+      onClose,
+    }) {
+      const staffId =
+        item?.maNhanVien ||
+        item?.ma_nhan_vien ||
+        item?.id ||
+        item?.maNhanSu ||
+        null;
+    
+      const { data: detail } = useStaffDetailQuery(staffId, {
+        enabled: open && !!staffId,
+      });
+    
+      // Ưu tiên data chi tiết từ BE, fallback về item từ card
+      const view = detail || item;
+    
+      if (!open || !view) return null;
+      let roomTodayText = null;
 
-export default function StaffDetail({
-  open,
-  item,
-  role,
-  schedule,   // { Mon: "Sáng", Tue: "Chiều", ... }
-  roomToday,  // "Nội 101" / "Quầy tiếp nhận 1"
-  onClose,
-}) {
-  if (!open || !item) return null;
+      if (typeof roomToday === "string") {
+        roomTodayText = roomToday;
+      } else if (roomToday && typeof roomToday === "object") {
+        roomTodayText =
+          roomToday.tenPhong ||
+          roomToday.tenPhongHoacBanHomNay ||
+          roomToday.maPhong ||
+          null;
+      }
+      
+      // Fallback nếu FE chưa truyền roomToday thì lấy từ detail / card
+      if (!roomTodayText) {
+        roomTodayText =
+          view.tenPhongHoacBanHomNay ||
+          view.tenPhongHomNay ||
+          view.doctorRoom ||
+          null;
+      }
+      const apptCount =
+        view?.apptCount ??
+        view?.appointmentsToday ??
+        view?.appts ??
+        view?.appointments ??
+        view?.soLichHenHomNay ??
+        0;
+    
+      const certCount =
+        view?.so_nam_kinh_nghiem ??
+        view?.soNamKinhNghiem ??
+        view?.years ??
+        0;
+    
+      const statusView = getStatusVisual(view.status);
+      const managedRooms = view.managedRooms || [];
 
-  const apptCount =
-    item?.apptCount ??
-    item?.appointmentsToday ??
-    item?.appts ??
-    item?.appointments ??
-    0;
-
-  const certCount =
-    item?.so_nam_kinh_nghiem ?? item?.years ?? 0;
-
-  const statusView = getStatusVisual(item.status);
-  const managedRooms = item.managedRooms || [];
-
-  const isDoctor = role === "doctor";
-  const isNurse = role === "nurse";
+  const isDoctor = role == "doctor"|| role =="bac_si";
+  const isNurse = role == "nurse"|| role =="y_ta";
 
   const roleLabel = isDoctor
     ? "Bác sĩ"
@@ -70,7 +152,6 @@ export default function StaffDetail({
     ? "Y tá"
     : "Nhân sự y tế";
 
-  const nurseWorkRole = isNurse ? getNurseWorkRole(item) : null;
 
   // Số ca trực tuần này cho Y tá: đếm ca != "Nghỉ" / "—"
   const weeklyShiftCount =
@@ -147,16 +228,16 @@ export default function StaffDetail({
             >
               {/* HEADER */}
               <header className="sticky top-0 z-10 backdrop-blur-sm bg-gradient-to-r from-teal-50/80 to-cyan-50/80 border-b border-slate-200 p-4 flex items-start gap-3">
-                <Avatar item={item} size="lg" />
+                <Avatar src={avatar[randomInRange(1, 6)]} item={view} size="lg" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <h2 className="text-base font-semibold text-slate-900 truncate">
-                        {item.name}
+                        {view.name}
                       </h2>
                       <p className="text-xs text-slate-500 truncate">
-                        {item.degree ? item.degree + " • " : ""}
-                        {item.dept || "Chưa gán khoa"}
+                        {view.degree ? view.degree + " • " : ""}
+                        {view.dept || "Chưa gán khoa"}
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
@@ -190,14 +271,14 @@ export default function StaffDetail({
                         Thông tin hành chính
                       </h3>
                       <div className="grid grid-cols-2 gap-2">
-                        <Tile label="Họ tên" value={item.name} />
+                        <Tile label="Họ tên" value={view.name} />
                         <Tile
                           label="Mã nhân viên"
-                          value={item.ma_nhan_vien || "—"}
+                          value={view.ma_nhan_vien || view.maNhanVien || "—"}
                         />
                         <Tile
                           label="Khoa"
-                          value={item.dept || "Chưa gán khoa"}
+                          value={view.dept || "Chưa gán khoa"}
                         />
                         <Tile label="Vai trò" value={roleLabel} />
                       </div>
@@ -208,11 +289,11 @@ export default function StaffDetail({
                         Chuyên môn
                       </h3>
                       <div className="grid grid-cols-2 gap-2">
-                        <Tile label="Học vị" value={item.degree || "—"} />
+                        <Tile label="Học vị" value={view.degree || "—"} />
                         <Tile
                           label="Chuyên khoa"
                           value={
-                            (item.specialties || []).join(", ") || "—"
+                            (view.specialties || []).join(", ") || "—"
                           }
                         />
                       </div>
@@ -223,8 +304,13 @@ export default function StaffDetail({
                         Kỹ năng
                       </h3>
                       <div className="flex flex-wrap gap-1.5">
-                        {(item.skills && item.skills.length > 0
-                          ? item.skills
+                        {((view.skills && view.skills.length > 0
+                          ? view.skills
+                                                    : view.kyNang && view.kyNang.length > 0
+                                                    ? view.kyNang
+                                                    : []
+                                                  ).length
+                                                    ? view.skills || view.kyNang
                           : ["—"]
                         ).map((s, i) => (
                           <span
@@ -250,12 +336,10 @@ export default function StaffDetail({
                           <a
                             className="text-teal-700 hover:underline"
                             href={
-                              item.email
-                                ? `mailto:${item.email}`
-                                : "#"
-                            }
+                                                            view.email ? `mailto:${view.email}` : "#"
+                                                          }
                           >
-                            {item.email || "—"}
+                            {view.email || "—"}
                           </a>
                         </div>
                         <div>
@@ -263,12 +347,12 @@ export default function StaffDetail({
                           <a
                             className="text-teal-700 hover:underline"
                             href={
-                              item.phone
-                                ? `tel:${item.phone}`
+                              view.phone
+                                ? `tel:${view.phone}`
                                 : "#"
                             }
                           >
-                            {item.phone || "—"}
+                            {view.phone || "—"}
                           </a>
                         </div>
                       </div>
@@ -311,19 +395,19 @@ export default function StaffDetail({
                           : "Phòng / bàn"}
                       </h3>
                       <div className="flex flex-wrap gap-1.5 text-xs text-slate-700">
-                        {isDoctor && (item.doctorRoom || roomToday) && (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition">
-                            PK: {item.doctorRoom || roomToday}
-                          </span>
-                        )}
+                        
+                          {isDoctor && (view.doctorRoom || roomTodayText) && (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition">
+                              PK: {view.doctorRoom || roomTodayText}
+                            </span>
+                          )}
 
-                        {isNurse && (roomToday || managedRooms.length) ? (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition">
-                            {roomToday || managedRooms[0] || "—"}
-                          </span>
-                        ) : null}
-
-                        {!isDoctor && !isNurse && (
+                          {isNurse && (roomTodayText || managedRooms.length) ? (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition">
+                              {roomTodayText || managedRooms[0] || "—"}
+                            </span>
+                          ) : null}
+                                                  {!isDoctor && !isNurse && (
                           (managedRooms.length ? managedRooms : ["—"]).map(
                             (r, i) => (
                               <span

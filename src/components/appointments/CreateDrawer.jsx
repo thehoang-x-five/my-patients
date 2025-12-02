@@ -3,16 +3,14 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Chip from "../ui/Chip.jsx";
-
+import { toast } from "react-toastify";
 // ✅ Dùng API layer (TanStack Query) — KHÔNG còn data/*
 import {
-  useDepartments,            // GET /metadata/departments
-  useDoctorQueueByDept,      // GET /metadata/doctor-queue?dept=...
+  useDepartments,            // GET /master-data/departments
+  useDoctorQueueByDept,      // (custom) GET /master-data/staff?maKhoa=...&vaiTro=bac_si
 } from "../../api/departments.js";
 
-import {
-  useFindLastAppointment,    // GET /appointments/last?code=...&name=...&cutoff=YYYY-MM-DD
-} from "../../api/appointments.js";
+
 
 export default function CreateDrawer({
   open,
@@ -22,11 +20,13 @@ export default function CreateDrawer({
   defaultDate,
     // ✅ Prefill từ Patients → Appointments (patient, code, type, note, dept, doctor, date, time)
   defaultValues,
+  isLoading=false,
 }) {
   const firstFieldRef = useRef(null);
   const canEditCode = !!(defaultValues && (defaultValues.code || defaultValues.patient));
-  const [selectedDept, setSelectedDept] = useState("");
-  const [selectedDoctor, setSelectedDoctor] = useState("");
+    const [selectedDeptCode, setSelectedDeptCode] = useState("");
+    const [selectedDeptName, setSelectedDeptName] = useState("");
+    const [selectedDoctor, setSelectedDoctor] = useState("");
   const [showDeptSelect, setShowDeptSelect] = useState(false);
   const [showDoctorSelect, setShowDoctorSelect] = useState(false);
 
@@ -42,31 +42,94 @@ export default function CreateDrawer({
     const [phone, setPhone] = useState("");
     
   // ===== Server state (TanStack Query)
-  const { data: departments = [], isLoading: deptLoading } = useDepartments();
-  const { data: doctorQueue = [], isLoading: docLoading } =
-    useDoctorQueueByDept(selectedDept, { enabled: !!selectedDept });
+   // ===== Server state (TanStack Query)
+  // ngày  giờ gửi xuống API overview
+  const atParams = useMemo(() => {
+    const d = (dateStr || "").trim();
+    const t = (startStr || "").trim();
 
-  // Lần khám gần nhất theo cutoff (ngày đặt)
-  const { data: lastVisit } = useFindLastAppointment(
-    {
-      code: (patientCode || "").trim(),
-      name: (patientName || "").trim(),
-      cutoff: dateStr || new Date().toISOString().slice(0, 10),
-    },
-    {
-      // chỉ gọi khi có code hoặc name
-      enabled:
-        !!(patientCode && patientCode.trim()) ||
-        !!(patientName && patientName.trim()),
+    // API yêu cầu:
+    // - ngay: "YYYY-MM-DD"
+    // - gio:  "HH:MM:SS"
+    const ngay = d || new Date().toISOString().slice(0, 10);
+
+    let gio = "08:00:00";
+    if (t) {
+      // nếu input time là "HH:MM" → append ":00"
+
+
+      gio = t.length === 5 ? `${t}:00` : t;
+
     }
-  );
+
+    return { ngay, gio };
+  }, [dateStr, startStr]);
+
+  const { data: departments = [], isLoading: deptLoading } = useDepartments({
+    at: atParams,
+  });
+
+  const { data: doctorQueue = [], isLoading: docLoading } =
+    useDoctorQueueByDept(selectedDeptCode, {
+      enabled: !!selectedDeptCode && !!atParams.ngay && !!atParams.gio,
+      at: atParams,
+    });
+
+   // Lần khám gần nhất cho flow "Tái khám"
+  // - Nếu mở từ Patients → đã có defaultValues là 1 dòng lịch sử khám
+  // - Không gọi lại /appointments/search để khỏi nhầm với LỊCH HẸN
+  const lastVisit = useMemo(() => {
+    if (apType !== "follow_up") return null;
+
+    const dv = defaultValues || {};
+    // dv có thể bọc thêm trong dv.lastVisit, nên ưu tiên lastVisit trước
+    const src = dv.lastVisit || dv;
+
+    const result = {
+      date:
+        src.lastVisitDate ||
+        src.date ||
+        src.Date ||
+        src.NgayKham ||
+        src.ngay_kham ||
+        "",
+      time:
+        src.lastVisitTime ||
+        src.time ||
+        src.Time ||
+        src.GioKham ||
+        src.gio_kham ||
+        "",
+      patientName: src.patientName || src.patient || patientName,
+      patientCode: src.patientCode || src.code || patientCode,
+      doctorName:
+        src.doctorName ||
+        src.doctor ||
+        src.Doctor ||
+        src.TenBacSiKham ||
+        "",
+      deptName:
+        src.deptName ||
+        src.dept ||
+        src.Dept ||
+        src.TenKhoa ||
+        src.khoa_kham ||
+        src.KhoaKham ||
+        "",
+      note: src.note || src.Note || src.GhiChu || "",
+    };
+
+    // Nếu không có ngày & giờ khám thì coi như không có dữ liệu
+    if (!result.date && !result.time) return null;
+    return result;
+  }, [apType, defaultValues, patientName, patientCode]);
+
 
   const availableDoctors = useMemo(() => {
-    if (!selectedDept) return [];
-    // API trả về dạng [{name, waiting, appointments, status}]
+    if (!selectedDeptCode) return [];
+   // API trả về dạng [{name, waiting, appointments, status}]
     return Array.isArray(doctorQueue) ? doctorQueue : [];
-  }, [selectedDept, doctorQueue]);
-
+  }, [selectedDeptCode, doctorQueue]);
   useEffect(() => {
     if (!open) return;
     const handleKey = (e) => e.key === "Escape" && onClose?.();
@@ -82,8 +145,19 @@ export default function CreateDrawer({
       };
       const dv = defaultValues || {};
   
-      setSelectedDept(dv.dept || "");
-      setSelectedDoctor(dv.doctor || "");
+      setSelectedDeptCode(
+                dv.deptCode || dv.maKhoa || dv.MaKhoa || ""
+              );
+              setSelectedDeptName(
+                dv.dept ||
+                  dv.department ||
+                  dv.deptName ||
+                  dv.TenKhoa ||
+                  ""
+              );
+              setSelectedDoctor(
+                dv.doctor || dv.doctorName || dv.TenBacSiKham || ""
+              );
       setApType(mapTypeToKey(dv.type));
       setPatientName(dv.patient || "");
       setPatientCode(dv.code || "");
@@ -98,19 +172,35 @@ export default function CreateDrawer({
     };
   }, [open, onClose, defaultDate, defaultValues]);
 
+ 
   function handleSubmit(e) {
     e.preventDefault();
+  
+    // Nếu là Tái khám nhưng không tìm thấy bất kỳ lịch sử khám nào
+    // → Không cho tạo lịch tái khám, bắt buộc user chọn lại "Khám mới" hoặc đi từ hồ sơ bệnh nhân.
+    if (apType === "follow_up" && !lastVisit) {
+      toast.warn(
+        "Không tìm thấy lịch sử khám để tạo lịch tái khám. Vui lòng kiểm tra lại Mã BN/Họ tên hoặc chọn 'Khám mới'."
+      );
+      return;
+    }
+  
     const fd = new FormData(e.currentTarget);
     const raw = Object.fromEntries(fd.entries());
     // giữ nguyên: parent sẽ normalize & map 'type'
     onSubmit?.(raw);
   }
-
-  function handleDeptSelect(deptName) {
-    setSelectedDept(deptName);
-    setSelectedDoctor("");
-    setShowDeptSelect(false);
-  }
+  function handleDeptSelect(dept) {
+        if (!dept) return;
+        const code =
+          dept.code || dept.MaKhoa || dept.maKhoa || dept.id || "";
+        const name =
+          dept.name || dept.TenKhoa || dept.tenKhoa || "";
+        setSelectedDeptCode(code);
+        setSelectedDeptName(name);
+        setSelectedDoctor("");
+        setShowDeptSelect(false);
+      }
 
   function handleDoctorSelect(doctorName) {
     setSelectedDoctor(doctorName);
@@ -143,7 +233,7 @@ export default function CreateDrawer({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 8 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="w-[min(900px,100%)] max-h-[88vh] overflow-auto scrollbar-thin scrollbar-thumb-violet-200 bg-white rounded-3xl ring-1 ring-violet-200/50 shadow-2xl pointer-events-auto"
+              className="w-[min(900px,100%)] max-h-[88vh] overflow-auto scrollbar-none bg-white rounded-3xl ring-1 ring-violet-200/50 shadow-2xl pointer-events-auto"
             >
               <header className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-gradient-to-r from-violet-50/80 via-purple-50/60 to-violet-50/80 backdrop-blur-sm border-b border-violet-100/60">
                 <h3 className="text-lg font-extrabold text-slate-900">Tạo lịch hẹn</h3>
@@ -246,12 +336,13 @@ export default function CreateDrawer({
                     Khoa
                     <input
                       name="department"
-                      value={selectedDept}
+                      value={selectedDeptName}
                       readOnly
                       placeholder={deptLoading ? "Đang tải..." : "Chọn khoa..."}
                       onClick={() => setShowDeptSelect(true)}
                       className="mt-1.5 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-violet-500 outline-none bg-white shadow-sm transition cursor-pointer hover:bg-violet-50"
                     />
+                     <input type="hidden" name="deptCode" value={selectedDeptCode} />
                   </label>
 
                   <label className="text-sm font-semibold text-slate-700">
@@ -261,14 +352,14 @@ export default function CreateDrawer({
                       value={selectedDoctor}
                       readOnly
                       placeholder={
-                        selectedDept
+                        selectedDeptCode
                           ? docLoading
                             ? "Đang tải..."
                             : "Chọn bác sĩ..."
                           : "Chọn khoa trước"
                       }
-                      onClick={() => selectedDept && setShowDoctorSelect(true)}
-                      disabled={!selectedDept}
+                      onClick={() => selectedDeptCode && setShowDoctorSelect(true)}
+                      disabled={!selectedDeptCode}
                       className="mt-1.5 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-violet-500 outline-none bg-white shadow-sm transition cursor-pointer hover:bg-violet-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </label>
@@ -301,17 +392,28 @@ export default function CreateDrawer({
                     {lastVisit ? (
                       <div className="mt-2 grid md:grid-cols-2 gap-2 text-sm">
                         <div>
-                          <b>Bệnh nhân:</b> {lastVisit.patient}
+                          <b>Bệnh nhân:</b> {""}
+                          {lastVisit.patientName ||
+                            lastVisit.patient ||
+                            <i className="text-slate-400">—</i>}
                         </div>
                         <div>
                           <b>Mã BN:</b>{" "}
-                          {lastVisit.code || <i className="text-slate-400">—</i>}
+                          {lastVisit.patientCode ||
+                            lastVisit.code ||
+                            <i className="text-slate-400">—</i>}
                         </div>
                         <div>
-                          <b>Bác sĩ:</b> {lastVisit.doctor || "—"}
+                        <b>Bác sĩ:</b>{" "}
+                          {lastVisit.doctorName ||
+                            lastVisit.doctor ||
+                            <i className="text-slate-400">—</i>}
                         </div>
                         <div>
-                          <b>Khoa:</b> {lastVisit.dept || "—"}
+                        <b>Khoa:</b>{" "}
+                          {lastVisit.deptName ||
+                            lastVisit.dept ||
+                            <i className="text-slate-400">—</i>}
                         </div>
                         <div className="md:col-span-2 max-w-[1000px] break-words">
                           <b>Ghi chú:</b>{" "}
@@ -320,8 +422,7 @@ export default function CreateDrawer({
                       </div>
                     ) : (
                       <div className="mt-2 text-sm text-slate-600">
-                        Không tìm thấy bản ghi gần đây. Vui lòng nhập <b>Mã BN</b>{" "}
-                        hoặc kiểm tra đúng <b>Họ tên</b>.
+                        Không tìm thấy bản ghi gần đây. Vui lòng tạo lịch hẹn từ danh sách bệnh nhân và đảm bảo <b>Mã BN</b>{" "}đã tồn tại!
                       </div>
                     )}
                   </div>
@@ -343,7 +444,13 @@ export default function CreateDrawer({
                     whileTap={{ scale: 0.98 }}
                     className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 text-white font-semibold shadow-md hover:shadow-lg transition"
                   >
-                    Lưu lịch hẹn
+                    {isLoading && (
+                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    {isLoading ? "Đang xử lý..." : "Lưu lịch hẹn"}
                   </motion.button>
                 </div>
               </form>
@@ -375,19 +482,20 @@ export default function CreateDrawer({
                     </button>
                   </header>
 
-                  <div className="p-6 overflow-y-auto max-h-[60vh]">
+                  <div className="p-6 overflow-y-auto scrollbar-none max-h-[60vh]">
                     <div className="space-y-2">
                       {(departments || []).map((dept) => (
                         <motion.button
-                          key={dept.id || dept.name}
+                        key={dept.id || dept.MaKhoa || dept.name}
+                          
                           whileHover={{ scale: 1.01 }}
                           whileTap={{ scale: 0.99 }}
-                          onClick={() => handleDeptSelect(dept.name)}
+                          onClick={() => handleDeptSelect(dept)}
                           className="w-full rounded-xl p-3 bg-white ring-1 ring-slate-200 hover:ring-violet-300 hover:bg-violet-50/50 transition text-left"
                         >
                           <div className="font-semibold text-slate-900">{dept.name}</div>
                           <div className="text-xs text-slate-500 mt-0.5">
-                            {(dept.rooms || []).length} phòng • {(dept.doctors || []).length} bác sĩ
+                          {(dept.totalRooms ?? 0)} phòng • {(dept.activeDoctors ?? 0)} bác sĩ
                           </div>
                         </motion.button>
                       ))}
@@ -413,7 +521,7 @@ export default function CreateDrawer({
                   className="bg-white rounded-2xl shadow-2xl ring-1 ring-violet-200 max-w-4xl w-full max-h-[80vh] overflow-hidden"
                 >
                   <header className="flex items-center justify-between px-6 py-4 bg-violet-50 border-b border-violet-100">
-                    <h3 className="font-bold text-slate-900">Chọn bác sĩ ({selectedDept || "—"})</h3>
+                    <h3 className="font-bold text-slate-900">Chọn bác sĩ ({selectedDeptName  || "—"})</h3>
                     <button
                       type="button"
                       onClick={() => setShowDoctorSelect(false)}
@@ -423,7 +531,7 @@ export default function CreateDrawer({
                     </button>
                   </header>
 
-                  <div className="p-6 overflow-y-auto max-h-[calc(80vh-73px)]">
+                  <div className="p-6 overflow-y-auto scrollbar-none max-h-[calc(80vh-73px)]">
                     <div className="rounded-xl ring-1 ring-slate-200 overflow-hidden">
                       <table className="min-w-full text-sm">
                         <thead className="bg-violet-50">
@@ -477,7 +585,7 @@ export default function CreateDrawer({
                           {availableDoctors.length === 0 && (
                             <tr>
                               <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                                {selectedDept ? "Không có dữ liệu bác sĩ" : "Chưa chọn khoa"}
+                                {selectedDeptCode ? "Không có dữ liệu bác sĩ" : "Chưa chọn khoa"}
                               </td>
                             </tr>
                           )}

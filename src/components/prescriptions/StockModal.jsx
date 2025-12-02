@@ -226,7 +226,6 @@ export default function StockModal({ open, item, onClose, onSave }) {
                   >
                     <option value="hoat_dong">Hoạt động</option>
                     <option value="tam_dung">Tạm dừng</option>
-                    <option value="het_han">Hết hạn</option>
                   </select>
                 </label>
               </div>

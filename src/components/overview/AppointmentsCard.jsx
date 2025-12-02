@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from "framer-motion";
-import { Card, Badge, Empty } from "../ui/Supports.jsx";
+import { Card, Badge } from "../ui/Supports.jsx";
 
 export default function AppointmentsCard({
   rows = [],
@@ -15,14 +15,7 @@ export default function AppointmentsCard({
       ariaLabel="Lịch hẹn sắp tới"
       className="h-full"
     >
-      {loading && <div className="skel h-36" />}
-      {error && <div className="text-rose-600">{error}</div>}
-      {!loading && !rows.length && (
-        <Empty
-          title="Chưa có lịch hẹn"
-          subtitle="Bạn có thể tạo lịch hẹn mới"
-        />
-      )}
+     
 
       <div className={`flex flex-col gap-2 p-1 ${maxBodyClass}`}>
         {rows.map((r, i) => (
@@ -50,6 +43,7 @@ export default function AppointmentsCard({
           </motion.div>
         ))}
       </div>
+     
     </Card>
   );
 }

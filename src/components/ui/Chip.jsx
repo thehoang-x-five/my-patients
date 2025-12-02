@@ -19,9 +19,11 @@ export default function Chip({
     teal: "bg-teal-50 ring-teal-200",
     emerald: "bg-emerald-50 ring-emerald-200",
     violet: "bg-violet-50 ring-violet-200",
-    red:"bg-red-50 ring-red-200",
-    rose:"bg-rose-50 ring-rose-200",
+    red: "bg-red-50 ring-red-200",
+    rose: "bg-rose-50 ring-rose-200",
+    indigo: "bg-indigo-50 ring-indigo-200", // thêm indigo
   };
+  
   const dotMap = {
     emerald: "bg-emerald-500",
     amber: "bg-amber-500",
@@ -31,9 +33,10 @@ export default function Chip({
     rose: "bg-rose-500",
     slate: "bg-slate-400",
     violet: "bg-violet-500",
-    red:"bg-red-400",
+    red: "bg-red-400",
+    indigo: "bg-indigo-500", // thêm indigo
   };
-
+  
   // Hover shadow theo tone/dot (fallback violet để đồng bộ one-tone)
   const rgbByTone = {
     emerald: "16,185,129",
@@ -47,7 +50,9 @@ export default function Chip({
     yellow: "234,179,8",
     cyan: "6,182,212",
     red: "240,70,100",
+    indigo: "99,102,241", // thêm indigo
   };
+  
   const prefer = dot && rgbByTone[dot] ? dot : tone;
   const hoverRGB = rgbByTone[prefer] || rgbByTone.violet;
 

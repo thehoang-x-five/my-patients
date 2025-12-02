@@ -1,20 +1,22 @@
 import { motion } from "framer-motion";
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
-import React from 'react';
+import React from "react";
+
 export default function KpiCard({
   title,
   value,
   trend = 0,
   data = [],
-  color = "#10b981",
+  color = "#22d3ee", // cyan mặc định
   formatter,
 }) {
   const trendCls =
     trend > 0
-      ? "text-emerald-600"
+      ? "text-cyan-600"
       : trend < 0
-      ? "text-rose-600"
+      ? "text-rose-500"
       : "text-slate-500";
+
   const display = typeof formatter === "function" ? formatter(value) : value;
   const gid = `g-${String(title).replace(/\W+/g, "").toLowerCase()}`;
 
@@ -52,7 +54,7 @@ export default function KpiCard({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
-      className=" rounded-2xl bg-white ring-1 ring-slate-200/80 p-3 shadow-soft "
+      className="rounded-2xl bg-white ring-1 ring-slate-200/80 p-3 shadow-soft"
       aria-label={`Chỉ số ${title}`}
     >
       <div className="flex items-center justify-between">
@@ -64,7 +66,7 @@ export default function KpiCard({
 
       <div className="text-2xl font-black mt-1 tabular-nums">{display}</div>
 
-      <div className="h-10 mt-2 rounded-md bg-slate-50">
+      <div className="h-10 mt-2 rounded-md bg-cyan-50/60">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>

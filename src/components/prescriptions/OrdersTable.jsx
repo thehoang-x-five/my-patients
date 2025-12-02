@@ -4,32 +4,57 @@ import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 
 function StatusBadge({ s }) {
-  const low = (s || "").toLowerCase();
-  const isDone = /đã phát|da phat|done/.test(low);
-  const isPending = /chờ phát|cho phat|pending|đang chờ/.test(low);
-
-  const cls = isDone
-    ? "bg-green-50 text-green-700 ring-green-200"
-    : isPending
-    ? "bg-amber-50 text-amber-700 ring-amber-200"
-    : "bg-slate-50 text-slate-700 ring-slate-200";
-
-  const dot = isDone
-    ? "bg-green-500"
-    : isPending
-    ? "bg-amber-500"
-    : "bg-slate-400";
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${cls}`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-      {s || "—"}
-    </span>
-  );
-}
-
+    const raw = (s || "").toLowerCase().trim();
+  
+    let type = "other";
+    let label = s || "—";
+  
+    if (raw == "da_ke" || /đã kê|da ke/.test(raw)) {
+      type = "created";
+      label = "Đã kê";
+    } else if (
+      raw == "cho_phat" ||
+      /chờ phát|cho phat|pending|đang chờ/.test(raw)
+    ) {
+      type = "pending";
+      label = "Chờ phát";
+    } else if (
+      raw == "da_phat" ||
+      /đã phát|da phat|done/.test(raw)
+    ) {
+      type = "done";
+      label = "Đã phát";
+    } else if (raw == "huy" || /hủy|huy/.test(raw)) {
+      type = "cancelled";
+      label = "Đã huỷ";
+    }
+  
+    let cls = "bg-slate-50 text-slate-700 ring-slate-200";
+    let dot = "bg-slate-400";
+  
+    if (type === "done") {
+      cls = "bg-emerald-50 text-emerald-700 ring-emerald-200";
+      dot = "bg-emerald-500";
+    } else if (type === "pending") {
+      cls = "bg-amber-50 text-amber-700 ring-amber-200";
+      dot = "bg-amber-500";
+    } else if (type === "created") {
+      cls = "bg-sky-50 text-sky-700 ring-sky-200";
+      dot = "bg-sky-500";
+    } else if (type === "cancelled") {
+      cls = "bg-rose-50 text-rose-700 ring-rose-200";
+      dot = "bg-rose-500";
+    }
+  
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${cls}`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+        {label}
+      </span>
+    );
+  }
 const Thead = ({ children }) => (
   <thead className="text-left text-[13px] font-semibold text-slate-600 shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)]">
     <tr>{children}</tr>
@@ -92,14 +117,14 @@ export default function OrdersTable({
       <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none px-4 pb-2 pt-0">
         <table className="min-w-full table-fixed">
           <colgroup>
-            <col style={{ width: "15%" }} /> {/* Mã đơn */}
-            <col style={{ width: "15%" }} /> {/* Bệnh nhân */}
-            <col style={{ width: "13%" }} /> {/* Bác sĩ */}
-            <col style={{ width: "17%" }} /> {/* Chẩn đoán */}
-            <col style={{ width: "10%" }} /> {/* Tổng tiền */}
-            <col style={{ width: "13%" }} /> {/* Thời gian */}
-            <col style={{ width: "10%" }} /> {/* Trạng thái */}
-            <col style={{ width: "7%" }} /> {/* Thao tác */}
+            <col style={{ width: "15%" }} /> 
+            <col style={{ width: "15%" }} /> 
+            <col style={{ width: "13%" }} /> 
+            <col style={{ width: "17%" }} />
+            <col style={{ width: "10%" }} /> 
+            <col style={{ width: "13%" }} /> 
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "7%" }} /> 
           </colgroup>
 
           <Thead>
@@ -120,7 +145,7 @@ export default function OrdersTable({
                   colSpan={8}
                   className="px-3 py-10 text-center text-slate-500"
                 >
-                  Đang tải danh sách đơn thuốc…
+                 Không có bản ghi phù hợp.
                 </td>
               </tr>
             ) : !items.length ? (
@@ -129,7 +154,7 @@ export default function OrdersTable({
                   colSpan={8}
                   className="px-3 py-10 text-center text-slate-500"
                 >
-                  Không có đơn thuốc phù hợp.
+                 Không có bản ghi phù hợp.
                 </td>
               </tr>
             ) : (

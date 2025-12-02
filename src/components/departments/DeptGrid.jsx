@@ -15,7 +15,7 @@ export default function DeptGrid({ items = [], onOpenDetail, onOpenSchedule, tab
 
   if (!filteredItems.length) {
     return (
-      <section className="card p-6 m-1 border-0 ring-1 ring-slate-200/80 text-slate-500">
+      <section className=" h-full  rounded-2xl bg-white ring-1 ring-slate-200/60 text-sm text-slate-500 min-h-[320px] flex items-center justify-center">
         Không tìm thấy phòng phù hợp.
       </section>
     );

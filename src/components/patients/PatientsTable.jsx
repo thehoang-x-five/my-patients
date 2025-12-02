@@ -5,17 +5,15 @@ import Button from "../ui/Button.jsx";
 
 import {
   useExamTemplates,
-  useAddTransaction,
   STATUSES,
-  useUpdatePatient,
+  useUpdatePatientStatus,
+  mapTodayStatusLabel,useMarkServiceDispatched,
+  useMarkServiceDone,
+  useMarkWaitDoctorReview,
 } from "../../api/patients.js";
 
 import { useEnqueueService, useReturnToDoctor } from "../../api/queue.js";
-import {
-  useMarkServiceDispatched,
-  useMarkServiceDone,
-  useMarkWaitDoctorReview,
-} from "../../api/patientFlow.js";
+
 
 /* ===== Helpers normalize theo ERD ===== */
 function getAccount(p) {
@@ -26,8 +24,10 @@ function getAccount(p) {
     ""
   );
 }
-function getTodayStatus(p) {
+function getTodayStatusCode(p) {
   return (
+    p?.trang_thai_hom_nay_code ??
+    p?.statusCode ??
     p?.trang_thai_hom_nay ??
     p?.todayStatus ??
     p?.status ??
@@ -35,11 +35,7 @@ function getTodayStatus(p) {
   );
 }
 function getStatusDate(p) {
-  return (
-    p?.ngay_trang_thai ??
-    p?.statusDate ??
-    ""
-  );
+  return p?.ngay_trang_thai ?? p?.statusDate ?? "";
 }
 function getVitals(p) {
   return p?.sinh_hieu ?? p?.vitals ?? "";
@@ -47,7 +43,8 @@ function getVitals(p) {
 
 /* ===== UI helpers ===== */
 function StatusBadge({ s }) {
-  const low = (s || "").toLowerCase();
+  const label = mapTodayStatusLabel(s);
+  const low = (label || "").toLowerCase();
   const cls =
     /hoàn thành/.test(low)
       ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
@@ -70,7 +67,7 @@ function StatusBadge({ s }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${cls}`}>
       <i className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-      {s || "—"}
+      {label || "—"}
     </span>
   );
 }
@@ -192,7 +189,7 @@ export default function PatientsTable({
   const svcDispatched = useMarkServiceDispatched();
   const svcDone = useMarkServiceDone();
   const svcWaitReview = useMarkWaitDoctorReview();
-  const updatePatient = useUpdatePatient();
+  const updatePatientStatus = useUpdatePatientStatus();
 
   const computeServiceExamFee = useMemo(() => {
     const byId = Object.fromEntries((examTemplates || []).map((t) => [t.id, t]));
@@ -208,13 +205,9 @@ export default function PatientsTable({
     if (!p) return;
     const id = p.id ?? p.pid;
     if (!id) return;
-    const today = new Date().toISOString().slice(0, 10);
-    updatePatient.mutate({
+    updatePatientStatus.mutate({
       id,
-      patch: {
-        trang_thai_hom_nay: STATUSES.WAIT_INTAKE,
-        ngay_trang_thai: today,
-      },
+      status: STATUSES.WAIT_INTAKE,
     });
   };
 
@@ -250,58 +243,49 @@ export default function PatientsTable({
 
   function handleReturnToDoctor(p) {
     const pid = p.id ?? p.pid;
-    const fromDoctor = p?.serviceOrder?.fromDoctor || p.doctor || "Bác sĩ phụ trách";
-
+    if (!pid) return;
+  
+    const fromDoctor =
+      p?.serviceOrder?.fromDoctor || p.doctor || "Bác sĩ phụ trách";
+  
+    // cập nhật flow dịch vụ
     svcDone.mutate({ pid });
     svcWaitReview.mutate({ pid });
-
+  
+    // ĐẨY VỀ HÀNG ĐỢI BÁC SĨ với pid đúng
     returnToDoctorMut.mutate({
+      pid,
       name: p.name,
       dept: "Phòng khám",
       doctor: fromDoctor,
       note: "Đã có kết quả dịch vụ",
     });
   }
+  function handleIntakeSmart(p) {
+    const status = String(getTodayStatusCode(p) || "").toLowerCase();
+    
+    // Dựa hoàn toàn vào Status Code từ API
+    const isServiceWait = 
+        status === STATUSES.WAIT_INTAKE_SVC || 
+        status === STATUSES.WAIT_EXAM_SVC;
 
+    // Chỉ mở modal, truyền action 'intake'. 
+    // PatientModal sẽ gọi API lấy chi tiết nếu cần thiết.
+    onAction?.("intake", p);
+}
   // Click “Lập phiếu khám” — logic DV / thường
   function handleIntakeSmart(p) {
-    const status = String(getTodayStatus(p) || "").toLowerCase();
-    const service = p.serviceOrder;
-    const hasServiceOrder =
-      !!service && Array.isArray(service.items) && service.items.length > 0;
-    const notDispatched = !service?.dispatched;
+    const status = String(getTodayStatusCode(p) || "").toLowerCase();
+    
+    // Dựa hoàn toàn vào Status Code từ API
+    const isServiceWait = 
+        status === STATUSES.WAIT_INTAKE_SVC || 
+        status === STATUSES.WAIT_EXAM_SVC;
 
-    const isServiceIntakeStatus = /chờ tiếp nhận \(dịch vụ\)/i.test(status);
-    const isServiceDispatchable =
-      /chờ khám \(dịch vụ\)/i.test(status) || (hasServiceOrder && notDispatched);
-
-    if (isServiceIntakeStatus) {
-      onAction?.("intake", p);
-      return;
-    }
-
-    if (isServiceDispatchable) {
-      const pid = p.id ?? p.pid;
-      const fee = computeServiceExamFee() || 0;
-      if (fee > 0) {
-        addTxnMut.mutate({
-          pid,
-          data: {
-            date: new Date().toISOString().slice(0, 10),
-            item: "Phí khám dịch vụ",
-            amount: fee,
-            status: "Đã thu",
-            ref: `FEE-DV-${Date.now()}`,
-          },
-        });
-      }
-      handleSendService(p);
-      return;
-    }
-
-    // intake bình thường
+    // Chỉ mở modal, truyền action 'intake'. 
+    // PatientModal sẽ gọi API lấy chi tiết nếu cần thiết.
     onAction?.("intake", p);
-  }
+}
 
   return (
     <section
@@ -349,7 +333,7 @@ export default function PatientsTable({
               </tr>
             ) : (
               items.map((p, i) => {
-                const status = getTodayStatus(p) || "";
+                const statusCode = getTodayStatusCode(p) || "";
                 const account = getAccount(p) || "";
                 const statusDate = getStatusDate(p);
 
@@ -359,11 +343,14 @@ export default function PatientsTable({
                 const accountActive = /hoat_dong|hoạt động|active|1/.test(
                   String(account).toLowerCase()
                 );
-                const hasTodayStatus = !!status && !!isToday;
+                const hasTodayStatus = !!statusCode && !!isToday;
 
-                const lowStatus = String(status).toLowerCase();
-                const isWaitIntake = /chờ tiếp nhận/.test(lowStatus);
-                const isWaitProc = /chờ xử lý/.test(lowStatus);
+                const isWaitIntake =
+                  statusCode === STATUSES.WAIT_INTAKE ||
+                  statusCode === STATUSES.WAIT_INTAKE_SVC;
+                const isWaitProc =
+                  statusCode === STATUSES.WAIT_PROC ||
+                  statusCode === STATUSES.WAIT_PROC_SVC;
 
                 const vitals = getVitals(p);
 
@@ -466,7 +453,7 @@ export default function PatientsTable({
 
                         {hasTodayStatus ? (
                           <div className="flex items-center gap-2">
-                            <StatusBadge s={status} />
+                            <StatusBadge s={statusCode} />
                             {statusDate && (
                               <span className="text-[11px] text-slate-500 tabular-nums">
                                 {String(statusDate).slice(0, 10)}

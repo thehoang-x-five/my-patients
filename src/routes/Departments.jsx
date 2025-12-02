@@ -1,30 +1,83 @@
 // src/pages/Departments.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
+
 import DeptToolbar from "../components/departments/DeptToolbar.jsx";
 import DeptGrid from "../components/departments/DeptGrid.jsx";
 import DeptModal from "../components/departments/DeptModal.jsx";
 import ScheduleModal from "../components/departments/ScheduleModal.jsx";
-import { WEEK_TEMPLATE } from "../data/departments.js";
-import { useDepartments, useDutyByRoom, subscribeDepartments } from "../api/departments.js";
-import { useUIStore } from "../components/stores/uiStore.js";
+import DeptFilterPopover from "../components/departments/DeptFilterPopover.jsx";
+
+import {
+  useDepartmentRooms,
+  useDutyByRoom,
+} from "../api/departments.js";
+import { useUIStore } from "../components/stores/appStore.js";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
+// Không dùng data/departments.js nữa, define local
+const WEEK_TEMPLATE = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
 const dayKeyToday = () => {
-  const map = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const map = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const k = map[new Date().getDay()];
   return WEEK_TEMPLATE.includes(k) ? k : "Mon";
 };
 
 function decorateRow(d) {
   const status = d.status ?? (d.room?.status ? "active" : "inactive");
-  const waitingPatients = status === "inactive" ? 0 : (d.waitingPatients || 0);
-  return { ...d, status, waitingPatients };
+  const raw = d._raw || {};
+
+  const waitingPatients =
+    status === "inactive"
+      ? 0
+      : d.waitingPatients ??
+        raw.DangCho ??
+        raw.dangCho ??
+        raw.SoBenhNhanDangCho ??
+        raw.soBenhNhanDangCho ??
+        0;
+
+  const examinedPatients =
+    d.examinedPatients ??
+    d.doneToday ??
+    raw.DaHoanThanh ??
+    raw.daHoanThanh ??
+    raw.SoBenhNhanDaKhamHomNay ??
+    raw.soBenhNhanDaKhamHomNay ??
+    0;
+
+  const totalToday =
+    d.totalToday ??
+    raw.TongHomNay ??
+    raw.tongHomNay ??
+    waitingPatients + examinedPatients;
+
+  const deptName =
+    d.deptName ||
+    (d.dept && (d.dept.name || d.dept.tenKhoa || d.dept.ten_khoa)) ||
+    d.khoaName ||
+    d.name ||
+    "";
+
+  const short =
+    (deptName || "").trim().charAt(0).toUpperCase() || "P";
+
+  return {
+    ...d,
+    status,
+    waitingPatients,
+    examinedPatients,
+    totalToday,
+    short,
+  };
 }
+
+
 
 // helper để escape CSS attribute selector
 function safeCssEscape(v) {
@@ -32,6 +85,142 @@ function safeCssEscape(v) {
   // @ts-ignore
   if (typeof CSS !== "undefined" && CSS.escape) return CSS.escape(s);
   return s.replace(/[^a-zA-Z0-9_\-]/g, "\\$&");
+}
+function buildWeekDaysFromDuty(list) {
+  if (!Array.isArray(list) || list.length === 0) return null;
+
+  const toDayKey = (value) => {
+    if (!value) return null;
+
+    if (value instanceof Date) {
+      const map = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      return map[value.getDay()];
+    }
+
+    const s = String(value).trim().toLowerCase();
+    if (!s) return null;
+
+    // Vietnamese "Thứ 2..7", "CN" or english day names
+    if (/^mon/.test(s) || /^th(?:ứ|u)\s*2/.test(s)) return "Mon";
+    if (/^tue/.test(s) || /^th(?:ứ|u)\s*3/.test(s)) return "Tue";
+    if (/^wed/.test(s) || /^th(?:ứ|u)\s*4/.test(s)) return "Wed";
+    if (/^thu(?!r)/.test(s) || /^th(?:ứ|u)\s*5/.test(s)) return "Thu";
+    if (/^fri/.test(s) || /^th(?:ứ|u)\s*6/.test(s)) return "Fri";
+    if (/^sat/.test(s) || /^th(?:ứ|u)\s*7/.test(s)) return "Sat";
+    if (/^sun/.test(s) || /^cn/.test(s)) return "Sun";
+
+    // yyyy-MM-dd
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      const dt = new Date(s);
+      if (!Number.isNaN(dt.getTime())) {
+        const map = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        return map[dt.getDay()];
+      }
+    }
+
+    return null;
+  };
+
+  const result = { fixedDoctor: null };
+
+  for (const raw of list) {
+    const dto = raw || {};
+
+    const dayRaw =
+      dto.DayOfWeek ||
+      dto.dayOfWeek ||
+      dto.Thu ||
+      dto.thu ||
+      dto.Day ||
+      dto.day ||
+      dto.NgayTruc ||
+      dto.ngayTruc ||
+      dto.date ||
+      dto.ngay;
+
+    const key = toDayKey(dayRaw) || "Mon";
+
+    const nurse =
+      dto.NurseName ||
+      dto.nurseName ||
+      dto.TenDieuDuong ||
+      dto.tenDieuDuong ||
+      dto.DieuDuongTruc ||
+      dto.dieuDuongTruc ||
+      dto.DieuDuong ||
+      dto.dieuDuong ||
+      dto.nurse ||
+      "";
+
+    const shift =
+      dto.CaTruc ||
+      dto.caTruc ||
+      dto.ca_truc ||
+      dto.Shift ||
+      dto.shift ||
+      "";
+
+    const start =
+      dto.GioBatDau ||
+      dto.gioBatDau ||
+      dto.gio_bat_dau ||
+      dto.StartTime ||
+      dto.startTime ||
+      "";
+
+    const end =
+      dto.GioKetThuc ||
+      dto.gioKetThuc ||
+      dto.gio_ket_thuc ||
+      dto.EndTime ||
+      dto.endTime ||
+      "";
+
+    const doctor =
+      dto.BacSi ||
+      dto.bacSi ||
+      dto.TenBacSi ||
+      dto.tenBacSi ||
+      dto.DoctorName ||
+      dto.doctorName ||
+      dto.doctor ||
+      "";
+
+    if (doctor && !result.fixedDoctor) {
+      result.fixedDoctor = doctor;
+    }
+
+    const slot = {
+      nurse: nurse || "—",
+      ca_truc: shift || "—",
+      gio_bat_dau: start || "—",
+      gio_ket_thuc: end || "—",
+    };
+
+    if (!Array.isArray(result[key])) result[key] = [];
+    result[key].push(slot);
+  }
+
+  return result;
+}
+
+// xác định phòng CLS / DV
+function isClsRoom(r) {
+  const raw =
+    (r.room && (r.room.type || r.room.loaiPhong || r.room.loai_phong)) ||
+    r.roomType ||
+    r.loaiPhong ||
+    r.loai_phong ||
+    "";
+  const v = String(raw).toLowerCase();
+  return (
+    v.includes("cls") ||
+    v.includes("cận lâm sàng") ||
+    v.includes("can_lam_sang") ||
+    v.includes("dịch vụ") ||
+    v.includes("dich_vu") ||
+    v.includes("dv")
+  );
 }
 
 export default function Departments() {
@@ -42,23 +231,68 @@ export default function Departments() {
 
   const todayKey = dayKeyToday();
 
-  // Load departments
-  const { data: depItems = [], isLoading, error } = useDepartments();
-  const all = useMemo(() => (depItems || []).map(decorateRow), [depItems]);
+  // Load departments (RoomCardDto + DepartmentDto) từ /rooms/cards/search
+  const {
+    data: depResult,
+    isLoading,
+    error,
+  } = useDepartmentRooms();
 
-  const [tab, setTab] = useState("all");
-  const [query, setQuery] = useState("");
+  // depResult là object có .items
+  const depItems = useMemo(
+    () =>
+      depResult && Array.isArray(depResult.items)
+        ? depResult.items
+        : [],
+    [depResult]
+  );
 
-  const [detail, setDetail] = useState({ open: false, dept: null });
-  const [schedule, setSchedule] = useState({ open: false, dept: null });
+// chuẩn hóa từng phòng cho UI
+const all = useMemo(
+  () => (depItems || []).map((d) => decorateRow(d)),
+  [depItems]
+);
 
-  // realtime
-  const qc = useQueryClient();
-  useEffect(() => {
-    let off;
-    (async () => { off = await subscribeDepartments(qc); })();
-    return () => { if (typeof off === "function") off(); };
-  }, [qc]);
+  // ===== Bộ lọc (popover) =====
+  const [filters, setFilters] = useState({
+    keyword: "",
+    status: "all", // all | online | offline
+    roomType: "all", // all | ls | cls
+    sort: "none", // none | capacity_asc | capacity_desc
+  });
+
+  const filterKey = useMemo(
+    () =>
+      [
+        filters.status,
+        filters.roomType,
+        filters.sort,
+        filters.keyword.trim(),
+      ].join("|"),
+    [filters]
+  );
+
+  const filterBtnRef = useRef(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  // stats cho toolbar
+  const { totalRooms, onlineCount, offlineCount, clinicCount, clsCount } =
+    useMemo(() => {
+      const total = all.length;
+      const online = all.filter((d) => d.status === "active").length;
+      const offline = total - online;
+      const clinic = all.filter((d) => !isClsRoom(d)).length;
+      const cls = total - clinic;
+      return {
+        totalRooms: total,
+        onlineCount: online,
+        offlineCount: offline,
+        clinicCount: clinic,
+        clsCount: cls,
+      };
+    }, [all]);
+
+
 
   // ===== Highlight room by URL =====
   const { search } = useLocation();
@@ -70,53 +304,118 @@ export default function Departments() {
   const setHighlightRoomId = useUIStore((s) => s.setHighlightRoomId);
   const clearHighlightRoom = useUIStore((s) => s.clearHighlightRoom);
 
-  // set highlight when URL asks
   useEffect(() => {
     if (focus && focusRoomId) {
       setHighlightRoomId(focusRoomId);
     }
   }, [focus, focusRoomId, setHighlightRoomId]);
 
-  // scroll into view when highlighted appears in DOM
   useEffect(() => {
     if (!highlightRoomId) return;
     const sel = `[data-room-id="${safeCssEscape(highlightRoomId)}"]`;
     const el = document.querySelector(sel);
     if (el && el.scrollIntoView) {
-      try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch {}
-      // auto-clear after 5s
+      try {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+      } catch {}
       const t = setTimeout(() => clearHighlightRoom(), 5000);
       return () => clearTimeout(t);
     }
-  }, [highlightRoomId, clearHighlightRoom, all]); // re-run after data render
+  }, [highlightRoomId, clearHighlightRoom, all]);
 
   // duty when schedule modal opens
+  const [schedule, setSchedule] = useState({ open: false, dept: null });
   const dutyRoomId = schedule.open && schedule.dept ? schedule.dept.id : null;
-  const { data: weekDays } = useDutyByRoom(dutyRoomId, { enabled: !!dutyRoomId });
+  const { data: dutyRaw = [] } = useDutyByRoom(dutyRoomId, {
+    enabled: !!dutyRoomId,
+  });
+  
+  const weekDays = useMemo(
+    () => buildWeekDaysFromDuty(dutyRaw),
+    [dutyRaw]
+  );
 
-  const activeCount = useMemo(() => all.filter((d) => d.status === "active").length, [all]);
+  // modal chi tiết
+  const [detail, setDetail] = useState({ open: false, dept: null });
 
-  const searchMatch = (d, q) => {
-    if (!q) return true;
-    const s = q.toLowerCase();
+  const searchMatch = (d, kw) => {
+    if (!kw) return true;
+    const s = kw.toLowerCase();
+    const roomName =d.room?.name || d.room?.tenPhong || d.room?.ten_phong || d.room?.number;
+    const deptName = d.name || d.dept?.name || d.dept?.tenKhoa || d.dept?.ten_khoa || d.khoaName;
     return (
-      (d.room?.number || "").toLowerCase().includes(s) ||
-      (d.name || "").toLowerCase().includes(s) ||
+      (roomName || "").toLowerCase().includes(s) ||
+      (deptName || "").toLowerCase().includes(s) ||
       (d.doctorInCharge || "").toLowerCase().includes(s) ||
       (d.nurseInCharge || "").toLowerCase().includes(s)
     );
   };
 
+  // lọc + sort
   const filtered = useMemo(() => {
-    let arr = all;
-    if (tab === "active") arr = arr.filter((d) => d.status === "active");
-    if (tab === "inactive") arr = arr.filter((d) => d.status === "inactive");
-    if (query) arr = arr.filter((d) => searchMatch(d, query));
-    return arr;
-  }, [all, tab, query]);
+    let arr = [...all];
 
-  function openDetail(dept) { setDetail({ open: true, dept }); }
-  function openSchedule(dept) { setSchedule({ open: true, dept }); }
+    // trạng thái
+    if (filters.status === "online") {
+      arr = arr.filter((d) => d.status === "active");
+    } else if (filters.status === "offline") {
+      arr = arr.filter((d) => d.status === "inactive");
+    }
+
+    // loại phòng
+    if (filters.roomType === "cls") {
+      arr = arr.filter((d) => isClsRoom(d));
+    } else if (filters.roomType === "ls") {
+      arr = arr.filter((d) => !isClsRoom(d));
+    }
+
+    // keyword
+    const kw = filters.keyword.trim().toLowerCase();
+    if (kw) {
+      arr = arr.filter((d) => searchMatch(d, kw));
+    }
+
+       // sort "sức chứa" = tải phòng trong ngày
+       if (
+        filters.sort === "capacity_asc" ||
+        filters.sort === "capacity_desc"
+      ) {
+        const getCap = (x) =>
+          Number(
+            // Nếu sau này detail có sức chứa/ngày thì ưu tiên
+            x.capacityPerDay ??
+              // còn hiện tại dùng tổng lượt hôm nay trên card
+              x.totalToday ??
+              (x.waitingPatients ?? 0) + (x.examinedPatients ?? 0)
+          );
+  
+        arr = [...arr].sort((a, b) => {
+          const da = getCap(a);
+          const db = getCap(b);
+          return filters.sort === "capacity_asc" ? da - db : db - da;
+        });
+      }
+  
+
+    return arr;
+  }, [all, filters]);
+
+  function openDetail(dept) {
+    setDetail({ open: true, dept });
+  }
+
+  function openSchedule(dept) {
+    setSchedule({ open: true, dept });
+  }
+
+  const handleResetFilters = () => {
+    setFilters({
+      keyword: "",
+      status: "all", // all | online | offline
+      roomType: "all", // all | ls | cls
+      sort: "none", // none | capacity_asc | capacity_desc
+    });
+  };
 
   return (
     <motion.main
@@ -131,30 +430,34 @@ export default function Departments() {
         className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
         style={{ "--topbar-h": `${topbar}px` }}
       >
+        {/* Toolbar mới: chip Online / Offline / loại phòng + nút Lọc */}
         <DeptToolbar
-          tab={tab}
-          setTab={setTab}
-          total={all.length}
-          activeCount={activeCount}
-          query={query}
-          setQuery={setQuery}
+          totalRooms={totalRooms}
+          onlineCount={onlineCount}
+          offlineCount={offlineCount}
+          clinicCount={clinicCount}
+          clsCount={clsCount}
+          onOpenFilter={() => setFilterOpen(true)}
+          onResetFilters={handleResetFilters}
+          filterBtnRef={filterBtnRef}
         />
 
         {isLoading ? (
-          <section className="card mt-3 p-4 h-full">
-            <div className="space-y-2">
-              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skel h-24" />)}
-            </div>
+          <section className="card mt-3 p-4 h-full  rounded-2xl bg-white ring-1 ring-slate-200/60 text-sm text-slate-500 min-h-[320px] flex items-center justify-center">
+            Đang tải dữ liệu phòng khoa.
           </section>
         ) : error ? (
-          <section role="alert" className="card mt-3 p-4 ring-1 ring-red-200 bg-red-50 text-red-700">
-            Không tải được danh sách phòng. <span className="text-red-600/80 text-sm">{String(error)}</span>
+          <section
+            role="alert"
+            className="card h-full  rounded-2xl bg-white ring-1 ring-slate-200/60 text-sm text-slate-500 min-h-[320px] flex items-center justify-center"
+          >
+        
           </section>
         ) : (
           <div className="mt-2.5 flex-1 min-h-0">
             <AnimatePresence mode="wait">
               <motion.div
-                key={`${tab}-${query}`}
+                key={filterKey}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
@@ -166,7 +469,7 @@ export default function Departments() {
                     items={filtered}
                     onOpenDetail={openDetail}
                     onOpenSchedule={openSchedule}
-                    highlightId={highlightRoomId}   // NEW
+                    highlightId={highlightRoomId}
                   />
                 </div>
               </motion.div>
@@ -175,20 +478,31 @@ export default function Departments() {
         )}
       </div>
 
+      {/* Popover lọc */}
+      <DeptFilterPopover
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        anchorEl={filterBtnRef}
+        values={filters}
+        setValues={setFilters}
+      />
+
+      {/* Modal chi tiết phòng */}
       <DeptModal
         open={detail.open}
         dept={detail.dept}
         onClose={() => setDetail({ open: false, dept: null })}
       />
 
+      {/* Modal lịch trực theo phòng */}
       <ScheduleModal
-        open={schedule.open}
-        dept={schedule.dept}
-        todayDuty={weekDays ? weekDays[todayKey] : null}
-        weekDays={weekDays}
-        todayKey={todayKey}
-        onClose={() => setSchedule({ open: false, dept: null })}
-      />
+  open={schedule.open}
+  dept={schedule.dept}
+  todayDuty={weekDays ? weekDays[todayKey] : null}
+  weekDays={weekDays}
+  todayKey={todayKey}
+  onClose={() => setSchedule({ open: false, dept: null })}
+/>
     </motion.main>
   );
 }

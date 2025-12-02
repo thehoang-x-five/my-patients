@@ -2,10 +2,10 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
-import { STATUSES, ACCOUNT_STATUSES } from "../../api/patients";
+import { STATUSES, ACCOUNT_STATUSES, mapTodayStatusLabel } from "../../api/patients";
 
 const TODAY_SEG = [
-  "Tất cả",
+  "all",
   STATUSES.WAIT_INTAKE,
   STATUSES.WAIT_INTAKE_SVC,
   STATUSES.WAIT_EXAM,
@@ -13,8 +13,10 @@ const TODAY_SEG = [
   STATUSES.WAIT_PROC,
   STATUSES.WAIT_PROC_SVC,
   STATUSES.IN_EXAM,
+  STATUSES.DONE_EXAM,
   STATUSES.IN_EXAM_SVC,
   STATUSES.DONE,
+  STATUSES.CANCELLED,
 ];
 
 const ACC_LABELS = {
@@ -47,7 +49,7 @@ export default function PatientsFilterPopover({
     anchorEl && anchorEl.current ? anchorEl.current : anchorEl || null;
 
   const kw = values?.keyword ?? "";
-  const todayStatus = values?.todayStatus ?? "Tất cả";
+  const todayStatus = values?.todayStatus ?? "all";
   const accountStatus = values?.accountStatus ?? "all";
 
   // esc / click ngoài
@@ -223,6 +225,7 @@ export default function PatientsFilterPopover({
                 >
                   {TODAY_SEG.map((s) => {
                     const active = todayStatus === s;
+                    const label = s === "all" ? "Tất cả" : mapTodayStatusLabel(s) || s;
                     return (
                       <button
                         key={s}
@@ -252,7 +255,7 @@ export default function PatientsFilterPopover({
                             }}
                           />
                         )}
-                        <span className="relative">{s}</span>
+                        <span className="relative">{label}</span>
                       </button>
                     );
                   })}

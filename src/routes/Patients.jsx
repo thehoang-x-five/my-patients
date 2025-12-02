@@ -7,21 +7,24 @@ import PatientsTable from "../components/patients/PatientsTable.jsx";
 import PatientsFilterPopover from "../components/patients/PatientsFilterPopover.jsx";
 import PatientModal from "../components/patients/PatientModal.jsx";
 
-import { usePatientsList, useCreatePatient, useUpdatePatient } from "../api/patients";
-import { useUIStore } from "../components/stores/uiStore.js";
+import {
+  usePatientsList,
+  useCreatePatient,
+  useUpdatePatient,
+  useUpdatePatientStatus,
+  usePatientDetail,
+  
+  STATUSES,
+} from "../api/patients";
+import { APPT_STATUS, searchAppointmentsRaw } from "../api/appointments";
+import { searchClinicalRaw } from "../api/examination";
+
+import { useUIStore, useExamStore } from "../components/stores/appStore.js";
+
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
-// Nhãn trạng thái tham khảo (không bắt buộc)
-export const STATUSES = {
-  WAIT_INTAKE: "Chờ tiếp nhận",
-  WAIT_EXAM: "Chờ khám",
-  WAIT_PROC: "Chờ xử lý",
-  SCHEDULED_APPT: "Hẹn khám",
-  SCHEDULED_FUP: "Hẹn tái khám",
-  DONE: "Hoàn thành",
-};
-
+// Lấy chuỗi yyyy-MM-dd của hôm nay
 const todayStr = () => {
   try {
     const d = new Date();
@@ -31,15 +34,17 @@ const todayStr = () => {
   }
 };
 
-function normStatus(p) {
-  // map linh hoạt theo ERD/field thực tế
+function normStatusCode(p) {
   const todayStatus =
+    p?.trang_thai_hom_nay_code ??
+    p?.statusCode ??
     p?.trang_thai_hom_nay ??
     p?.todayStatus ??
     p?.status ??
     "";
   return String(todayStatus || "").trim();
 }
+
 function normAccount(p) {
   const v =
     p?.trang_thai_tai_khoan ??
@@ -48,20 +53,62 @@ function normAccount(p) {
     "";
   return String(v || "").trim();
 }
+
 function normStatusDate(p) {
   const v =
+    p?.NgayTrangThai ??
     p?.ngay_trang_thai ??
     p?.statusDate ??
     "";
   return String(v || "").trim();
 }
+function pickLatestAppointment(list = []) {
+  if (!Array.isArray(list) || list.length === 0) return null;
+
+  const parseTs = (item) => {
+    const d =
+      item.NgayHen ||
+      item.ngayHen ||
+      item.date ||
+      item.NgayHenKham ||
+      item.appointmentDate ||
+      "";
+    const t =
+      item.GioHen ||
+      item.gioHen ||
+      item.time ||
+      item.GioHenKham ||
+      "";
+
+    if (!d && !t) return 0;
+
+    try {
+      const day = String(d).slice(0, 10);
+      const time = String(t || "00:00").slice(0, 5);
+      return new Date(`${day}T${time}:00`).getTime();
+    } catch {
+      return 0;
+    }
+  };
+
+  return list.reduce(
+    (best, cur) => {
+      const ts = parseTs(cur);
+      if (!best || ts > best.ts) return { ts, item: cur };
+      return best;
+    },
+    null
+  )?.item;
+}
+
 
 export default function Patients() {
   useViewportVH();
+
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
-  
-  const topbar = isMobile ? 64 : isTablet ? 72 : 80; // giữ không đổi nếu bạn đang dùng
+
+  const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
   const nav = useNavigate();
   const { search } = useLocation();
@@ -70,21 +117,41 @@ export default function Patients() {
   // === Bộ lọc
   const [filter, setFilter] = useState({
     keyword: "",
-    // hôm nay (theo ERD)
-    todayStatus: "Tất cả",
-    // tài khoản
+    // status code (TrangThaiHomNay)
+    todayStatus: "all",
+    // trạng thái tài khoản
     accountStatus: "all",
-    // chỉ hôm nay (lọc ngày trạng thái == hôm nay)
+    // flag chỉ hôm nay (đang xử lý ở FE)
     todayOnly: false,
   });
-  const [viewMode, setViewMode] = useState("today");
-  const [sort, setSort] = useState("priority");
-  const [modal, setModal] = useState({ open: false, mode: "view", patient: null });
+
+  const [viewMode, setViewMode] = useState("today"); // "today" | "all"
+  const [sort, setSort] = useState("priority"); // "priority" | "name" | "date"
+  const [modal, setModal] = useState({
+    open: false,
+    mode: "view", // "view" | "add" | "edit" | "exam" | "process"
+    patient: null,
+  });
+  // Khi modal mở với các mode khác "add" → load PatientDetail từ API
+  const activePid =
+    modal.open && modal.patient
+      ? modal.patient?.id ||
+        modal.patient?.pid ||
+        modal.patient?.MaBenhNhan ||
+        modal.patient?.maBenhNhan
+      : null;
+
+  const { data: patientDetail } = usePatientDetail(activePid, {
+    enabled: !!activePid && modal.mode !== "add",
+  });
+
+  const patientForModal =
+    modal.mode === "add" ? modal.patient : patientDetail || modal.patient;
+
   const [filterOpen, setFilterOpen] = useState(false);
   const filterBtnRef = useRef(null);
   const [filterAnchor, setFilterAnchor] = useState(null);
 
-  // === UI store
   const highlightPid = useUIStore((s) => s.highlightPid);
   const clearHighlight = useUIStore((s) => s.clearHighlight);
 
@@ -92,18 +159,36 @@ export default function Patients() {
   const ackFlashAdd = useUIStore((s) => s.ackFlashAdd);
 
   const patientPrefill = useUIStore((s) => s.patientPrefill);
+  const setPatientPrefill = useUIStore((s) => s.setPatientPrefill);
   const clearPatientPrefill = useUIStore((s) => s.clearPatientPrefill);
+
+  // Exam store: dùng để prefill phiếu khám
+  const setExamActive = useExamStore((s) => s.setActive);
+  const setExamPrefillAppointment = useExamStore(
+    (s) => s.setPrefillAppointment
+  );
+  const setExamCurrentClinical = useExamStore(
+    (s) => s.setCurrentClinical
+  );
+
 
   // === Tải danh sách từ API (server đã lọc theo keyword nếu backend hỗ trợ)
   const { data: items = [] } = usePatientsList({
-    keyword: filter.keyword || undefined,
-    // Giữ status server-side nếu bạn muốn, còn lại lọc ở FE
-    status: filter.todayStatus === "Tất cả" ? undefined : filter.todayStatus,
-  });
+        keyword: filter.keyword || undefined,
+        // mã TrangThaiHomNay theo API (cho_kham, cho_tiep_nhan, ...)
+        status: filter.todayStatus === "all" ? undefined : filter.todayStatus,
+        // trạng thái tài khoản: hoat_dong | khong_hoat_dong | da_xoa
+        accountStatus:
+          filter.accountStatus === "all" ? undefined : filter.accountStatus,
+        // map sang OnlyToday trong PatientSearchFilter
+        todayOnly: viewMode === "today",
+      });
+
   const { mutateAsync: createPatient } = useCreatePatient();
   const { mutateAsync: updatePatient } = useUpdatePatient();
+  const { mutateAsync: updatePatientStatus } = useUpdatePatientStatus();
 
-  // query-open modal (giữ logic cũ)
+  // === Query → tự mở modal
   useEffect(() => {
     const pid = sp.get("pid");
     const action = sp.get("action");
@@ -113,43 +198,99 @@ export default function Patients() {
 
     if (pid && focus) {
       const p = items.find((x) => x.id === pid || x.pid === pid);
-      if (p) setModal({ open: true, mode: "view", patient: p });
+      if (p) {
+        setModal({
+          open: true,
+          mode: "view",
+          patient: p,
+        });
+      }
     } else if (action === "add") {
       setModal({
         open: true,
         mode: "add",
-        patient: { id: defaultCode || "", name: defaultName || "", status: STATUSES.WAIT_INTAKE },
+        patient: {
+          id: defaultCode || "",
+          name: defaultName || "",
+          status: STATUSES.WAIT_INTAKE,
+        },
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, items]);
 
-  // auto clear highlight
+  // === Auto clear highlight sau 5s
   useEffect(() => {
     if (!highlightPid) return;
     const t = setTimeout(() => clearHighlight(), 5000);
     return () => clearTimeout(t);
   }, [highlightPid, clearHighlight]);
 
-  // flash nút + Thêm khi có prefill
-  useEffect(() => {
-    if (!flashAddAt) return;
-    const btn = document.getElementById("patients-add-btn");
-    if (btn) {
-      try { btn.focus(); } catch {}
-      btn.classList.add("flash-once");
-      const t = setTimeout(() => {
-        btn.classList.remove("flash-once");
+    // === Flash nút + Thêm khi có prefill + prefetch lịch hẹn đã check-in ===
+    useEffect(() => {
+      if (!flashAddAt) return;
+  
+      // 1. Nếu có mã bệnh nhân trong prefill -> gọi Search lịch hẹn
+      const code =
+        patientPrefill?.code ||
+        patientPrefill?.patientCode ||
+        patientPrefill?.maBenhNhan ||
+        patientPrefill?.ma_benh_nhan;
+  
+      if (code) {
+        (async () => {
+          try {
+            const today = todayStr();
+            const appts = await searchAppointmentsRaw({
+              MaBenhNhan: code,
+              TrangThai: APPT_STATUS.DA_CHECKIN,
+              FromDate: today,
+              ToDate: today,
+            });
+  
+            if (Array.isArray(appts) && appts.length > 0) {
+              const latest = pickLatestAppointment(appts);
+              setPatientPrefill({
+                ...(patientPrefill || {}),
+                latestAppointment: latest || null,
+              });
+            } else {
+              setPatientPrefill({
+                ...(patientPrefill || {}),
+                latestAppointment: null,
+              });
+            }
+          } catch (err) {
+            console.error(
+              "Không lấy được lịch hẹn đã check-in cho prefill bệnh nhân:",
+              err
+            );
+          }
+        })();
+      }
+  
+      // 2. Hiệu ứng flash nút + Thêm
+      const btn = document.getElementById("patients-add-btn");
+      if (btn) {
+        try {
+          btn.focus();
+        } catch {}
+        btn.classList.add("flash-once");
+        const t = setTimeout(() => {
+          btn.classList.remove("flash-once");
+          ackFlashAdd();
+        }, 5000);
+        return () => {
+          clearTimeout(t);
+          try {
+            btn.classList.remove("flash-once");
+          } catch {}
+        };
+      } else {
         ackFlashAdd();
-      }, 5000);
-      return () => {
-        clearTimeout(t);
-        try { btn.classList.remove("flash-once"); } catch {}
-      };
-    } else {
-      ackFlashAdd();
-    }
-  }, [flashAddAt, ackFlashAdd]);
+      }
+    }, [flashAddAt, ackFlashAdd, setPatientPrefill]);
+  
 
   // Clear prefill khi rời trang
   useEffect(() => {
@@ -159,104 +300,227 @@ export default function Patients() {
     return () => {
       window.removeEventListener("pagehide", onBeforeUnload);
       window.removeEventListener("beforeunload", onBeforeUnload);
-      clearPatientPrefill();
     };
   }, [clearPatientPrefill]);
 
-  // Lọc FE theo ERD
+  // === Lọc FE theo ERD
   const filtered = useMemo(() => {
     let arr = Array.isArray(items) ? items.slice() : [];
 
-    
+    // lọc theo trạng thái tài khoản
     if (filter.accountStatus && filter.accountStatus !== "all") {
-         const tgt = String(filter.accountStatus).toLowerCase(); // code
-         arr = arr.filter((p) => {
-           const code = String(p.trang_thai_tai_khoan || p.accountStatus || "hoat_dong").toLowerCase();
-           return code === tgt;
-         });
-       }
-
-    // today status
-    if (filter.todayStatus && filter.todayStatus !== "Tất cả") {
-      arr = arr.filter((p) => normStatus(p).toLowerCase() === filter.todayStatus.toLowerCase());
+      const tgt = String(filter.accountStatus).toLowerCase();
+      arr = arr.filter((p) => {
+        const code = String(
+          p.trang_thai_tai_khoan || p.accountStatus || "hoat_dong"
+        ).toLowerCase();
+        return code === tgt;
+      });
     }
 
-    // chỉ hôm nay
-if (viewMode === "today") {
-  const t = todayStr();
-  arr = arr.filter((p) => {
-    const d = normStatusDate(p);
-    return d ? String(d).slice(0, 10) === t : false;
-  });
-}
+    // lọc theo trạng thái hôm nay (TrangThaiHomNay)
+    if (filter.todayStatus && filter.todayStatus !== "all") {
+      arr = arr.filter(
+        (p) =>
+          normStatusCode(p).toLowerCase() ===
+          filter.todayStatus.toLowerCase()
+      );
+    }
+
+    // viewMode: chỉ lấy những BN có NgayTrangThai == hôm nay
+    if (viewMode === "today") {
+      const t = todayStr();
+      arr = arr.filter((p) => {
+        const d = normStatusDate(p);
+        return d ? String(d).slice(0, 10) === t : false;
+      });
+    }
 
     // keyword (fallback ở FE nếu BE chưa lọc)
     const kw = (filter.keyword || "").trim().toLowerCase();
     if (kw) {
       arr = arr.filter((p) => {
         const bag = [
-          p?.id, p?.pid, p?.name, p?.ho_ten,
-          p?.phone, p?.dien_thoai, p?.email,
+          p?.id,
+          p?.pid,
+          p?.name,
+          p?.ho_ten,
+          p?.phone,
+          p?.dien_thoai,
+          p?.email,
         ].map((x) => String(x || "").toLowerCase());
         return bag.some((s) => s.includes(kw));
       });
     }
-// sort
-const normName = (p) =>
-  (p.name || p.ho_ten || "").toString().toLowerCase().trim();
 
-const priorityScore = (p) => {
-  const s = normStatus(p).toLowerCase();
-  if (/chờ tiếp nhận/.test(s)) return 50;
-  if (/chờ khám/.test(s)) return 40;
-  if (/chờ xử lý/.test(s)) return 30;
-  if (/đang khám/.test(s)) return 20;
-  if (/hoàn thành/.test(s)) return 10;
-  if (/hủy|huỷ/.test(s)) return 0;
-  return 5;
-};
+    // sort
+    const normName = (p) =>
+      (p.name || p.ho_ten || "").toString().toLowerCase().trim();
 
-if (sort === "name") {
-  arr.sort((a, b) => normName(a).localeCompare(normName(b), "vi"));
-} else if (sort === "date") {
-  arr.sort((a, b) => {
-    const da = normStatusDate(a) || "";
-    const db = normStatusDate(b) || "";
-    return String(db).localeCompare(String(da));
-  });
-} else {
-  arr.sort((a, b) => priorityScore(b) - priorityScore(a));
-}
+    const priorityScore = (p) => {
+      const s = normStatusCode(p);
+      if (s === STATUSES.WAIT_INTAKE || s === STATUSES.WAIT_INTAKE_SVC) {
+        return 50;
+      }
+      if (s === STATUSES.WAIT_EXAM || s === STATUSES.WAIT_EXAM_SVC) {
+        return 40;
+      }
+      if (s === STATUSES.WAIT_PROC || s === STATUSES.WAIT_PROC_SVC) {
+        return 30;
+      }
+      if (s === STATUSES.IN_EXAM || s === STATUSES.IN_EXAM_SVC) {
+        return 20;
+      }
+      if (s === STATUSES.DONE || s === STATUSES.DONE_EXAM) {
+        return 10;
+      }
+      if (s === STATUSES.CANCELLED) {
+        return 0;
+      }
+      return 5;
+    };
+
+    if (sort === "name") {
+      arr.sort((a, b) => normName(a).localeCompare(normName(b), "vi"));
+    } else if (sort === "date") {
+      arr.sort((a, b) => {
+        const da = normStatusDate(a) || "";
+        const db = normStatusDate(b) || "";
+        return String(db).localeCompare(String(da));
+      });
+    } else {
+      arr.sort((a, b) => priorityScore(b) - priorityScore(a));
+    }
+
     return arr;
   }, [items, filter, viewMode, sort]);
 
+  // === Đếm số lượng theo trạng thái hôm nay
   const counts = useMemo(() => {
-    const s = (p) => normStatus(p).toLowerCase();
-    const is = (p, labels) => labels.some((l) => s(p) === l.toLowerCase());
-  
-    const done = items.filter((p) => s(p) === "hoàn thành").length;
-    const waitExam = items.filter((p) => is(p, ["Chờ khám", "Chờ khám (dịch vụ)"])).length;
-    const waitProc = items.filter((p) => is(p, ["Chờ xử lý", "Chờ xử lý (dịch vụ)"])).length;
-    const waitIntake = items.filter((p) => is(p, ["Chờ tiếp nhận", "Chờ tiếp nhận (dịch vụ)"])).length;
-    const cancelled = items.filter((p) => /hủy|huỷ/.test(s(p))).length;
-    const inExam = items.filter((p) => is(p, ["Đang khám", "Đang khám (dịch vụ)"])).length;
-  
+    const s = (p) => normStatusCode(p);
+
+    const done = items.filter(
+      (p) => s(p) === STATUSES.DONE || s(p) === STATUSES.DONE_EXAM
+    ).length;
+
+    const waitExam = items.filter(
+      (p) => s(p) === STATUSES.WAIT_EXAM || s(p) === STATUSES.WAIT_EXAM_SVC
+    ).length;
+
+    const waitProc = items.filter(
+      (p) =>
+        s(p) === STATUSES.WAIT_PROC || s(p) === STATUSES.WAIT_PROC_SVC
+    ).length;
+
+    const waitIntake = items.filter(
+      (p) =>
+        s(p) === STATUSES.WAIT_INTAKE || s(p) === STATUSES.WAIT_INTAKE_SVC
+    ).length;
+
+    const cancelled = items.filter(
+      (p) => s(p) === STATUSES.CANCELLED
+    ).length;
+
+    const inExam = items.filter(
+      (p) => s(p) === STATUSES.IN_EXAM || s(p) === STATUSES.IN_EXAM_SVC
+    ).length;
+
     return { done, waitExam, waitProc, waitIntake, cancelled, inExam };
   }, [items]);
-  
 
-  function handleAction(type, p) {
+  async function handleAction(type, p) {
     clearPatientPrefill();
+    if (!p) return;
+
+    const pid =
+      p.id ||
+      p.maBenhNhan ||
+      p.ma_benh_nhan ||
+      p.MaBenhNhan ||
+      p.pid;
+
     if (type === "view") {
       setModal({ open: true, mode: "view", patient: p });
-    } else if (type === "edit") {
-      setModal({ open: true, mode: "edit", patient: p });
-    } else if (type === "intake") {
-      setModal({ open: true, mode: "exam", patient: p });
-    } else if (type === "process") {
-      setModal({ open: true, mode: "process", patient: p });
+      return;
     }
+
+    if (type === "edit") {
+      setModal({ open: true, mode: "edit", patient: p });
+      return;
+    }
+
+    if (type === "intake") {
+      // Mở tab phiếu khám (Exam)
+      setModal({ open: true, mode: "exam", patient: p });
+      setExamActive(p);
+
+      if (pid) {
+        const today = todayStr();
+
+        // 1. Search lịch hẹn đã check-in mới nhất hôm nay
+        try {
+          const appts = await searchAppointmentsRaw({
+            MaBenhNhan: pid,
+            TrangThai: APPT_STATUS.DA_CHECKIN,
+            FromDate: today,
+            ToDate: today,
+          });
+
+          if (Array.isArray(appts) && appts.length > 0) {
+            const latest = pickLatestAppointment(appts);
+            setExamPrefillAppointment(latest || null);
+          } else {
+            setExamPrefillAppointment(null);
+          }
+        } catch (err) {
+          console.error("Không lấy được lịch hẹn đã check-in:", err);
+        }
+
+        // 2. Search phiếu khám LS đang thực hiện (dang_thuc_hien)
+        try {
+          const clinicalList = await searchClinicalRaw({
+            MaBenhNhan: pid,
+            TrangThai: "dang_thuc_hien",
+          });
+
+          if (Array.isArray(clinicalList) && clinicalList.length > 0) {
+            // lưu nguyên list, tab Phiếu sau này sẽ tự xử lý
+            setExamCurrentClinical(clinicalList);
+          } else {
+            setExamCurrentClinical(null);
+          }
+        } catch (err) {
+          console.error("Không lấy được phiếu khám đang thực hiện:", err);
+        }
+      }
+
+      return;
+    }
+// ===== XỬ LÝ & CHẨN ĐOÁN =====
+if (type === "process") {
+  // Mở modal xử lý & chẩn đoán (không qua store)
+  setModal({ open: true, mode: "process", patient: p });
+
+  if (!pid) return;
+
+  try {
+    // GỌI API Lấy chẩn đoán cuối
+    // GET /api/clinical/{maPhieuKham}/final-diagnosis
+    // backend sẽ hiểu pid là mã bệnh nhân theo yêu cầu của anh
+    await getFinalDiagnosis(pid);
+
+    // Chưa cần lưu đâu cả, tab xử lý & chẩn đoán sẽ làm sau
+    // Có thể tạm console.log nếu muốn debug:
+    // console.log("Final diagnosis:", dx);
+  } catch (err) {
+    console.error("Lỗi khi gọi lấy chẩn đoán cuối:", err);
   }
+
+  return;
+}
+  }
+
+
   return (
     <motion.main
       initial={{ opacity: 0, y: 8 }}
@@ -265,14 +529,44 @@ if (sort === "name") {
       className="px-4 pb-3 pt-1 min-h-0 overflow-hidden"
       role="main"
     >
-
-      <div className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
-        style={{ "--topbar-h": `${topbar}px` }}>
+      <div
+        className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
+        style={{ "--topbar-h": `${topbar}px` }}
+      >
         <PatientsToolbar
           counts={counts}
           viewMode={viewMode}
           onChangeViewMode={setViewMode}
-          onAdd={() => setModal({ open: true, mode: "add", patient: patientPrefill ? { name: patientPrefill?.name || "" } : {} })}
+          onAdd={() => {
+            const latest = patientPrefill?.latestAppointment;
+        
+            setModal({
+              open: true,
+              mode: "add",
+              patient: {
+                // Tên ưu tiên:
+                // 1. từ prefill (check-in truyền qua)
+                // 2. nếu không có thì lấy từ lịch hẹn: TenBenhNhan / HoTen
+                name:
+                  patientPrefill?.name ||
+                  latest?.TenBenhNhan ||
+                  latest?.HoTen ||
+                  "",
+        
+               
+        
+                // SĐT nếu BE có trả:
+                phone:
+                  patientPrefill?.phone ||
+                  latest?.SoDienThoai ||
+                  latest?.DienThoai ||
+                  "",
+        
+                // giữ luôn bản ghi lịch hẹn để tab tạo sau này muốn lấy thêm
+                latestAppointment: latest || null,
+              },
+            });
+          }}
           onOpenFilter={() => {
             setFilterAnchor(filterBtnRef.current);
             setFilterOpen(true);
@@ -281,12 +575,15 @@ if (sort === "name") {
             setFilter({
               keyword: "",
               accountStatus: "all",
-              todayStatus: "Tất cả",
+              todayStatus: "all",
+              todayOnly: false,
             })
           }
+          sort={sort}
+          onChangeSort={setSort}
           filterBtnRef={filterBtnRef}
         />
-  
+
         <div className="mt-0 flex-1 min-h-0">
           <PatientsTable
             items={filtered}
@@ -296,43 +593,98 @@ if (sort === "name") {
           />
         </div>
       </div>
-  
-      <PatientsFilterPopover
-        open={filterOpen}
-        onClose={() => setFilterOpen(false)}
-        values={filter}
-        setValues={(v) => setFilter((s) => ({ ...s, ...v }))}
-        anchorEl={filterAnchor || filterBtnRef}
-        sort={sort}
-        onChangeSort={setSort}
-      />
-  
-      {/* Modal BN */}
-      <AnimatePresence>
-          {modal.open && (
-            <PatientModal
-              open={modal.open}
-              mode={modal.mode}
-              patient={modal.patient}
-              onClose={() => setModal({ open: false, mode: "view", patient: null })}
-              onSave={async (data) => {
-                if (modal.mode === "add") {
-                  await createPatient(data);
-                } else {
-                  await updatePatient({ id: data?.id || data?.pid, patch: data });
-                }
-                setModal({ open: false, mode: "view", patient: null });
-              }}
-              onMutatePatient={async (patch) => {
-                const id = modal?.patient?.id || modal?.patient?.pid;
-                if (!id) return;
-                await updatePatient({ id, patch });
-              }}
-            />
-          )}
-        </AnimatePresence>
 
+      <AnimatePresence>
+        {filterOpen && (
+          <PatientsFilterPopover
+            open={filterOpen}
+            onClose={() => setFilterOpen(false)}
+            values={filter}
+            setValues={(v) =>
+              setFilter((s) => ({
+                ...s,
+                ...v,
+              }))
+            }
+            anchorEl={filterAnchor}
+            sort={sort}
+            onChangeSort={setSort}
+          />
+        )}
+
+        {modal.open && (
+          <PatientModal
+            mode={modal.mode}
+            open={modal.open}
+            patient={patientForModal}
+            onClose={() => {
+              setModal({ open: false, mode: "view", patient: null });
+      
+              // Nếu đang ở mode Add thì clear luôn prefill,
+              // trong đó có cả latestAppointment -> "giải phóng"
+              if (modal.mode === "add") {
+                clearPatientPrefill(); 
+                // hoặc nếu muốn giữ lại name/code mà chỉ xóa lịch hẹn:
+                // if (patientPrefill) {
+                //   setPatientPrefill({ ...patientPrefill, latestAppointment: null });
+                // }
+              }
+            }}
+            onSaved={(p) => {
+                       // đóng modal
+                       setModal({ open: false, mode: "view", patient: null });
+                       // điều hướng + focus vào BN vừa thao tác
+                       const pid = p?.id || p?.pid || p?.MaBenhNhan || p?.maBenhNhan;
+                       if (pid) {
+                         nav(`/patients?pid=${encodeURIComponent(pid)}`);
+                       }
+                     }}
+                     onSave={async (data) => {
+                       if (modal.mode === "add") {
+                         // createPatient (mutateAsync) trả về entity đã lưu
+                         return await createPatient(data);
+                       }
+                       // update
+                       return await updatePatient({
+                         id: data?.id || data?.pid,
+                         patch: data,
+                       });
+                     }}
+                     onMutatePatient={async (id, next) => {
+                      const pid = id || modal?.patient?.id || modal?.patient?.pid;
+                      if (!pid) return;
+                    
+                      // Cho phép:
+                      // - onMutatePatient(pid, "wait_exam")
+                      // - onMutatePatient(pid, { status: STATUSES.WAIT_EXAM, ... })
+                      let payload = null;
+                    
+                      if (typeof next === "string") {
+                        payload = { status: next };
+                      } else if (next && typeof next === "object") {
+                        const status =
+                          next.status ||
+                          next.statusCode ||
+                          next.trang_thai_tai_khoan ||
+                          next.TrangThai;
+                    
+                        payload = {
+                          ...next,
+                          ...(status ? { status } : {}),
+                        };
+                      }
+                    
+                      if (!payload || !payload.status) return;
+                    
+                      await updatePatientStatus({
+                        id: pid,
+                        ...payload,
+                      });
+                    }}
+                    
+          />
+        )}
+      </AnimatePresence>
     </motion.main>
   );
- 
 }

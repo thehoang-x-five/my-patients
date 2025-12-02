@@ -1,6 +1,9 @@
 // src/pages/Appointments.jsx
+// [FIXED 2025-11-22] Sync appointment status + check-in & queue logic with BE. UI/layout unchanged.
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import ApptToolbar from "../components/appointments/ApptToolbar.jsx";
 import ApptList from "../components/appointments/ApptList.jsx";
 import ApptCalendar from "../components/appointments/ApptCalendar.jsx";
@@ -11,14 +14,18 @@ import {
   useAppointmentsByDate,
   useCreateAppointment,
   useUpdateAppointment,
-  useCheckInAppointment,  APPT_STATUS , useAppointmentsRange
-} from "../api/appointments";
-import { useUIStore } from "../components/stores/uiStore";
+  useUpdateAppointmentStatus,
+  useCheckInAppointment,
+  APPT_STATUS,
+  useAppointmentsRange,
+  subscribeAppointments,
+} from "../api/appointments.js";
+import { useUIStore } from "../components/stores/appStore";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
 
-const RECEPTION_HOURS = { start: 6, end: 17 };
+const RECEPTION_HOURS = { start: 0, end: 24 };
 const isWithinReceptionHours = () => {
   const h = new Date().getHours();
   return h >= RECEPTION_HOURS.start && h < RECEPTION_HOURS.end;
@@ -27,14 +34,21 @@ const mm = (t) => {
   const [h, m] = (t || "00:00").split(":").map(Number);
   return h * 60 + (m || 0);
 };
+const toYMD = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 
 export default function Appointments() {
   useViewportVH();
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
+  const navigate = useNavigate();
 
-  const TODAY = new Date().toISOString().slice(0, 10);
+  const TODAY = toYMD(new Date());
   const [view, setView] = useState("list");
   const [currentTime, setCurrentTime] = useState(new Date());
   const [month, setMonth] = useState(() => {
@@ -42,16 +56,17 @@ export default function Appointments() {
     d.setDate(1);
     return d;
   });
-  // Thêm:
-const monthStartStr = useMemo(() => {
-  const d = new Date(month.getFullYear(), month.getMonth(), 1);
-  return d.toISOString().slice(0, 10);
-}, [month]);
 
-const monthEndStr = useMemo(() => {
-  const d = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-  return d.toISOString().slice(0, 10);
-}, [month]);
+  const monthStartStr = useMemo(() => {
+    const d = new Date(month.getFullYear(), month.getMonth(), 1);
+    return toYMD(d);
+  }, [month]);
+
+  const monthEndStr = useMemo(() => {
+    const d = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+    return toYMD(d);
+  }, [month]);
+
   const [panelDate, setPanelDate] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createDate, setCreateDate] = useState("");
@@ -61,50 +76,82 @@ const monthEndStr = useMemo(() => {
 
   // today list
   const { data: todayItems = [], isLoading } = useAppointmentsByDate(TODAY);
-  
-// Lịch của cả tháng hiện tại (cho calendar)
-const { data: monthItems = [] } = useAppointmentsRange(
-  monthStartStr,
-  monthEndStr,
-  { enabled: !!monthStartStr && !!monthEndStr }
-);
-const itemsByDate = useMemo(() => {
-  const map = {};
-  (monthItems || []).forEach((a) => {
-    if (!a?.date) return;
-    (map[a.date] ||= []).push(a);
-  });
-  return map;
-}, [monthItems]);
 
-  // fetch items for selected panel date on demand
-  const { data: panelItems = [] } = useAppointmentsByDate(panelDate, { enabled: !!panelDate });
+  // Chỉ dùng cho hiển thị list – ẩn các lịch đã huỷ
+  const visibleTodayItems = useMemo(
+    () => todayItems.filter((a) => a.status !== APPT_STATUS.DA_HUY),
+    [todayItems]
+  );
 
-  // reactive clock
+  // Lịch của cả tháng hiện tại (cho calendar)
+  const { data: monthItems = [] } = useAppointmentsRange(
+    monthStartStr,
+    monthEndStr,
+    { enabled: !!monthStartStr && !!monthEndStr }
+  );
+
+  const queryClient = useQueryClient();
+
+  // Realtime: lắng nghe AppointmentChanged từ SignalR
   useEffect(() => {
-    const t = setInterval(() => setCurrentTime(new Date()), 60_000);
-    return () => clearInterval(t);
-  }, []);
+    let off;
+    (async () => {
+      try {
+        off = await subscribeAppointments(queryClient);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("subscribeAppointments error", err);
+      }
+    })();
+
+    return () => {
+      if (typeof off === "function") off();
+    };
+  }, [queryClient]);
+
+  const itemsByDate = useMemo(() => {
+    const map = {};
+    (monthItems || []).forEach((a) => {
+      if (!a?.date) return;
+      if (a.status === APPT_STATUS.DA_HUY) return; // ẩn lịch đã huỷ ở Panel
+      (map[a.date] ||= []).push(a);
+    });
+    return map;
+  }, [monthItems]);
+
+  const panelItems = panelDate ? itemsByDate[panelDate] || [] : [];
 
   const counts = useMemo(
     () => ({
       today: todayItems.length,
-      pending: todayItems.filter((a) => a.status === APPT_STATUS.DANG_CHO).length,
-      confirmed: todayItems.filter((a) => a.status === APPT_STATUS.DA_XAC_NHAN).length,
-      checkedIn: todayItems.filter((a) => a.status === APPT_STATUS.DA_CHECKIN).length,
+      pending: todayItems.filter((a) => a.status === APPT_STATUS.DANG_CHO)
+        .length,
+      confirmed: todayItems.filter(
+        (a) => a.status === APPT_STATUS.DA_XAC_NHAN
+      ).length,
+      checkedIn: todayItems.filter(
+        (a) => a.status === APPT_STATUS.DA_CHECKIN
+      ).length,
       cancel: todayItems.filter((a) => a.status === APPT_STATUS.DA_HUY).length,
     }),
     [todayItems]
   );
+
+
+
   function ensureMonthVisible(ymd) {
     const d = new Date(ymd);
-    if (d.getFullYear() !== month.getFullYear() || d.getMonth() !== month.getMonth()) {
+    if (
+      d.getFullYear() !== month.getFullYear() ||
+      d.getMonth() !== month.getMonth()
+    ) {
       setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
   }
 
-  const { mutateAsync: createAppt } = useCreateAppointment();
+  const { mutateAsync: createAppt, } = useCreateAppointment();
   const { mutateAsync: updateAppt } = useUpdateAppointment();
+  const { mutateAsync: updateApptStatus } = useUpdateAppointmentStatus();
   const { mutateAsync: checkInAppt } = useCheckInAppointment();
 
   // ===== Prefill & highlight “Tạo lịch hẹn” khi điều hướng từ PatientModal
@@ -121,7 +168,9 @@ const itemsByDate = useMemo(() => {
     if (!flashApptCreateAt) return;
     const btn = document.getElementById("appt-create-btn");
     if (btn) {
-      try { btn.focus(); } catch {}
+      try {
+        btn.focus();
+      } catch {}
       btn.classList.add("flash-once");
       const t = setTimeout(() => {
         btn.classList.remove("flash-once");
@@ -129,7 +178,9 @@ const itemsByDate = useMemo(() => {
       }, 5000);
       return () => {
         clearTimeout(t);
-        try { btn.classList.remove("flash-once"); } catch {}
+        try {
+          btn.classList.remove("flash-once");
+        } catch {}
       };
     } else {
       ackFlashApptCreate();
@@ -148,6 +199,11 @@ const itemsByDate = useMemo(() => {
     };
   }, []);
 
+  useEffect(() => {
+    const t = setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
   // ✅ Clear prefill nếu thực hiện hành động khác (mở chi tiết, đổi view, chọn ngày…)
   function openDetail(appt) {
     clearIfAnyPrefill();
@@ -161,51 +217,129 @@ const itemsByDate = useMemo(() => {
 
   async function addApptFromForm(fd) {
     if (!isWithinReceptionHours()) {
-      toast.warn(`Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`);
+      toast.warn(
+        `Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`
+      );
       return;
     }
-    // normalize payload (support CreateDrawer raw FormData)
-    const isPayload = fd && ("patient" in fd || "time" in fd);
-let patient_name, patient_code, phone, date, start, duration, type, doctor, department, note;
-
-if (isPayload) {
-  patient_name = fd.patient?.trim() || fd.patient_name?.trim() || "";
-  patient_code = fd.code?.trim() || fd.patient_code?.trim() || "";
-  phone = fd.phone?.trim() || "";
-  date = fd.date;
-  start = fd.time || fd.start;
-  duration = fd.duration;
-  type = fd.type;
-  doctor = fd.doctor;
-  department = fd.dept || fd.department;
-  note = fd.note || "";
-} else {
-  ({ patient_name, patient_code, phone, date, start, duration, type, doctor, department, note } = fd);
-}
-
-const newItem = {
-  patient: patient_name,
-  code: patient_code,
-  phone,
-  date,
-  time: start,
-  duration: parseInt(duration || 30, 10),
-  type,
-  doctor,
-  dept: department,
-  note,
-};
-
-
-    // basic clash check on client
-    const sameDay = todayItems.filter((x) => x.date === date && (doctor ? x.doctor === doctor : true));
-    const clash = sameDay.find((x) => {
-      const sa = mm(x.time), ea = sa + (x.duration || 30);
-      const sb = mm(newItem.time), eb = sb + (newItem.duration || 30);
-      return sa < eb && sb < ea;
-    });
-
-    const created = await createAppt({ ...newItem, status: clash ? "Đang chờ" : "Đã xác nhận" });
+    // Cho phép cả FormData lẫn plain object, map về field chuẩn hoá theo api/appointments
+    const isFormData =
+      typeof FormData !== "undefined" && fd instanceof FormData;
+  
+    let patientName,
+      patientCode,
+      phone,
+      date,
+      time,
+      duration,
+      typeRaw,
+      doctorName,
+      deptName,
+      note;
+  
+    if (isFormData) {
+      patientName =
+        (fd.get("patient_name") || fd.get("patient") || "").toString().trim();
+      patientCode =
+        (fd.get("patient_code") || fd.get("code") || "").toString().trim();
+      phone = (fd.get("phone") || "").toString().trim();
+      date = fd.get("date");
+      // form đặt name="start"
+      time = fd.get("time") || fd.get("start");
+      duration = fd.get("duration");
+      typeRaw = fd.get("type");
+      doctorName = fd.get("doctor");
+      deptName = fd.get("dept") || fd.get("department");
+      note = fd.get("note");
+    } else if (fd && typeof fd === "object") {
+      // object từ CreateDrawer: { patient_name, patient_code, phone, date, start, type, department, doctor, note }
+      patientName =
+        fd.patient_name?.trim() ||
+        fd.patientName?.trim() ||
+        fd.patient?.trim() ||
+        "";
+      patientCode =
+        fd.patient_code?.trim() ||
+        fd.patientCode?.trim() ||
+        fd.code?.trim() ||
+        "";
+      phone = fd.phone?.trim() || "";
+      date = fd.date;
+      time = fd.time || fd.start;
+      duration = fd.duration;
+      typeRaw = fd.type;
+      doctorName = fd.doctor;
+      deptName = fd.dept || fd.department;
+      note = fd.note;
+    }
+  
+    // Chuẩn hoá & validate theo DTO BE
+    patientName = (patientName || "").trim();
+    patientCode = (patientCode || "").trim();
+    phone = (phone || "").trim();
+    date = (date || "").trim();
+    time = (time || "").trim();
+    deptName = (deptName || "").trim();
+    doctorName = (doctorName || "").trim();
+  
+    if (!patientName || !date || !time) {
+      toast.error("Vui lòng nhập đủ tên, ngày và giờ hẹn.");
+      return;
+    }
+    if (!phone) {
+      toast.error("Vui lòng nhập số điện thoại.");
+      return;
+    }
+    if (!deptName) {
+      toast.error("Vui lòng chọn khoa khám.");
+      return;
+    }
+    if (!doctorName) {
+      toast.error("Vui lòng chọn bác sĩ khám.");
+      return;
+    }
+  
+    // Map giá trị select "new" / "follow_up" thành label hiển thị chuẩn
+    const apptType =
+      typeRaw === "new"
+        ? "Khám mới"
+        : typeRaw === "follow_up"
+        ? "Tái khám"
+        : typeRaw || "Khám mới";
+  
+    const durationMinutes = Number.parseInt(duration || 30, 10) || 30;
+  
+    const newItem = {
+      patientName,
+      patientCode,
+      phone,
+      date,
+      time,
+      apptType,
+      doctorName,
+      deptName,
+      note,
+      duration: durationMinutes,
+    };
+  
+    // ❌ KHÔNG check trùng SĐT / giờ ở FE nữa
+    // ✅ Gửi thẳng lên BE với trạng thái muốn tạo (ở đây là đã xác nhận)
+    let created;
+    try {
+      created = await createAppt({
+        ...newItem,
+        status: APPT_STATUS.DA_XAC_NHAN,
+      });
+    } catch (err) {
+      const msg =
+        err?.message ||
+        err?.response?.data?.message ||
+        
+        "Không thể tạo lịch hẹn. Vui lòng thử lại.";
+      toast.error(msg);
+      return;
+    }
+    toast.success("Đã tạo lịch hẹn thành công.");
     if (date === TODAY) {
       setView("list");
       setPanelDate(null);
@@ -218,33 +352,64 @@ const newItem = {
     setDrawerOpen(false);
     setCreateDate("");
     clearApptPrefill(); // ✅ dọn sau khi lưu
-    toast[clash ? "warn" : "success"](clash ? `Trùng lịch với ${clash.patient} (${clash.time}).` : "Đã tạo lịch hẹn.");
   }
+  
 
   async function handleCheckIn(appt) {
-    if (!appt || appt.status === "Đã hủy") return;
-    if (appt.checkedIn) {
+    if (!appt) return;
+
+    // Không xử lý lịch đã hủy
+    if (appt.status === APPT_STATUS.DA_HUY) return;
+
+    const status = appt.status;
+    const checkedIn = appt.checkedIn ?? (status === APPT_STATUS.DA_CHECKIN);
+
+    if (checkedIn) {
       toast.warn("Bệnh nhân đã check-in trước đó.");
       return;
     }
-    await checkInAppt(appt.id);
-    const pid = appt.code || appt.pid || null;
 
-    if (pid) {
-      // Lưu prefill tối thiểu cho Patients để khi click “Lập phiếu khám” sẽ có sẵn name
-      useUIStore.getState().setPatientPrefill({ name: appt.patient });
-      useUIStore.getState().setHighlightPid(pid);
-    } else {
-      useUIStore.getState().flashAdd();
+    const pid = appt.patientCode || appt.pid || appt.code || null;
+
+    const name = appt.patientName || appt.patient || "";
+
+    try {
+      // ❌ KHÔNG enqueue queue ở đây nữa
+      // ✅ Chỉ cập nhật trạng thái lịch hẹn -> đã check-in
+      await checkInAppt(appt.id);
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Không thể check-in lịch hẹn. Vui lòng thử lại.";
+      toast.error(msg);
+      return;
     }
-    // Nếu đang có prefill tạo lịch (từ nơi khác) mà user lại check-in → coi như hủy ý định tạo lịch
-    clearIfAnyPrefill();
+    if (!pid) {
+      // Không có mã BN: chỉ lưu prefill tối thiểu và flash UI bên Patients
+      const store = useUIStore.getState();
+      store.setPatientPrefill({ name });
+      store.flashAdd();
+      navigate(`/patients?action=add`);
+      toast.info(
+        "Đã check-in. Vui lòng tạo hồ sơ bệnh nhân trong danh sách để lập phiếu khám."
+      );
+      closeDetail();
+    } else {
+      // ✅ Prefill cho trang Patients (lúc lập phiếu mới enqueue)
+      useUIStore.getState().setPatientPrefill({ name });
+      useUIStore.getState().setHighlightPid(pid);
 
-    toast.success("Đã check-in.");
-    closeDetail();
+      // ✅ Sau khi check-in xong, chuyển sang trang bệnh nhân
+      navigate(`/patients?pid=${encodeURIComponent(pid)}`);
+
+      toast.success("Đã check-in. Vui lòng lập phiếu khám cho bệnh nhân.");
+      closeDetail();
+    }
   }
 
-  const formatTime = (date) => date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+  const formatTime = (date) =>
+    date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 
   return (
     <motion.main
@@ -259,10 +424,15 @@ const newItem = {
       >
         <ApptToolbar
           view={view}
-          setView={(v) => { setView(v); clearIfAnyPrefill(); }}  // ✅ đổi view cũng hủy prefill
+          setView={(v) => {
+            setView(v);
+            clearIfAnyPrefill();
+          }} // ✅ đổi view cũng hủy prefill
           onOpenCreate={() => {
             if (!isWithinReceptionHours()) {
-              toast.warn(`Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`);
+              toast.warn(
+                `Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`
+              );
               return;
             }
             setCreateDate(panelDate || TODAY);
@@ -277,22 +447,35 @@ const newItem = {
         <div className="mt-3 flex-1 min-h-0">
           {view === "list" ? (
             <ApptList
-              items={todayItems}
+              items={visibleTodayItems}
               loading={isLoading}
               error={null}
               onDetail={openDetail}
               onCheckIn={handleCheckIn}
-              stretch
+              onCreate={() => {
+                setCreateDate(TODAY);
+                setDrawerOpen(true);
+              }}
             />
           ) : (
             <div className="h-full min-h-0 p-0.5 overflow-auto scrollbar-none">
               <ApptCalendar
                 month={month}
                 itemsByDate={itemsByDate}
-                onPrev={() => { setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1)); clearIfAnyPrefill(); }}  // ✅ action khác → clear
-                onNext={() => { setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1)); clearIfAnyPrefill(); }}  // ✅
+                onPrev={() => {
+                  setMonth(
+                    (m) => new Date(m.getFullYear(), m.getMonth() - 1, 1)
+                  );
+                  clearIfAnyPrefill();
+                }}
+                onNext={() => {
+                  setMonth(
+                    (m) => new Date(m.getFullYear(), m.getMonth() + 1, 1)
+                  );
+                  clearIfAnyPrefill();
+                }}
                 onPickDay={(d) => {
-                  clearIfAnyPrefill();            // ✅ chọn ngày → clear
+                  clearIfAnyPrefill();
                   setPanelDate(d);
                   setNewId(null);
                 }}
@@ -304,19 +487,26 @@ const newItem = {
 
       <DayPanel
         open={!!panelDate}
-        dateLabel={panelDate ? `${panelDate.split("-").reverse().join("/")}` : ""}
+        dateLabel={
+          panelDate ? `${panelDate.split("-").reverse().join("/")}` : ""
+        }
         items={panelItems}
         onClose={() => {
           setPanelDate(null);
           setNewId(null);
-          clearIfAnyPrefill();                  // ✅ đóng panel → clear
+          clearIfAnyPrefill(); // ✅ đóng panel → clear
         }}
-        onOpenDetail={(a) => { clearIfAnyPrefill(); openDetail(a); }}  // ✅ mở chi tiết → clear
+        onOpenDetail={(a) => {
+          clearIfAnyPrefill();
+          openDetail(a);
+        }} // ✅ mở chi tiết → clear
         onCreate={
           panelDate
             ? () => {
                 if (!isWithinReceptionHours()) {
-                  toast.warn(`Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`);
+                  toast.warn(
+                    `Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`
+                  );
                   return;
                 }
                 setCreateDate(panelDate);
@@ -324,8 +514,8 @@ const newItem = {
               }
             : undefined
         }
-        highlightId={newId}
         onCheckIn={handleCheckIn}
+        highlightId={newId}
       />
 
       <CreateDrawer
@@ -339,14 +529,64 @@ const newItem = {
         defaultValues={apptPrefill || undefined}
       />
 
-<ApptDetailModal
+      <ApptDetailModal
         open={detailOpen}
         appt={detailAppt}
         onClose={() => {
           clearIfAnyPrefill();
           closeDetail();
         }}
-        onUpdate={(patch) => updateAppt({ id: patch.id, patch })}
+        onUpdate={async (patch) => {
+          if (!patch?.id) return;
+         
+          // Lấy bản hiện tại
+          /*const current =
+            detailAppt && detailAppt.id === patch.id
+              ? detailAppt
+              : todayItems.find((a) => a.id === patch.id) ||
+                (monthItems || []).find((a) => a.id === patch.id) ||
+                null;
+        
+          const merged = current ? { ...current, ...patch } : patch;*/
+        
+          // ❌ KHÔNG check trùng ở FE nữa – để BE xử lý
+        
+          // ✅ Optimistic update trong modal
+        
+        
+          // Nếu chỉ đổi trạng thái → dùng endpoint /status
+          const isStatusOnly =
+            Object.prototype.hasOwnProperty.call(patch, "status") &&
+            !patch.date &&
+            !patch.time &&
+            !patch.duration &&
+            !patch.note;
+        
+          let updated;
+          try {
+            updated = isStatusOnly
+              ? await updateApptStatus({ id: patch.id, status: patch.status })
+              : await updateAppt({ id: patch.id, patch });
+          } catch (err) {
+            const msg =
+              err?.response?.data?.message ||
+              err?.message ||
+              "Không thể cập nhật lịch hẹn. Vui lòng thử lại.";
+            toast.error(msg);
+            return;
+          }
+
+          // Sync lại với dữ liệu từ BE (trường hợp BE chuẩn hoá khác)
+          /*if (updated) {
+            setDetailAppt((cur) =>
+              cur && cur.id === updated.id ? { ...cur, ...updated } : cur
+            );
+          }*/
+          setDetailAppt((cur) =>
+            cur && cur.id === patch.id ? { ...cur, ...patch } : cur
+          );
+          toast.success("Đã cập nhật lịch hẹn.");
+        }}
         onCheckIn={handleCheckIn}
       />
     </motion.main>

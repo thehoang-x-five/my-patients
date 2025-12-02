@@ -6,8 +6,9 @@ import "./index.css";
 import { UIProvider } from "./context/UIContext.jsx";
 import App from "./App.jsx";
 import AppProviders from "./providers/AppProviders.jsx";
-
-
+import Login from "./routes/Login.jsx";
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 const Overview = React.lazy(() => import("./routes/Overview.jsx"));
 const Appointments = React.lazy(() => import("./routes/Appointments.jsx"));
 const Examination = React.lazy(() => import("./routes/Examination.jsx"));
@@ -21,6 +22,10 @@ const Reports = React.lazy(() => import("./routes/Reports.jsx"));
 const Settings = React.lazy(() => import("./routes/Settings.jsx"));
 
 const router = createBrowserRouter([
+  {
+    path: "/login",
+    element: <Login />,
+  },
   {
     path: "/",
     element: <App />,
@@ -47,6 +52,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <AnimatePresence mode="wait">
         <AppProviders>
      <RouterProvider router={router} />
+     <ToastContainer />
     </AppProviders>
         </AnimatePresence>
       </Suspense>

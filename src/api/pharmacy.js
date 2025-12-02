@@ -1,176 +1,376 @@
 // src/api/pharmacy.js
-import axios from "axios";
+// API & hooks cho trang Nhà thuốc (Kho thuốc + Đơn thuốc)
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { mockEnabled, mockPharmacyApi } from "./mockData.js";
+import { get, post } from "./http.js";
 import { on } from "./realtime.js";
 
-/** ================== AXIOS INSTANCE ================== */
-// Có thể chỉnh baseURL theo BE của anh, tạm để relative cho an toàn
-const api = axios.create({
-  // baseURL: "/api", // nếu BE mount dưới /api thì bật dòng này
-  withCredentials: true,
-});
+/** ================== HELPERS ================== */
 
-/** ================== NORMALIZE HELPERS ================== */
-
-function normalizeDrug(dto = {}) {
-  const code = dto.code || dto.maThuoc || dto.MaThuoc;
-  const name = dto.name || dto.tenThuoc || dto.TenThuoc;
-  const unit = dto.unit || dto.donViTinh || dto.DonViTinh;
-
-  const price =
-    dto.price ??
-    dto.giaNiemYet ??
-    dto.GiaNiemYet ??
-    dto.giaBanLe ??
-    dto.GiaBanLe ??
-    0;
-
-  const usage = dto.usage || dto.congDung || dto.CongDung || "";
-
-  const qty = dto.qty ?? dto.soLuongTon ?? dto.SoLuongTon ?? 0;
-
-  const exp =
-    dto.exp ||
-    dto.hanSuDung ||
-    dto.HanSuDung ||
-    dto.ngayHetHan ||
-    dto.NgayHetHan ||
-    null;
-
-  const lot = dto.lot || dto.soLo || dto.SoLo || "";
-
-  const status = dto.status || dto.trangThai || dto.TrangThai || "hoat_dong";
-
-  return { code, name, unit, price, usage, qty, exp, lot, status };
+function toNumber(...vals) {
+  for (const v of vals) {
+    if (v === null || v === undefined) continue;
+    const n = Number(v);
+    if (!Number.isNaN(n)) return n;
+  }
+  return 0;
 }
 
-function normalizePrescription(dto = {}) {
-  const id = dto.id || dto.maDonThuoc || dto.MaDonThuoc;
+function toDateOnly(raw) {
+  if (!raw) return "";
+  if (raw instanceof Date) return raw.toISOString().slice(0, 10);
 
-  const at =
-    dto.at ||
-    dto.thoiGianKeDon ||
-    dto.ThoiGianKeDon ||
-    dto.ngayKeDon ||
-    dto.NgayKeDon ||
-    null;
+  const s = String(raw);
+  // Chuẩn ISO hoặc yyyy-MM-dd → cắt 10 ký tự đầu
+  if (s.length >= 10) return s.slice(0, 10);
+  return s;
+}
+
+/** ================== NORMALIZE DTO ================== */
+
+// DTO kho thuốc (DrugDto / KhoThuocDto) → FE
+function normalizeDrug(dto = {}) {
+  const code =
+    dto.code ??
+    dto.maThuoc ??
+    dto.MaThuoc ??
+    dto.maHangHoa ??
+    dto.MaHangHoa ??
+    "";
+
+  const name =
+    dto.name ??
+    dto.tenThuoc ??
+    dto.TenThuoc ??
+    dto.thuoc?.TenThuoc ??
+    dto.Thuoc?.TenThuoc ??
+    "";
+
+  const unit =
+    dto.unit ??
+    dto.donViTinh ??
+    dto.DonViTinh ??
+    dto.thuoc?.DonViTinh ??
+    dto.Thuoc?.DonViTinh ??
+    "";
+
+  const usage =
+    dto.usage ??
+    dto.congDung ??
+    dto.CongDung ??
+    "";
+
+  const qty = toNumber(
+    dto.qty,
+    dto.soLuongTon,
+    dto.SoLuongTon,
+    dto.tonKho,
+    dto.TonKho
+  );
+
+  const price = toNumber(
+    dto.price,
+    dto.giaNiemYet,
+    dto.GiaNiemYet,
+    dto.donGia,
+    dto.DonGia
+  );
+
+  const exp = toDateOnly(
+    dto.exp ?? dto.hanSuDung ?? dto.HanSuDung
+  );
+
+  const lot =
+    dto.lot ??
+    dto.soLo ??
+    dto.SoLo ??
+    "";
+
+  const statusRaw =
+    (dto.status ?? dto.trangThai ?? dto.TrangThai ?? "")
+      .toString()
+      .toLowerCase();
+
+  let status = statusRaw || "hoat_dong";
+
+  // Chuẩn hoá vài biến thể
+  if (["expired"].includes(status)) status = "het_han";
+  if (["inactive", "tam_dung", "tam_ngung", "paused"].includes(status)) {
+    status = "tam_ngung";
+  }
+
+  const id =
+    dto.id ??
+    dto.maKhoThuoc ??
+    dto.MaKhoThuoc ??
+    `${code || "drug"}-${lot || "na"}-${exp || "na"}`;
+
+  return {
+    id,
+    code,
+    name,
+    unit,
+    usage,
+    qty,
+    price,
+    exp,
+    lot,
+    status,
+    raw: dto,
+  };
+}
+
+// Chi tiết 1 dòng thuốc trong đơn
+function normalizePrescriptionItem(d = {}) {
+  const code =
+    d.code ??
+    d.maThuoc ??
+    d.MaThuoc ??
+    "";
+
+  const name =
+    d.name ??
+    d.tenThuoc ??
+    d.TenThuoc ??
+    "";
+
+  const unit =
+    d.unit ??
+    d.donViTinh ??
+    d.DonViTinh ??
+    "";
+
+  const qty = toNumber(d.qty, d.soLuong, d.SoLuong);
+  const price = toNumber(
+    d.price,
+    d.donGia,
+    d.DonGia,
+    d.giaNiemYet,
+    d.GiaNiemYet
+  );
+  const amount = toNumber(
+        d.amount,
+        d.thanhTien,
+        d.ThanhTien,
+        price * qty
+      );
+    
+      const dose =
+        d.dose ??
+        d.chiDinhSuDung ??
+    d.ChiDinhSuDung ??
+        d.lieuDung ??
+        d.LieuDung ??
+        d.huongDan ??
+        d.HuongDan ??
+        d.cachDung ??
+        d.CachDung ??
+        "";
+
+  const usage =
+    d.usage ??
+    d.congDung ??
+    d.CongDung ??
+    "";
+
+  return {
+    code,
+    name,
+    unit,
+    qty,
+    price,
+    amount,
+    dose,
+    usage,
+    raw: d,
+  };
+}
+
+// DTO PrescriptionDto → FE
+function normalizePrescription(dto = {}) {
+  const code =
+    dto.code ??
+    dto.maDonThuoc ??
+    dto.MaDonThuoc ??
+    "";
 
   const ptId =
-    dto.ptId ||
-    dto.maBenhNhan ||
-    dto.MaBenhNhan ||
-    dto.benhNhan?.maBenhNhan ||
-    dto.BenhNhan?.MaBenhNhan ||
+    dto.maBenhNhan ??
+    dto.MaBenhNhan ??
+    dto.BenhNhan?.MaBenhNhan ??
     null;
 
   const ptName =
-    dto.ptName ||
-    dto.tenBenhNhan ||
-    dto.TenBenhNhan ||
-    dto.benhNhan?.hoTen ||
-    dto.benhNhan?.tenBenhNhan ||
-    dto.BenhNhan?.HoTen ||
+    dto.ptName ??
+    dto.tenBenhNhan ??
+    dto.TenBenhNhan ??
+    dto.benhNhan?.HoTen ??
+    dto.BenhNhan?.HoTen ??
     "";
 
-  const doctor =
-    dto.doctor ||
-    dto.bacSiKeDon ||
-    dto.BacSiKeDon ||
-    dto.bacSiKeDon?.hoTen ||
-    dto.BacSiKeDon?.HoTen ||
+  const doctorId =
+    dto.maBacSiKeDon ??
+    dto.MaBacSiKeDon ??
+    null;
+
+  const doctorName =
+    dto.doctor ??
+    dto.tenBacSiKeDon ??
+    dto.TenBacSiKeDon ??
+    dto.BacSiKeDon?.HoTen ??
     "";
 
-  const diag =
-    dto.diag ||
-    dto.chanDoan ||
-    dto.ChanDoan ||
-    dto.chuanDoanChinh ||
-    dto.ChuanDoanChinh ||
+  const diagnosisId =
+    dto.maPhieuChanDoanCuoi ??
+    dto.MaPhieuChanDoanCuoi ??
+    null;
+
+  const diagnosis =
+    dto.chanDoan ??
+    dto.ChanDoan ??
+    dto.PhieuChanDoanCuoi?.ChanDoanCuoi ??
     "";
 
-  const rawStatus = dto.status || dto.trangThai || dto.TrangThai || "da_ke";
-  let status = rawStatus;
+    const atRaw =
+        dto.at ??
+        dto.thoiGianKeDon ??
+        dto.ThoiGianKeDon ??
+        dto.createdAt ??
+        dto.CreatedAt ??
+        null;
+    
+      const rawStatus =
+        dto.status ??
+        dto.trangThai ??
+        dto.TrangThai ??
+        "";
 
-  // FE quy ước:
-  // - done      -> đã phát
-  // - pending   -> chờ phát / đã kê
-  if (rawStatus === "da_phat") status = "done";
-  else if (rawStatus === "cho_phat" || rawStatus === "da_ke") status = "pending";
+        const total = toNumber(
+              dto.total,
+              dto.tongTienDon,
+              dto.TongTienDon
+            );
 
-  const total = dto.total ?? dto.tongTienDon ?? dto.TongTienDon ?? 0;
-
-  const itemsSrc =
+  const itemsRaw =
     dto.items ??
-    dto.Items ??
     dto.chiTiet ??
     dto.ChiTiet ??
-    dto.chiTietDonThuocs ??
-    dto.ChiTietDonThuocs ??
     [];
 
-  const items = (itemsSrc || []).map((it) => ({
-    code: it.code || it.maThuoc || it.MaThuoc,
-    name: it.name || it.tenThuoc || it.TenThuoc,
-    unit: it.unit || it.donViTinh || it.DonViTinh,
-    dose: it.dose || it.lieuDung || it.LieuDung || "",
-    qty: it.qty ?? it.soLuong ?? it.SoLuong ?? 0,
-    price: it.price ?? it.donGia ?? it.DonGia ?? 0,
-  }));
+  const items = Array.isArray(itemsRaw)
+    ? itemsRaw.map(normalizePrescriptionItem)
+    : [];
 
-  return { id, at, ptId, ptName, doctor, diag, status, total, items };
+  return {
+    id: code || dto.id,
+    code,
+    rawStatus,
+        status: rawStatus,
+        at: atRaw,
+        total,
+        // alias cho bệnh nhân
+        patientId: ptId,
+        patientName: ptName,
+        ptId,
+        ptName,
+        // alias cho bác sĩ
+        doctorId,
+        doctorName,
+        doctor: doctorName,
+        // alias cho chẩn đoán
+        diagnosisId,
+        diagnosis,
+        diag: diagnosis,
+    items,
+    raw: dto,
+  };
 }
+function normalizeStatusForUpsert(status) {
+  const raw = String(status || "").toLowerCase();
 
-/** ================== RAW API (axios) ================== */
-
-export async function getStock() {
-  if (mockEnabled) {
-    const list = await mockPharmacyApi.listStock();
-    return list.map(normalizeDrug);
+  if (
+    raw === "tam_dung" ||
+    raw === "tam_ngung" ||
+    raw === "paused" ||
+    raw === "inactive"
+  ) {
+    return "tam_dung";
   }
 
-  const res = await api.get("/pharmacy/stock");
-  const data = res.data;
-  const list = data?.items || data || [];
-  return list.map(normalizeDrug);
+  // Mặc định là hoạt động, các trạng thái khác BE tự tính
+  return "hoat_dong";
+}
+/** ================== RAW API CALLS ================== */
+function extractItems(data) {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.items)) return data.items;
+  if (Array.isArray(data.Items)) return data.Items;
+  return [];
 }
 
+// GET /api/pharmacy/prescriptions
 export async function getRxOrders() {
-  if (mockEnabled) {
-    const list = await mockPharmacyApi.listPrescriptions();
-    return list.map(normalizePrescription);
-  }
+  const data = await get("/pharmacy/prescriptions");
 
-  const res = await api.get("/pharmacy/prescriptions");
-  const data = res.data;
-  const list = data?.items || data || [];
+ 
+
+  const list = extractItems(data);
   return list.map(normalizePrescription);
 }
 
-export async function upsertStockItem(form) {
-  if (mockEnabled) {
-    const saved = await mockPharmacyApi.upsertStock(form);
-    return normalizeDrug(saved);
-  }
+// GET /api/pharmacy/stock
+export async function getStock() {
+  const data = await get("/pharmacy/stock");
 
-  // Map form FE -> DTO BE
+  const list = extractItems(data);
+  return list.map(normalizeDrug);
+}
+export async function searchStock({ keyword, status, expFrom, expTo, tonMin, tonMax, page = 1, pageSize = 500 } = {}) {
   const payload = {
-    maThuoc: form.code,
-    tenThuoc: form.name,
-    donViTinh: form.unit,
-    giaNiemYet: form.price ?? 0,
-    congDung: form.usage || undefined,
-    soLuongTon: form.qty ?? 0,
-    soLo: form.lot || undefined,
+    Keyword: keyword || null,
+    TrangThai: status === "all" ? null : status || null,
+    HanSuDungFrom: expFrom || null,
+    HanSuDungTo: expTo || null,
+    TonToiThieu: tonMin ?? null,
+    TonToiDa: tonMax ?? null,
+    SortBy: null,
+    SortDirection: null,
+    Page: page,
+    PageSize: pageSize,
   };
 
-  if (form.exp) {
-    // Giả định input là yyyy-MM-dd
-    payload.hanSuDung = form.exp;
+  const data = await post("/pharmacy/stock/search", payload);
+  const list = extractItems(data); // dùng helper extractItems ở trên
+  return list.map(normalizeDrug);
+}
+
+
+
+/**
+ * Upsert kho thuốc
+ * BE: POST /api/pharmacy/stock (DrugDto)
+ * form: { code, name, unit, usage, price, qty, exp, lot, status }
+ */
+export async function upsertStockItem(form) {
+  if (!form || !form.code) {
+    throw new Error("Thiếu mã thuốc (code)");
   }
 
-  const res = await api.post("/pharmacy/stock", payload);
-  return normalizeDrug(res.data);
+  const payload = {
+    MaThuoc: form.code,
+    TenThuoc: form.name,
+    DonViTinh: form.unit,
+    CongDung: form.usage || null,
+    GiaNiemYet: toNumber(form.price),
+    SoLuongTon: toNumber(form.qty),
+    TrangThai: normalizeStatusForUpsert(form.status), // 🔑
+    HanSuDung: form.exp || null, // yyyy-MM-dd
+    SoLo: form.lot || null,
+  };
+
+  const dto = await post("/pharmacy/stock", payload);
+  return normalizeDrug(dto);
 }
 
 /** ================== REACT QUERY HOOKS ================== */
@@ -179,7 +379,7 @@ export function useStock(options = {}) {
   return useQuery({
     queryKey: ["pharmacy", "stock"],
     queryFn: getStock,
-    staleTime: 60_000,
+    staleTime: 30_000,
     ...options,
   });
 }
@@ -188,19 +388,25 @@ export function useRxOrders(options = {}) {
   return useQuery({
     queryKey: ["pharmacy", "rxOrders"],
     queryFn: getRxOrders,
-    staleTime: 60_000,
+    staleTime: 30_000,
     ...options,
   });
 }
 
-export function useUpsertStockItem() {
+export function useUpsertStockItem(options = {}) {
   const qc = useQueryClient();
+  const { onSuccess, ...rest } = options || {};
+
   return useMutation({
     mutationFn: upsertStockItem,
-    onSuccess: () => {
+    onSuccess: (data, variables, context) => {
       qc.invalidateQueries({ queryKey: ["pharmacy", "stock"] });
       qc.invalidateQueries({ queryKey: ["pharmacy", "rxOrders"] });
+      if (typeof onSuccess === "function") {
+        onSuccess(data, variables, context);
+      }
     },
+    ...rest,
   });
 }
 

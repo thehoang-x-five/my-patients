@@ -21,15 +21,16 @@ import {
   getStock,
   upsertStockItem,
   subscribePharmacy,
+  searchStock
 } from "../api/pharmacy.js";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { usePrescStore } from "../components/stores/prescriptionStore.js";
+import { usePrescStore } from "../components/stores/appStore.js";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
-const NEAR_EXPIRY_DAYS = 90;
+const NEAR_EXPIRY_DAYS = 30;
 const LOW_STOCK_QTY = 10;
 
 const daysLeft = (exp) => {
@@ -47,32 +48,26 @@ const getQty = (r) =>
 
 // Chuẩn hoá status kho cho toàn trang
 const getDrugStatusCode = (r) => {
-  let raw = (r.status ?? r.trangThai ?? r.TrangThai ?? "").toLowerCase();
+  const raw = (r.status ?? r.trangThai ?? r.TrangThai ?? "").toLowerCase();
+
+  // Map trực tiếp từ BE
+  if (["hoat_dong", "active"].includes(raw)) return "hoat_dong";
+  if (["tam_dung", "tam_ngung", "paused", "inactive"].includes(raw)) return "tam_dung";
+  if (["het_han", "expired"].includes(raw)) return "het_han";
+  if (["sap_het_han", "near_expiry"].includes(raw)) return "sap_het_han";
+  if (["sap_het_ton", "low_stock", "near_out"].includes(raw)) return "sap_het_ton";
+
+  // Fallback: nếu BE chưa kịp update logic, FE vẫn tự tính được
   const exp = r.exp ?? r.hanSuDung ?? r.HanSuDung;
   const qty = getQty(r);
   const left = daysLeft(exp);
 
-  // Map các trạng thái BE kiểu "pause" → "het_han"
-  if (
-    raw === "tam_dung" ||
-    raw === "tam_ngung" ||
-    raw === "inactive" ||
-    raw === "paused"
-  ) {
-    raw = "het_han";
-  }
-
-  // Ưu tiên theo hạn dùng
   if (!Number.isNaN(left)) {
-    if (left < 0) return "het_han"; // đã hết hạn
-    if (left >= 0 && left <= NEAR_EXPIRY_DAYS) return "sap_het_han"; // sắp hết hạn
+    if (left < 0) return "het_han";
+    if (left >= 0 && left <= NEAR_EXPIRY_DAYS) return "sap_het_han";
   }
 
-  // Nếu chưa gần hết hạn → xét lượng tồn
   if (qty <= LOW_STOCK_QTY) return "sap_het_ton";
-
-  // Còn lại: hoạt động / hết hạn theo raw
-  if (raw === "het_han" || raw === "expired") return "het_han";
 
   return "hoat_dong";
 };
@@ -123,8 +118,8 @@ export default function Prescriptions() {
     setStockStatus("all");
   }, [setQStock, setUnit, setStockStatus]);
 
-  // ===== Queries =====
-  const ordersQuery = useQuery({
+   // ===== Queries (BE chỉ trả ALL, FE tự lọc) =====
+   const ordersQuery = useQuery({
     queryKey: ["rxOrders"],
     queryFn: getRxOrders,
     staleTime: 30_000,
@@ -136,6 +131,8 @@ export default function Prescriptions() {
     staleTime: 30_000,
   });
 
+  
+
   const loadingOrders = ordersQuery.isLoading;
   const loadingStock = stockQuery.isLoading;
   const loadingBoth = loadingOrders && loadingStock;
@@ -143,64 +140,8 @@ export default function Prescriptions() {
   const orders = ordersQuery.data || [];
   const stock = stockQuery.data || [];
 
-  // ===== Stats đơn thuốc =====
-  const ordersCreatedCount = useMemo(
-    () =>
-      orders.filter((o) => {
-        const raw = (o.rawStatus || "").toLowerCase();
-        if (raw) return raw === "da_ke";
-        const st = (o.status || "").toLowerCase();
-        return st === "da_ke";
-      }).length,
-    [orders]
-  );
 
-  const ordersPendingCount = useMemo(
-    () =>
-      orders.filter((o) => {
-        const raw = (o.rawStatus || "").toLowerCase();
-        const st = (o.status || "").toLowerCase();
-        return (
-          raw === "cho_phat" ||
-          (!raw && (st === "pending" || st === "cho_phat"))
-        );
-      }).length,
-    [orders]
-  );
-
-  const ordersDoneCount = useMemo(
-    () =>
-      orders.filter((o) => {
-        const raw = (o.rawStatus || "").toLowerCase();
-        const st = (o.status || "").toLowerCase();
-        return (
-          raw === "da_phat" ||
-          (!raw && (st === "done" || st === "da_phat"))
-        );
-      }).length,
-    [orders]
-  );
-
-  // ===== Stats kho thuốc (theo status chuẩn) =====
-  const stockActiveCount = useMemo(
-    () => stock.filter((r) => getDrugStatusCode(r) === "hoat_dong").length,
-    [stock]
-  );
-
-  const stockExpiredCount = useMemo(
-    () => stock.filter((r) => getDrugStatusCode(r) === "het_han").length,
-    [stock]
-  );
-
-  const stockNearExpiryCount = useMemo(
-    () => stock.filter((r) => getDrugStatusCode(r) === "sap_het_han").length,
-    [stock]
-  );
-
-  const stockNearOutCount = useMemo(
-    () => stock.filter((r) => getDrugStatusCode(r) === "sap_het_ton").length,
-    [stock]
-  );
+  
 
   // ===== Realtime =====
   useEffect(() => {
@@ -292,7 +233,7 @@ export default function Prescriptions() {
   const filteredStock = useMemo(() => {
     if (!stock || !stock.length) return [];
     const kw = (qStockDef || "").trim().toLowerCase();
-
+  
     return stock.filter((r) => {
       const textOk =
         !kw ||
@@ -301,16 +242,20 @@ export default function Prescriptions() {
           .join(" ")
           .toLowerCase()
           .includes(kw);
-
+  
       const unitOk = unit
         ? (r.unit || r.donViTinh || "")
             .toLowerCase()
             .includes(unit.toLowerCase())
         : true;
-
+  
       const statusCode = getDrugStatusCode(r);
+      
       const qty = getQty(r);
-
+  
+      // 🔒 Không hiển thị thuốc tạm dừng
+      if (statusCode === "tam_dung") return false;
+  
       let statusOk = true;
       switch (stockStatus) {
         case "hoat_dong":
@@ -328,11 +273,100 @@ export default function Prescriptions() {
         default:
           statusOk = true; // all
       }
-
+  
       return textOk && unitOk && statusOk;
     });
   }, [stock, qStockDef, unit, stockStatus]);
 
+  // ===== Stats đơn thuốc + kho thuốc (theo danh sách đã lọc) =====
+const ordersCount = filteredOrders.length;
+
+const ordersCreatedCount = useMemo(
+  () =>
+    filteredOrders.filter((o) => {
+      const raw = (o.rawStatus || "").toLowerCase();
+      if (raw) return raw === "da_ke";
+      const st = (o.status || "").toLowerCase();
+      return st === "da_ke";
+    }).length,
+  [filteredOrders]
+);
+
+const ordersPendingCount = useMemo(
+  () =>
+    filteredOrders.filter((o) => {
+      const raw = (o.rawStatus || "").toLowerCase();
+      const st = (o.status || "").toLowerCase();
+      return (
+        raw === "cho_phat" ||
+        (!raw && (st === "pending" || st === "cho_phat"))
+      );
+    }).length,
+  [filteredOrders]
+);
+
+const ordersDoneCount = useMemo(
+  () =>
+    filteredOrders.filter((o) => {
+      const raw = (o.rawStatus || "").toLowerCase();
+      const st = (o.status || "").toLowerCase();
+      return (
+        raw === "da_phat" ||
+        (!raw && (st === "done" || st === "da_phat"))
+      );
+    }).length,
+  [filteredOrders]
+);
+
+const stockCount = useMemo(
+  () =>
+    filteredStock.filter((r) => {
+      const st = getDrugStatusCode(r);
+      if (st === "tam_dung") return false;
+      return true;
+    }).length,
+  [filteredStock]
+);
+
+const stockActiveCount = useMemo(
+  () =>
+    filteredStock.filter((r) => {
+      const st = getDrugStatusCode(r);
+      if (st === "tam_dung") return false;
+      return st === "hoat_dong";
+    }).length,
+  [filteredStock]
+);
+
+const stockExpiredCount = useMemo(
+  () =>
+    filteredStock.filter((r) => {
+      const st = getDrugStatusCode(r);
+      if (st === "tam_dung") return false;
+      return st === "het_han";
+    }).length,
+  [filteredStock]
+);
+
+const stockNearExpiryCount = useMemo(
+  () =>
+    filteredStock.filter((r) => {
+      const st = getDrugStatusCode(r);
+      if (st === "tam_dung") return false;
+      return st === "sap_het_han";
+    }).length,
+  [filteredStock]
+);
+
+const stockNearOutCount = useMemo(
+  () =>
+    filteredStock.filter((r) => {
+      const st = getDrugStatusCode(r);
+      if (st === "tam_dung") return false;
+      return st === "sap_het_ton";
+    }).length,
+  [filteredStock]
+);
   // ===== Mutations (upsert kho) =====
   const mUpsert = useMutation({
     mutationFn: upsertStockItem,
@@ -394,12 +428,12 @@ export default function Prescriptions() {
             tab={tab}
             setTab={setTab}
             // thống kê đơn
-            ordersCount={orders.length}
+            ordersCount={ordersCount}             
             ordersCreatedCount={ordersCreatedCount}
             ordersPendingCount={ordersPendingCount}
             ordersDoneCount={ordersDoneCount}
             // thống kê kho
-            stockCount={stock.length}
+            stockCount={stockCount}
             stockActiveCount={stockActiveCount}
             stockExpiredCount={stockExpiredCount}
             stockNearExpiryCount={stockNearExpiryCount}
@@ -422,14 +456,7 @@ export default function Prescriptions() {
               {loadingBoth ? "Đang tải dữ liệu…" : "Dữ liệu đã sẵn sàng"}
             </div>
 
-            {loadingBoth ? (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="animate-pulse text-sm text-indigo-500/80">
-                  Đang tải dữ liệu đơn thuốc & kho…
-                </div>
-              </div>
-            ) : (
-              <AnimatePresence mode="wait">
+            <AnimatePresence mode="wait">
                 {tab === "orders" ? (
                   <motion.section
                     key="orders"
@@ -474,7 +501,6 @@ export default function Prescriptions() {
                   </motion.section>
                 )}
               </AnimatePresence>
-            )}
           </div>
         </div>
       </div>

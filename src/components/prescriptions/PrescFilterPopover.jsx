@@ -7,7 +7,46 @@ import React, {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
-import Chip from "../ui/Chip.jsx";
+function Chip({ active, dot, children, ...rest }) {
+  const base =
+    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-medium cursor-pointer select-none transition";
+  const activeCls =
+    "bg-violet-600/10 text-violet-700 ring-1 ring-violet-300 shadow-sm";
+  const inactiveCls =
+    "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-violet-300 hover:text-violet-700";
+  const dotCls =
+    dot === "rose"
+      ? "bg-rose-400"
+      : dot === "violet"
+      ? "bg-violet-500"
+      : dot === "amber"
+      ? "bg-amber-400"
+      : dot === "sky"
+      ? "bg-sky-400"
+      : dot === "red"
+          ? "bg-red-400"
+      : dot === "emerald"
+      ? "bg-emerald-400"
+  
+      : dot === "indigo"
+      ? "bg-indigo-300"
+      :"bg-indigo-300";
+  return (
+    <button
+      type="button"
+      className={`${base} ${active ? activeCls : inactiveCls}`}
+      {...rest}
+    >
+      {dot && (
+        <span
+          className={`w-1.5 h-1.5 rounded-full ${dotCls}`}
+          aria-hidden="true"
+        />
+      )}
+      <span>{children}</span>
+    </button>
+  );
+}
 
 const ORDER_STATUS_SEG = ["Tất cả", "Đã kê", "Chờ phát", "Đã phát"];
 const ORDER_RANGE_SEG = ["Tất cả", "Hôm nay", "7 ngày", "30 ngày"];

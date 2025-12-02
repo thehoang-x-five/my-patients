@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import React from 'react';
+import React from "react";
+
 const VND = (n) => Number(n || 0).toLocaleString("vi-VN");
 
 export default function ReportsTable({ rows = [], stretch = false }) {
@@ -7,14 +8,14 @@ export default function ReportsTable({ rows = [], stretch = false }) {
     <motion.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`rounded-2xl bg-white ring-1 ring-slate-200/80 ${
+      className={`rounded-2xl bg-white ring-1 ring-slate-200/80 shadow-soft ${
         stretch ? "h-full flex flex-col min-h-0" : ""
       }`}
       role="region"
       aria-label="Bảng số liệu báo cáo"
     >
-      <header className="px-3 py-2 border-b border-slate-200/80 shrink-0">
-        <b>Bảng số liệu</b>
+      <header className="px-3 py-2 border-b border-cyan-100/80 shrink-0">
+        <b className="text-cyan-700">Bảng số liệu</b>
       </header>
 
       <div
@@ -22,7 +23,7 @@ export default function ReportsTable({ rows = [], stretch = false }) {
           stretch ? "flex-1 min-h-0" : ""
         } overflow-x-auto overflow-y-auto scrollbar-none`}
       >
-        <table className="min-w-full text-sm ">
+        <table className="min-w-full text-sm">
           <thead className="text-left text-slate-500 sticky top-0 bg-white">
             <tr>
               <th className="px-3 py-2">Ngày</th>
@@ -36,7 +37,7 @@ export default function ReportsTable({ rows = [], stretch = false }) {
             {rows.map((r, i) => (
               <motion.tr
                 key={r.date}
-                className="odd:bg-slate-50/40 hover:bg-slate-100 transition"
+                className="odd:bg-cyan-50/40 hover:bg-cyan-100/70 transition"
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.01 }}

@@ -1,8 +1,9 @@
 // src/api/dashboard.js
-// API cho trang Overview (Dashboard)
+// API + realtime cho trang Overview (Dashboard)
+
 import { useQuery } from "@tanstack/react-query";
 import { http } from "./http.js";
-import { mockEnabled, mockDashboardApi } from "./dashboardMock.js";
+import { ensureStarted, on } from "./realtime.js";
 
 const EMPTY = {
   kpi: {
@@ -14,6 +15,8 @@ const EMPTY = {
   upcomingAppointments: [],
   activities: [],
 };
+
+/* ================== HELPERS ================== */
 
 function toNumber(...values) {
   for (const v of values) {
@@ -34,12 +37,59 @@ function formatDelta(v) {
 function mapSpark(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.map((x, idx) => ({
-    hour: x.hour ?? x.gio ?? x.Gio ?? idx,
-    value: Number(x.value ?? x.giaTri ?? x.GiaTri ?? 0),
+    hour:
+      toNumber(x.Gio, x.gio, x.Hour, x.hour, idx) ??
+      idx,
+    value:
+      toNumber(
+        x.GiaTri,
+        x.giaTri,
+        x.Value,
+        x.value,
+        x.count
+      ) ?? 0,
   }));
 }
 
-/* ========== KPI MAPPING – BÁM SÁT DTO ========== */
+function formatTime(input) {
+  if (!input) return "";
+  const str = String(input);
+
+  // dạng "HH:mm"
+  const m = str.match(/(\d{1,2}):(\d{2})/);
+  if (m) {
+    const hh = m[1].padStart(2, "0");
+    const mm = m[2];
+    return `${hh}:${mm}`;
+  }
+
+  const d = new Date(str);
+  if (!Number.isNaN(d.getTime())) {
+    try {
+      return d.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${hh}:${mm}`;
+    }
+  }
+
+  return str;
+}
+
+function formatMoney(num) {
+  if (num === null || num === undefined || Number.isNaN(num)) return "0";
+  const n = Number(num);
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)} tỷ`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} triệu`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+/* ================== KPI MAPPERS ================== */
 
 function mapPatientsKpi(src = {}) {
   const total = toNumber(
@@ -58,9 +108,8 @@ function mapPatientsKpi(src = {}) {
   const pending = toNumber(
     src.ChoXuLy,
     src.choXuLy,
-    src.choKham,
-    src.waitExam,
-    src.waiting
+    src.pending,
+    src.choKham
   );
   const cancelled = toNumber(
     src.DaHuy,
@@ -109,8 +158,7 @@ function mapAppointmentsKpi(src = {}) {
   const pending = toNumber(
     src.ChoXacNhan,
     src.choXacNhan,
-    src.pending,
-    src.waiting
+    src.pending
   );
   const cancelled = toNumber(
     src.DaHuy,
@@ -127,7 +175,7 @@ function mapAppointmentsKpi(src = {}) {
 
   const parts = [];
   if (confirmed !== null) parts.push(`Đã xác nhận: ${confirmed}`);
-  if (pending !== null) parts.push(`Đang chờ: ${pending}`);
+  if (pending !== null) parts.push(`Chờ xác nhận: ${pending}`);
   if (cancelled !== null) parts.push(`Đã huỷ: ${cancelled}`);
 
   return {
@@ -143,44 +191,24 @@ function mapAppointmentsKpi(src = {}) {
   };
 }
 
-function formatMoney(num) {
-  if (num === null || num === undefined || Number.isNaN(num)) return "0";
-  const n = Number(num);
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)} tỷ`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} triệu`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
-
 function mapRevenueKpi(src = {}) {
   const total = toNumber(
     src.TongDoanhThu,
     src.tongDoanhThu,
     src.tongSo,
-    src.tongTien,
-    src.total,
-    src.amount
+    src.total
   );
   const clinic = toNumber(
     src.DoanhThuKhamLs,
-    src.doanhThuKhamLs,
-    src.tienKham,
-    src.kham,
-    src.clinic
+    src.doanhThuKhamLs
   );
   const cls = toNumber(
     src.DoanhThuCls,
-    src.doanhThuCls,
-    src.tienCls,
-    src.cls,
-    src.lab
+    src.doanhThuCls
   );
   const drug = toNumber(
     src.DoanhThuThuoc,
-    src.doanhThuThuoc,
-    src.tienThuoc,
-    src.thuoc,
-    src.drug
+    src.doanhThuThuoc
   );
   const delta = toNumber(
     src.TangTruongPhanTram,
@@ -213,18 +241,17 @@ function mapExamsKpi(src = {}) {
     src.TongLuotKham,
     src.tongLuotKham,
     src.tongSo,
-    src.total,
-    src.count
+    src.total
   );
-  const waitExam = toNumber(
+  const waiting = toNumber(
     src.ChoKham,
     src.choKham,
-    src.waitExam
+    src.waiting
   );
-  const inExam = toNumber(
+  const inProgress = toNumber(
     src.DangKham,
     src.dangKham,
-    src.inExam
+    src.inProgress
   );
   const done = toNumber(
     src.DaHoanTat,
@@ -240,8 +267,8 @@ function mapExamsKpi(src = {}) {
   );
 
   const parts = [];
-  if (waitExam !== null) parts.push(`Chờ khám: ${waitExam}`);
-  if (inExam !== null) parts.push(`Đang khám: ${inExam}`);
+  if (waiting !== null) parts.push(`Chờ khám: ${waiting}`);
+  if (inProgress !== null) parts.push(`Đang khám: ${inProgress}`);
   if (done !== null) parts.push(`Hoàn tất: ${done}`);
 
   return {
@@ -257,39 +284,108 @@ function mapExamsKpi(src = {}) {
   };
 }
 
-/* ========== LIST MAPPING ========== */
+/* ================== LIST NORMALIZERS ================== */
 
-function mapAppointmentStatusTone(codeOrLabel) {
-  const raw = (codeOrLabel ?? "").toString().toLowerCase();
-  if (!raw) return "info";
-  if (raw.includes("hủy") || raw.includes("huy")) return "danger";
-  if (
-    raw.includes("checkin") ||
-    raw.includes("đã đến") ||
-    raw.includes("da_den")
-  )
-    return "ok";
-  if (
-    raw.includes("đang chờ") ||
-    raw.includes("dang_cho") ||
-    raw.includes("cho")
-  )
-    return "warn";
-  if (raw.includes("xác nhận") || raw.includes("xac_nhan")) return "ok";
-  return "info";
+function normalizeUpcomingAppointment(a = {}, idx = 0) {
+  const statusRaw =
+    a.TrangThai ||
+    a.trangThai ||
+    a.statusLabel ||
+    a.status ||
+    "";
+
+  const status = statusRaw || "Đang xử lý";
+
+  const lower = String(statusRaw).toLowerCase();
+  let statusTone = "info";
+  if (lower.includes("huy")) statusTone = "danger";
+  else if (lower.includes("cho")) statusTone = "info";
+  else if (lower.includes("xac_nhan") || lower.includes("checkin"))
+    statusTone = "ok";
+
+  const patient =
+    a.TenBenhNhan ||
+    a.tenBenhNhan ||
+    a.patientName ||
+    a.hoTen ||
+    a.patient ||
+    `#${idx + 1}`;
+
+  const service =
+    a.TenDichVuKham ||
+    a.tenDichVuKham ||
+    a.tenDichVu ||
+    a.serviceName ||
+    a.dichVu ||
+    a.service ||
+    "";
+
+  const at =
+    a.gioHienThi ||
+    a.at ||
+    formatTime(
+      a.GioHen ||
+        a.gioHen ||
+        a.ThoiGianHen ||
+        a.thoiGianHen ||
+        a.time
+    );
+
+  const id =
+    a.id ||
+    a.MaLichHen ||
+    a.maLichHen ||
+    a.code ||
+    `APPT-${idx + 1}`;
+
+  return {
+    id,
+    patient,
+    service,
+    status,
+    statusTone,
+    at,
+  };
 }
 
-function formatTime(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return String(value);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function normalizeActivity(a = {}, idx = 0) {
+  const id =
+    a.id ||
+    a.MaHoatDong ||
+    a.maHoatDong ||
+    `ACT-${idx + 1}`;
+  const content =
+    a.MoTa ||
+    a.moTa ||
+    a.NoiDung ||
+    a.noiDung ||
+    a.content ||
+    "";
+  const at =
+    a.gioHienThi ||
+    a.at ||
+    formatTime(
+      a.ThoiGian ||
+        a.thoiGian ||
+        a.time
+    );
+
+  return {
+    id,
+    content,
+    at,
+  };
 }
 
-/* ========== DTO → UI MODEL ========== */
+/* ================== ROOT NORMALIZER ================== */
 
 function normalizeDashboardDto(dto) {
-  if (!dto || typeof dto !== "object") return EMPTY;
+  if (!dto || typeof dto !== "object") {
+    return {
+      ...EMPTY,
+      kpi: { ...EMPTY.kpi },
+    };
+  }
 
   const patientsRaw =
     dto.BenhNhanTrongNgay ||
@@ -323,100 +419,119 @@ function normalizeDashboardDto(dto) {
     dto.activities ||
     [];
 
-  const upcomingAppointments = Array.isArray(rawUpcoming)
-    ? rawUpcoming.map((a, idx) => {
-        const status =
-          a.TrangThai ||
-          a.trangThai ||
-          a.statusLabel ||
-          a.status ||
-          "";
-        const patient =
-          a.TenBenhNhan ||
-          a.tenBenhNhan ||
-          a.patientName ||
-          a.hoTen ||
-          a.patient ||
-          `#${idx + 1}`;
-        const service =
-          a.TenDichVuKham ||
-          a.tenDichVuKham ||
-          a.tenDichVu ||
-          a.serviceName ||
-          a.dichVu ||
-          a.service ||
-          "";
-        const at =
-          a.gioHienThi ||
-          a.at ||
-          formatTime(
-            a.GioHen ||
-              a.gioHen ||
-              a.ThoiGianHen ||
-              a.thoiGianHen ||
-              a.time
-          );
-
-        const id =
-          a.id ||
-          a.MaLichHen ||
-          a.maLichHen ||
-          a.code ||
-          `APPT-${idx + 1}`;
-
-        return {
-          id,
-          status,
-          statusTone: mapAppointmentStatusTone(
-            a.TrangThai || a.trangThai || a.status
-          ),
-          patient,
-          service,
-          at,
-        };
-      })
-    : [];
-
-  const activities = Array.isArray(rawActivities)
-    ? rawActivities.map((x, idx) => ({
-        id: x.id || x.MaHoatDong || x.maHoatDong || `ACT-${idx + 1}`,
-        content: x.MoTa || x.moTa || x.noiDung || x.message || x.text || "",
-        at:
-          x.thoiGianHienThi ||
-          x.at ||
-          formatTime(x.ThoiGian || x.thoiGian || x.time),
-      }))
-    : [];
-
   return {
+    date:
+      dto.Ngay ||
+      dto.ngay ||
+      dto.date ||
+      null,
     kpi: {
       patientsToday: mapPatientsKpi(patientsRaw),
       appointments: mapAppointmentsKpi(apptRaw),
       revenue: mapRevenueKpi(revenueRaw),
       exams: mapExamsKpi(examsRaw),
     },
-    upcomingAppointments,
-    activities,
+    upcomingAppointments: Array.isArray(rawUpcoming)
+      ? rawUpcoming.map(normalizeUpcomingAppointment)
+      : [],
+    activities: Array.isArray(rawActivities)
+      ? rawActivities.map(normalizeActivity)
+      : [],
   };
 }
 
-/* ========== PUBLIC API HOOKS ========== */
+/* ================== HTTP HOOK ================== */
 
 export async function getDashboardToday() {
-  let dto;
-  if (mockEnabled) {
-    dto = await mockDashboardApi.getToday();
-  } else {
-    const response = await http.get("/dashboard/today");
-    dto = response.data ?? response;
-  }
+  const response = await http.get("/dashboard/today");
+
+  console.log(response?.data);
+  const raw = response?.data ?? response;
+
+  // Một số backend bọc thêm lớp { data: ... }
+  const dto =
+    raw && typeof raw === "object" && raw.data && typeof raw.data === "object"
+      ? raw.data
+      : raw;
+
   return normalizeDashboardDto(dto);
+  
 }
 
-export function useDashboardToday() {
+export function useDashboardToday(options = {}) {
   return useQuery({
     queryKey: ["dashboardToday"],
     queryFn: getDashboardToday,
     staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+
+    ...options,
   });
+}
+
+/* ================== REALTIME SUBSCRIPTION ================== */
+/**
+ * FE dùng:
+ *   const qc = useQueryClient();
+ *   useEffect(() => {
+ *     const off = await subscribeDashboard(qc);
+ *     return () => off && off();
+ *   }, [qc]);
+ */
+export async function subscribeDashboard(queryClient) {
+  if (!queryClient) {
+    throw new Error("subscribeDashboard cần QueryClient");
+  }
+
+  // Đảm bảo connection đã start
+  await ensureStarted();
+
+  const updateWhole = (dto) => {
+    queryClient.setQueryData(
+      ["dashboardToday"],
+      normalizeDashboardDto(dto || {})
+    );
+  };
+
+  const patchKpi = (key, mapper) => (dto) => {
+    queryClient.setQueryData(["dashboardToday"], (prev) => {
+      const base = prev || EMPTY;
+      return {
+        ...base,
+        kpi: {
+          ...(base.kpi || EMPTY.kpi),
+          [key]: mapper(dto || {}),
+        },
+      };
+    });
+  };
+
+  const patchList = (field, mapper) => (items) => {
+    queryClient.setQueryData(["dashboardToday"], (prev) => {
+      const base = prev || EMPTY;
+      const arr = Array.isArray(items) ? items : [];
+      return {
+        ...base,
+        [field]: arr
+          .map((x, idx) => mapper(x, idx))
+          .filter(Boolean),
+      };
+    });
+  };
+
+  const disposers = [
+    on("DashboardTodayUpdated", updateWhole),
+   
+  ];
+
+  return () => {
+    for (const off of disposers) {
+      try {
+        typeof off === "function" && off();
+      } catch {
+        // ignore
+      }
+    }
+  };
 }

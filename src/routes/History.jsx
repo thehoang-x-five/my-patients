@@ -1,5 +1,6 @@
 import React, {
   useDeferredValue,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -11,10 +12,7 @@ import HistoryTable from "../components/history/HistoryTable.jsx";
 import HistoryDetailModal from "../components/history/HistoryDetailModal.jsx";
 import HistoryFilterPopover from "../components/history/HistoryFilterPopover.jsx";
 
-import {
-  useHistoryVisits,
-  useHistoryTransactions,
-} from "../api/history.js";
+import { useHistoryVisits, useHistoryTransactions, subscribeHistory } from "../api/history.js";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -115,8 +113,24 @@ export default function History() {
   const [openFilter, setOpenFilter] = useState(false);
   const filterBtnRef = useRef(null);
 
-  const { data: visitRows = [] } = useHistoryVisits();
-  const { data: txnRows = [] } = useHistoryTransactions();
+  const {
+        data: visitRows = [],
+        refetch: refetchVisits,
+      } = useHistoryVisits();
+      const {
+        data: txnRows = [],
+        refetch: refetchTxns,
+      } = useHistoryTransactions();
+      // realtime: lắng nghe "history.updated" từ SignalR và refetch
+      useEffect(() => {
+     
+        const off = subscribeHistory?.(() => {
+          // refetch cả 2 danh sách, đơn giản & an toàn
+          refetchVisits();
+          refetchTxns();
+        });
+        return () => off && off();
+      }, [refetchVisits, refetchTxns]);
 
   /* ====== common filter helpers ====== */
   const inRange = (date) => {

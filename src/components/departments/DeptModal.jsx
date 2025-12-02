@@ -1,11 +1,33 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import React, { useMemo } from "react";
-import { useRoomServices } from "../../api/departments.js";
+import {  useDepartment} from "../../api/departments.js";
+import Avatar from "../ui/Avatar.jsx";
+const avatar=[];
+function randomInRange(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+for (let i = 1; i <= 6; i++) {
+  avatar[i]="../../../public/"+i.toString()+".jpg";
+}
+function isClsType(type) {
+  const v = String(type || "").toLowerCase();
+  return (
+    v.includes("cls") ||
+    v.includes("cận lâm sàng") ||
+    v.includes("can_lam_sang") ||
+    v.includes("dv")
+  );
+}
 
 function kindText(type) {
-  return type === "phong_dich_vu" ? "Phòng cận lâm sàng (CLS)" : "Phòng khám lâm sàng (LS)";
+  return isClsType(type)
+    ? "Phòng cận lâm sàng (CLS)"
+    : "Phòng khám lâm sàng (LS)";
 }
+
+
 function Progress({ value = 0, max = 0 }) {
   const hasCap = Number(max) > 0;
   const pct = hasCap ? Math.min(100, Math.round((value / max) * 100)) : null;
@@ -23,31 +45,50 @@ function Progress({ value = 0, max = 0 }) {
 
 export default function DeptModal({ open, dept, onClose }) {
   const roomId = dept?.room?.id || dept?.id;
-  const { data: services = [] } = useRoomServices(roomId, { enabled: !!roomId });
 
-  const roomType = dept?.room?.type;
-  const isCLS = roomType === "phong_dich_vu";
+  // Lấy detail chuẩn từ BE
+  const { data: detail } = useDepartment(roomId, {
+    enabled: !!roomId && open,
+  });
+
+  // Ưu tiên detail (RoomDetailDto đã map sang normalizeRoomDetail), fallback card
+  const view = detail || dept || {};
+
+  const roomType =
+    view.room?.type ||
+    view.roomType ||
+    view.loaiPhong ||
+    view.loai_phong;
+  const isCLS = isClsType(roomType);
+
+  // Dịch vụ: lấy từ RoomDetailDto.DichVuTaiPhong (đã normalize -> view.services)
+  const services = Array.isArray(view.services) ? view.services : [];
 
   const shownServices = useMemo(() => {
     const list = Array.isArray(services) ? services : [];
     return list.filter((s) => {
-      const t = s.type || s.loai_dich_vu;
+      const t =
+        s.type || s.loaiDichVu || s.loai_dich_vu || s.LoaiDichVu || "";
       return isCLS ? t === "can_lam_sang" : t !== "can_lam_sang";
     });
   }, [services, isCLS]);
 
   if (!dept) return null;
-  const waiting = dept.waitingPatients || 0;
-  const done = dept.examinedPatients || 0;
+
+  const waiting = view.waitingPatients || 0;
+  const done = view.examinedPatients || 0;
   const totalToday = waiting + done;
-  const capacity = dept.capacityPerDay || dept.room?.capacity || 0;
+  const capacity =
+    view.capacityPerDay || view.room?.capacity || 0;
+
 
   const statusBadge = (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border 
-      ${dept.room?.status ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-600 border-slate-200"}`}
+      ${view.room?.status ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-600 border-slate-200"}`}
     >
-      {dept.room?.status ? "Đang hoạt động" : "Không hoạt động"}
+      
+      {view.room?.status ? "Đang hoạt động" : "Không hoạt động"}
     </span>
   );
 
@@ -90,15 +131,16 @@ export default function DeptModal({ open, dept, onClose }) {
               <div className="sticky top-0 z-10 backdrop-blur-sm bg-gradient-to-r from-indigo-50/80 via-violet-50/80 to-emerald-50/80 border-b border-slate-200 p-4 rounded-t-2xl">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl grid place-items-center font-extrabold bg-indigo-50 text-slate-800 border border-indigo-200">
-                      {dept.short || "P"}
-                    </div>
+                  <Avatar src={avatar[randomInRange(1, 6)]} item={view} size="lg" />
                     <div className="min-w-0">
-                      <h3 className="text-lg font-extrabold text-slate-900 truncate" title={`Phòng ${dept.room?.number || "—"}`}>
-                        Phòng {dept.room?.number || "—"}
+                    <h3
+                        className="text-lg font-extrabold text-slate-900 truncate"
+                        title={`Phòng ${view.room?.number || "—"}`}
+                      >
+                        Phòng {view.room?.number || "—"}
                       </h3>
                       <div className="text-slate-600 text-sm">
-                        Thuộc khoa: <b>{dept.name || "—"}</b>
+                        Thuộc khoa: <b>{view.deptName || view.name || "—"}</b>
                       </div>
                     </div>
                   </div>
@@ -121,26 +163,45 @@ export default function DeptModal({ open, dept, onClose }) {
                   <b className="block mb-3">Tổng quan</b>
                   <div className="grid lg:grid-cols-3 gap-6">
                     <div className="text-sm space-y-1">
-                      <div>Khu vực: <b>{dept.room?.area || "—"}</b></div>
-                      <div>Loại phòng: <b>{roomType === "phong_dich_vu" ? "Cận lâm sàng" : "Khám lâm sàng"}</b></div>
-                      <div>Số điện thoại: <b>{dept.room?.phone || "—"}</b></div>
+                    <div>Khu vực: <b>{view.room?.area || "—"}</b></div>
+                      <div>
+                        Loại phòng:{" "}
+                        <b>
+                          {isCLS ? "Cận lâm sàng" : "Khám lâm sàng"}
+                        </b>
+                      </div>
+                      <div>Số điện thoại: <b>{view.room?.phone || "—"}</b></div>
                       <div>
                         Email:{" "}
-                        <b className="truncate inline-block max-w-[220px]" title={dept.room?.email || ""}>
-                          {dept.room?.email || "—"}
+                        <b
+                          className="truncate max-w-[220px]"
+                          title={view.room?.email || ""}
+                        >
+                          {view.room?.email || "—"}
                         </b>
+
+                   
+                        
                       </div>
                       <div>Giờ làm việc: <span className="font-medium">T2–6 07:30–16:30 • T7 07:30–11:30</span></div>
                     </div>
                     <div className="text-sm space-y-1">
-                      <div>BS phụ trách (cố định): <b>{dept.doctorInCharge || "—"}</b></div>
-                      {dept.nurseInCharge ? <div>Điều dưỡng phụ trách: <b>{dept.nurseInCharge}</b></div> : null}
+                    <div>
+                        BS phụ trách (cố định):{" "}
+                        <b>{view.doctorInCharge || "—"}</b>
+                      </div>
+                      {view.nurseInCharge ? (
+                        <div>
+                          Điều dưỡng phụ trách: <b>{view.nurseInCharge}</b>
+                        </div>
+                      ) : null}
+
                     </div>
                     <div>
                       <div className="text-sm mb-2">Trang thiết bị</div>
                       <div className="flex flex-wrap gap-2">
-                        {(dept.equipments || []).length
-                          ? (dept.equipments || []).map((eq, i) => (
+                      {(view.equipments || []).length
+                          ? (view.equipments || []).map((eq, i) => (
                               <motion.span
                                 key={i}
                                 whileHover={{ scale: 1.05 }}
@@ -221,7 +282,7 @@ export default function DeptModal({ open, dept, onClose }) {
                               >
                                 <td className="px-2 py-2 border-b border-slate-100">{id}</td>
                                 <td className="px-2 py-2 border-b border-slate-100 font-medium">{name}</td>
-                                <td className="px-2 py-2 border-b border-slate-100">{type === "can_lam_sang" ? "CLS" : "LS/CK"}</td>
+                                <td className="px-2 py-2 border-b border-slate-100">{type === "can_lam_sang" ? "Cận lâm sàng" : "Lâm sàng"}</td>
                                 <td className="px-2 py-2 border-b border-slate-100">{min}</td>
                                 <td className="px-2 py-2 border-b border-slate-100">{price.toLocaleString()} đ</td>
                               </motion.tr>

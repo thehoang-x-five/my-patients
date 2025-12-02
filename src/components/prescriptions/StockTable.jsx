@@ -3,7 +3,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 
-const DEFAULT_NEAR_EXPIRY_DAYS = 90;
+const DEFAULT_NEAR_EXPIRY_DAYS = 30;
 const LOW_STOCK_QTY = 10;
 
 const daysLeft = (exp) => {
@@ -146,10 +146,10 @@ export default function StockTable({
   items = [],
   onEdit,
   loading = false,
-  nearExpiryDays,
+  nearExpiryDays= 30,
   stretch = false,
 }) {
-  const NEAR = nearExpiryDays ?? DEFAULT_NEAR_EXPIRY_DAYS;
+  const NEAR = nearExpiryDays ;
 
   return (
     <section
@@ -191,7 +191,7 @@ export default function StockTable({
                   colSpan={9}
                   className="px-3 py-10 text-center text-slate-500"
                 >
-                  Đang tải kho thuốc…
+                 Không có bản ghi phù hợp.
                 </td>
               </tr>
             ) : !items.length ? (
@@ -200,7 +200,7 @@ export default function StockTable({
                   colSpan={9}
                   className="px-3 py-10 text-center text-slate-500"
                 >
-                  Không có thuốc phù hợp.
+                  Không có bản ghi phù hợp.
                 </td>
               </tr>
             ) : (

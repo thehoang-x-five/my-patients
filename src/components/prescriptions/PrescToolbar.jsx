@@ -22,7 +22,7 @@ export default function PrescToolbar({
   // thống kê kho
   stockCount,
   stockActiveCount = 0,
-  stockPausedCount = 0,      // ⚠ prop cũ, nhưng dùng cho "Hết hạn"
+  stockExpiredCount = 0,     // ⚠ prop cũ, nhưng dùng cho "Hết hạn"
   stockNearExpiryCount = 0,
   stockNearOutCount = 0,
 
@@ -65,7 +65,7 @@ export default function PrescToolbar({
             Hoạt động:&nbsp;<b>{stockActiveCount}</b>
           </Chip>
           <Chip dot="rose">
-            Hết hạn:&nbsp;<b>{stockPausedCount}</b>
+            Hết hạn:&nbsp;<b>{stockExpiredCount }</b>
           </Chip>
           <Chip dot="amber">
             Sắp hết hạn:&nbsp;<b>{stockNearExpiryCount}</b>
@@ -78,15 +78,15 @@ export default function PrescToolbar({
 
       {/* TAB + LỌC + RESET BÊN PHẢI */}
       <div className="flex flex-wrap items-center gap-2 ml-auto">
-        <Button
+       
+        <button
           type="button"
           onClick={onResetFilters}
+          className="inline-flex items-center justify-center rounded-2xl bg-white ring-1 ring-slate-200 hover:ring-violet-400 text-xs px-3 py-2 shadow-sm"
           title="Làm mới bộ lọc"
-          className="!px-2 rounded-xl bg-white ring-1 ring-slate-200 hover:ring-indigo-400 text-[13px]"
         >
           ⟲
-        </Button>
-
+        </button>
         <Button
           ref={filterBtnRef}
           type="button"

@@ -1,15 +1,24 @@
-import React from 'react';
-import { useEffect, useMemo, useState } from "react";
+// src/Reports.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+
 import ReportToolbar from "../components/reports/ReportToolbar.jsx";
 import KpiCard from "../components/reports/KpiCard.jsx";
 import OverviewChart from "../components/reports/OverviewChart.jsx";
 import ReportsTable from "../components/reports/ReportsTable.jsx";
-import { buildSeries, filterByPeriod, calcKpi } from "../data/reports.js";
+
+import { useReportsOverview } from "../api/reports.js";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
 const VND = (n) => `₫ ${Number(n || 0).toLocaleString("vi-VN")}`;
+
+const EMPTY_KPI = {
+  revenue: { value: 0, trend: 0, spark: [] },
+  newPatients: { value: 0, trend: 0, spark: [] },
+  revisits: { value: 0, trend: 0, spark: [] },
+  cancelRate: { value: 0, trend: 0, spark: [] },
+};
 
 export default function Reports() {
   useViewportVH();
@@ -17,52 +26,52 @@ export default function Reports() {
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
-  const [raw] = useState(() => buildSeries(90));
   const [period, setPeriod] = useState("mtd");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("overview"); // để sẵn nếu sau này cần
   const [view, setView] = useState("chart");
-  const [loading, setLoading] = useState(false);
+  const [loadingView, setLoadingView] = useState(false);
 
-  const rows = useMemo(() => {
-    let r = filterByPeriod(raw, period);
-    if (from) r = r.filter((x) => new Date(x.date) >= new Date(from));
-    if (to) r = r.filter((x) => new Date(x.date) <= new Date(to));
-    return r;
-  }, [raw, period, from, to]);
+  const queryParams = useMemo(
+    () => ({
+      period,
+      from: from || undefined,
+      to: to || undefined,
+    }),
+    [period, from, to]
+  );
 
-  const kpi = useMemo(() => calcKpi(rows), [rows]);
+  const { data, isLoading, error } = useReportsOverview(queryParams);
 
-  const sparkRev = rows.map((r) => ({
-    value: r.revenue,
-    date: r.date,
-    label: r.label,
-  }));
-  const sparkOrders = rows.map((r) => ({
-    value: r.newPatients ?? r.orders,
-    date: r.date,
-    label: r.label,
-  }));
-  const sparkRevisit = rows.map((r) => ({
-    value: r.revisits,
-    date: r.date,
-    label: r.label,
-  }));
-  const sparkCancel = rows.map((r) => ({
-    value: r.cancelRate,
-    date: r.date,
-    label: r.label,
-  }));
+  const kpi = data?.kpi || EMPTY_KPI;
+  const rows = Array.isArray(data?.rows) ? data.rows : [];
+
+  const sparkRev = kpi.revenue.spark || [];
+  const sparkNew = kpi.newPatients.spark || [];
+  const sparkRevisit = kpi.revisits.spark || [];
+  const sparkCancel = kpi.cancelRate.spark || [];
 
   function onExport() {
-    const header = "Date,Revenue,Orders,Revisits,CancelRate(%)\n";
+    if (!rows.length) return;
+
+    const header =
+      "Date,Revenue,NewPatients,Revisits,CancelRate(%)\n";
     const body = rows
       .map((r) =>
-        [r.date, r.revenue, r.orders, r.revisits, r.cancelRate].join(",")
+        [
+          r.date,
+          r.revenue,
+          r.newPatients,
+          r.revisits,
+          r.cancelRate,
+        ].join(",")
       )
       .join("\n");
-    const blob = new Blob([header + body], { type: "text/csv;charset=utf-8;" });
+
+    const blob = new Blob([header + body], {
+      type: "text/csv;charset=utf-8;",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -70,6 +79,7 @@ export default function Reports() {
     a.click();
     URL.revokeObjectURL(url);
   }
+
   function onReset() {
     setFrom("");
     setTo("");
@@ -77,10 +87,10 @@ export default function Reports() {
   }
 
   useEffect(() => {
-    setLoading(true);
-    const t = setTimeout(() => setLoading(false), 150);
+    setLoadingView(true);
+    const t = setTimeout(() => setLoadingView(false), 150);
     return () => clearTimeout(t);
-  }, [period, from, to, tab, view]);
+  }, [period, from, to, tab, view, isLoading]);
 
   return (
     <motion.main
@@ -110,36 +120,36 @@ export default function Reports() {
           onReset={onReset}
         />
 
-        {/* KPI rail */}
-        <section className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 ">
+        {/* KPI rail – đồng bộ tone đỏ nhẹ + nâu nhẹ */}
+        <section className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <KpiCard
             title="Doanh thu"
-            value={kpi.revenue}
-            trend={7}
+            value={kpi.revenue.value}
+            trend={kpi.revenue.trend}
             data={sparkRev}
-            color="#16a34a"
+            color="#b91c1c" // đỏ trầm
             formatter={VND}
           />
           <KpiCard
             title="Bệnh nhân mới"
-            value={kpi.newPatients}
-            trend={3}
-            data={sparkOrders}
-            color="#0ea5e9"
+            value={kpi.newPatients.value}
+            trend={kpi.newPatients.trend}
+            data={sparkNew}
+            color="#0ea5e9" // cyan/sky
           />
           <KpiCard
             title="Tái khám"
-            value={kpi.revisits}
-            trend={1}
+            value={kpi.revisits.value}
+            trend={kpi.revisits.trend}
             data={sparkRevisit}
-            color="#f59e0b"
+            color="#c2410c" // nâu cam nhẹ
           />
           <KpiCard
             title="Tỷ lệ huỷ (%)"
-            value={kpi.cancel}
-            trend={-2}
+            value={kpi.cancelRate.value}
+            trend={kpi.cancelRate.trend}
             data={sparkCancel}
-            color="#ef4444"
+            color="#fb7185" // rose sáng
           />
         </section>
 
@@ -152,8 +162,8 @@ export default function Reports() {
             exit={{ opacity: 0, y: -6 }}
             className="mt-2.5 flex-1 min-h-0 p-1 overflow-hidden"
           >
-            {loading ? (
-              <section className="rounded-2xl bg-white ring-1 ring-slate-200/80 p-3  h-full">
+            {isLoading || loadingView ? (
+              <section className="rounded-2xl bg-white ring-1 ring-slate-200/80 p-3 h-full">
                 <div className="skel h-full" />
               </section>
             ) : view === "chart" ? (
