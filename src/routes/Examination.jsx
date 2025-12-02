@@ -29,7 +29,8 @@ export default function Examination() {
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
   const qc = useQueryClient();
-  const { data: patients = [] } = useQueueToday();
+  const { data: queueData } = useQueueToday();
+  const patients = Array.isArray(queueData?.items) ? queueData.items : [];
   const startMut = useStartExam();
   const finishMut = useFinishRemove();
   const orderMut = useCreateExamOrder();

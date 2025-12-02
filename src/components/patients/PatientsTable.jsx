@@ -4,12 +4,9 @@ import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 
 import {
-  useExamTemplates,
   STATUSES,
   useUpdatePatientStatus,
-  mapTodayStatusLabel,useMarkServiceDispatched,
-  useMarkServiceDone,
-  useMarkWaitDoctorReview,
+  mapTodayStatusLabel,
 } from "../../api/patients.js";
 
 import { useEnqueueService, useReturnToDoctor } from "../../api/queue.js";
@@ -181,35 +178,10 @@ export default function PatientsTable({
   stretch = false,
   highlightPid = null,
 }) {
-  // ===== metadata (phí khám DV) =====
-  const { data: examTemplates = [] } = useExamTemplates();
-  const addTxnMut = useAddTransaction();
+  // ===== mutations =====
   const enqueueServiceMut = useEnqueueService();
   const returnToDoctorMut = useReturnToDoctor();
-  const svcDispatched = useMarkServiceDispatched();
-  const svcDone = useMarkServiceDone();
-  const svcWaitReview = useMarkWaitDoctorReview();
   const updatePatientStatus = useUpdatePatientStatus();
-
-  const computeServiceExamFee = useMemo(() => {
-    return () => {
-      // Tìm template dịch vụ đầu tiên có giá
-      const serviceTemplate = (examTemplates || []).find(
-        (t) => t.loaiDichVu === "can_lam_sang" || t.type === "can_lam_sang"
-      );
-      if (serviceTemplate?.price != null) {
-        return Number(serviceTemplate.price) || 0;
-      }
-      // Nếu không có, lấy template đầu tiên có giá
-      const firstWithPrice = (examTemplates || []).find(
-        (t) => t.price != null && Number(t.price) > 0
-      );
-      if (firstWithPrice?.price != null) {
-        return Number(firstWithPrice.price) || 0;
-      }
-      return 0;
-    };
-  }, [examTemplates]);
 
   const handleStartToday = (p) => {
     if (!p) return;
@@ -249,7 +221,11 @@ export default function PatientsTable({
       dept: "Cận lâm sàng",
       doctor: "Khu dịch vụ",
     });
-    svcDispatched.mutate({ pid });
+    // Cập nhật trạng thái: đã gửi dịch vụ đi
+    updatePatientStatus.mutate({
+      id: pid,
+      status: STATUSES.WAIT_EXAM_SVC,
+    });
   }
 
   function handleReturnToDoctor(p) {
@@ -259,9 +235,11 @@ export default function PatientsTable({
     const fromDoctor =
       p?.serviceOrder?.fromDoctor || p.doctor || "Bác sĩ phụ trách";
   
-    // cập nhật flow dịch vụ
-    svcDone.mutate({ pid });
-    svcWaitReview.mutate({ pid });
+    // Cập nhật flow dịch vụ: đã hoàn thành dịch vụ, chờ bác sĩ xem xét
+    updatePatientStatus.mutate({
+      id: pid,
+      status: STATUSES.WAIT_PROC,
+    });
   
     // ĐẨY VỀ HÀNG ĐỢI BÁC SĨ với pid đúng
     returnToDoctorMut.mutate({
@@ -272,6 +250,8 @@ export default function PatientsTable({
       note: "Đã có kết quả dịch vụ",
     });
   }
+  
+  // Click "Lập phiếu khám" — logic DV / thường
   function handleIntakeSmart(p) {
     const status = String(getTodayStatusCode(p) || "").toLowerCase();
     
@@ -283,20 +263,7 @@ export default function PatientsTable({
     // Chỉ mở modal, truyền action 'intake'. 
     // PatientModal sẽ gọi API lấy chi tiết nếu cần thiết.
     onAction?.("intake", p);
-}
-  // Click “Lập phiếu khám” — logic DV / thường
-  function handleIntakeSmart(p) {
-    const status = String(getTodayStatusCode(p) || "").toLowerCase();
-    
-    // Dựa hoàn toàn vào Status Code từ API
-    const isServiceWait = 
-        status === STATUSES.WAIT_INTAKE_SVC || 
-        status === STATUSES.WAIT_EXAM_SVC;
-
-    // Chỉ mở modal, truyền action 'intake'. 
-    // PatientModal sẽ gọi API lấy chi tiết nếu cần thiết.
-    onAction?.("intake", p);
-}
+  }
 
   return (
     <section

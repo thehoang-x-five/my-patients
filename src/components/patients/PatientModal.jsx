@@ -26,14 +26,12 @@ import {
 
 // Hàng đợi (enqueue khám LS, CLS, quay lại khám)
 import {
-  getQueue,
+  useQueueToday,
   enqueueFromAppointment,
   enqueueService,
   enqueueReturnToDoctor,
   enqueueWalkin,
 } from "../../api/queue";
-// Billing (thu tiền khám, CLS, thuốc)
-import { createBillForExam, createBillForServices } from "../../api/billing";
 // Lịch hẹn (nếu cần làm follow-up)
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments";
 
@@ -614,15 +612,18 @@ const transactions = useMemo(() => {
     return [{ id, name, rooms: [], doctors: [] }];
   }, [serviceInfo]);
 
+  // Lấy danh sách hàng đợi để tính số lượng chờ theo khoa
+  const { data: queueData } = useQueueToday();
+  const queueItems = Array.isArray(queueData?.items) ? queueData.items : [];
+
   const waitingByDept = useMemo(() => {
-    const q = getQueue();
     const map = {};
-    q.forEach((it) => {
+    queueItems.forEach((it) => {
       const k = it.dept || "";
       map[k] = (map[k] || 0) + 1;
     });
     return map;
-  }, [open]);
+  }, [queueItems]);
 
   /* ==================== PRINT OVERLAY STATE ==================== */
   const [print, setPrint] = useState({ show: false, payload: null });

@@ -330,13 +330,33 @@ export function usePatientsList(params = {}, options) {
   });
 }
 
-// Tạo mới bệnh nhân +// Cập nhật bệnh nhân
+// Tạo mới bệnh nhân
 export function useCreatePatient() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload) => upsertPatient(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["patients"] });
+    },
+  });
+}
+
+// Cập nhật bệnh nhân (alias cho useCreatePatient vì API upsertPatient xử lý cả create và update)
+export function useUpdatePatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }) => {
+      // Nếu có id và patch, merge chúng lại
+      const payload = id ? { ...patch, id } : patch;
+      return upsertPatient(payload);
+    },
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      // Invalidate detail nếu có id
+      const pid = vars?.id ?? vars?.patch?.id ?? vars?.patch?.pid;
+      if (pid) {
+        qc.invalidateQueries({ queryKey: ["patient", pid] });
+      }
     },
   });
 }
