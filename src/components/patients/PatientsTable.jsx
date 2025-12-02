@@ -192,12 +192,22 @@ export default function PatientsTable({
   const updatePatientStatus = useUpdatePatientStatus();
 
   const computeServiceExamFee = useMemo(() => {
-    const byId = Object.fromEntries((examTemplates || []).map((t) => [t.id, t]));
     return () => {
-      const dv = byId["T-KHAM-DV"];
-      if (dv?.price != null) return Number(dv.price) || 0;
-      const thuong = byId["T-KHAM-THUONG"];
-      return Number(thuong?.price) || 0;
+      // Tìm template dịch vụ đầu tiên có giá
+      const serviceTemplate = (examTemplates || []).find(
+        (t) => t.loaiDichVu === "can_lam_sang" || t.type === "can_lam_sang"
+      );
+      if (serviceTemplate?.price != null) {
+        return Number(serviceTemplate.price) || 0;
+      }
+      // Nếu không có, lấy template đầu tiên có giá
+      const firstWithPrice = (examTemplates || []).find(
+        (t) => t.price != null && Number(t.price) > 0
+      );
+      if (firstWithPrice?.price != null) {
+        return Number(firstWithPrice.price) || 0;
+      }
+      return 0;
     };
   }, [examTemplates]);
 
@@ -205,9 +215,10 @@ export default function PatientsTable({
     if (!p) return;
     const id = p.id ?? p.pid;
     if (!id) return;
+    // Call UpdateDailyStatus với status "cho_tiep_nhan"
     updatePatientStatus.mutate({
       id,
-      status: STATUSES.WAIT_INTAKE,
+      status: "cho_tiep_nhan",
     });
   };
 

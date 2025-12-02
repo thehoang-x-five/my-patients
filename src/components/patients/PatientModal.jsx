@@ -85,7 +85,7 @@ export default function PatientModal({
 
   // ================= EXAM TEMPLATE / BOOKING =================
 
-  const [tplId, setTplId] = useState("T-KHAM-THUONG");
+  const [tplId, setTplId] = useState(null);
 
   // Lấy danh sách dịch vụ (overview) – BE đã normalize trong examination.js
   const { data: examServices = [] } = useExamServices({}, { enabled: true });
@@ -128,8 +128,8 @@ export default function PatientModal({
 
   const tpl = useMemo(
     () =>
-      tplList.find((t) => t?.id === tplId) ||
-      tplList[0] || { id: "", title: "Khám thường", price: 70000 },
+      (tplId ? tplList.find((t) => t?.id === tplId) : null) ||
+      tplList[0] || { id: "", title: "", price: 0 },
     [tplId, tplList]
   );
 
@@ -141,7 +141,7 @@ export default function PatientModal({
   const today = new Date().toISOString().slice(0, 10);
 
   const [exam, setExam] = useState({
-    type: "Khám thường",
+    type: "",
     dept: "",
     room: "",
     symptoms: "",
@@ -150,8 +150,8 @@ export default function PatientModal({
 
   const [booking, setBooking] = useState({
     date: today,
-    time: "08:00",
-    price: 70000,
+    time: "",
+    price: 0,
     doctor: "",
     dept: "",
   });
@@ -197,8 +197,8 @@ export default function PatientModal({
         b.price && b.price > 0
           ? b.price
           : donGia != null
-          ? Number(donGia) || b.price || 70000
-          : b.price || 70000,
+          ? Number(donGia) || b.price || 0
+          : b.price || 0,
     }));
   }, [serviceInfo]);
 
@@ -215,7 +215,7 @@ export default function PatientModal({
     advice: "",
     followup: "Cho thuốc về",
     followupDate: "",
-    followupTime: "08:00",
+    followupTime: "",
   };
   const [diagnosisData, setDiagnosisData] = useState(DIAG_INIT);
   const [svcResults, setSvcResults] = useState([]);
@@ -313,8 +313,9 @@ export default function PatientModal({
   useEffect(() => {
     if (!open) return;
     setForm(patient || {});
-    setTplId("T-KHAM-THUONG");
-    setExam({ type: "Khám thường", dept: "", room: "", symptoms: "", note: "" });
+    // Không hardcode template ID, để user chọn từ danh sách
+    setTplId(null);
+    setExam({ type: "", dept: "", room: "", symptoms: "", note: "" });
     const preExtras = EXTRA_FIELDS.filter(
       (f) => patient?.[f.key] && String(patient[f.key]).trim().length
     ).map((f) => ({ key: f.key, value: String(patient[f.key]) }));
@@ -322,8 +323,8 @@ export default function PatientModal({
 
     setBooking({
       date: today,
-      time: "08:00",
-      price: 70000,
+      time: "",
+      price: 0,
       doctor: "",
       dept: "",
     });
@@ -365,8 +366,15 @@ export default function PatientModal({
 
   useEffect(() => {
     if (!tpl) return;
-    setBooking((b) => ({ ...b, price: Number(tpl.price ?? b.price ?? 70000) }));
-  }, [tpl]);
+    // Chỉ cập nhật giá nếu tpl có giá và booking chưa có giá
+    if (tpl.price && tpl.price > 0) {
+      setBooking((b) => ({ ...b, price: b.price && b.price > 0 ? b.price : Number(tpl.price) }));
+    }
+    // Cập nhật type từ template nếu exam.type đang trống
+    if (tpl.title && !exam.type) {
+      setExam((s) => ({ ...s, type: s.type || tpl.title }));
+    }
+  }, [tpl, exam.type]);
 // Lịch sử khám từ PatientDetail
 const visits = useMemo(() => {
   const p = patientForView;
@@ -416,10 +424,10 @@ const transactions = useMemo(() => {
       setExam((s) => ({ ...s, note: last?.note || "" }));
     }
     if (isServiceIntake) {
-      setTplId("T-KHAM-DV");
+      // Không hardcode template ID cho dịch vụ, để user chọn
       setExam((s) => ({
         ...s,
-        type: "Khám dịch vụ",
+        type: s.type || "",
         dept: "",
         symptoms: "",
         note: "",
@@ -663,7 +671,7 @@ const transactions = useMemo(() => {
     const dept = exam.dept || booking.dept || "";
     const doctor = booking.doctor || "";
     const room = exam.room || "";
-    const fee = booking.price || tpl?.price || 70000;
+    const fee = booking.price || tpl?.price || 0;
 
     if (isServiceIntake) {
       const services = serviceItems;
@@ -969,7 +977,7 @@ const transactions = useMemo(() => {
 
     if (/tái khám/i.test(d.followup || "")) {
       const date = (d.followupDate || "").slice(0, 10);
-      const time = d.followupTime || "08:00";
+      const time = d.followupTime || "";
       if (date) {
         createFollowupHold({
           pid,

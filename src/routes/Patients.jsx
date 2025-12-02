@@ -17,7 +17,7 @@ import {
   STATUSES,
 } from "../api/patients";
 import { APPT_STATUS, searchAppointmentsRaw } from "../api/appointments";
-import { searchClinicalRaw } from "../api/examination";
+import { searchClinicalRaw, getFinalDiagnosis } from "../api/examination";
 
 import { useUIStore, useExamStore } from "../components/stores/appStore.js";
 
@@ -226,70 +226,63 @@ export default function Patients() {
     return () => clearTimeout(t);
   }, [highlightPid, clearHighlight]);
 
-    // === Flash nút + Thêm khi có prefill + prefetch lịch hẹn đã check-in ===
-    useEffect(() => {
-      if (!flashAddAt) return;
-  
-      // 1. Nếu có mã bệnh nhân trong prefill -> gọi Search lịch hẹn
-      const code =
-        patientPrefill?.code ||
-        patientPrefill?.patientCode ||
-        patientPrefill?.maBenhNhan ||
-        patientPrefill?.ma_benh_nhan;
-  
-      if (code) {
-        (async () => {
-          try {
-            const today = todayStr();
-            const appts = await searchAppointmentsRaw({
-              MaBenhNhan: code,
-              TrangThai: APPT_STATUS.DA_CHECKIN,
-              FromDate: today,
-              ToDate: today,
-            });
-  
-            if (Array.isArray(appts) && appts.length > 0) {
-              const latest = pickLatestAppointment(appts);
-              setPatientPrefill({
-                ...(patientPrefill || {}),
-                latestAppointment: latest || null,
-              });
-            } else {
-              setPatientPrefill({
-                ...(patientPrefill || {}),
-                latestAppointment: null,
-              });
-            }
-          } catch (err) {
-            console.error(
-              "Không lấy được lịch hẹn đã check-in cho prefill bệnh nhân:",
-              err
-            );
-          }
-        })();
+  // === Khi highlight xuất hiện -> call API search appointments đã check-in
+  useEffect(() => {
+    if (!highlightPid) return;
+
+    (async () => {
+      try {
+        // Call API search appointments với MaBenhNhan + TrangThai "da_checkin"
+        const appts = await searchAppointmentsRaw({
+          MaBenhNhan: highlightPid,
+          TrangThai: APPT_STATUS.DA_CHECKIN,
+        });
+
+        if (Array.isArray(appts) && appts.length > 0) {
+          // Lấy lịch hẹn mới nhất
+          const latest = pickLatestAppointment(appts);
+          
+          // Lưu vào store patientPrefill
+          const currentPrefill = useUIStore.getState().patientPrefill;
+          setPatientPrefill({
+            ...(currentPrefill || {}),
+            code: highlightPid,
+            maBenhNhan: highlightPid,
+            latestAppointment: latest || null,
+          });
+        }
+      } catch (err) {
+        console.error("Không lấy được lịch hẹn đã check-in khi highlight:", err);
       }
-  
-      // 2. Hiệu ứng flash nút + Thêm
-      const btn = document.getElementById("patients-add-btn");
-      if (btn) {
-        try {
-          btn.focus();
-        } catch {}
-        btn.classList.add("flash-once");
-        const t = setTimeout(() => {
-          btn.classList.remove("flash-once");
-          ackFlashAdd();
-        }, 5000);
-        return () => {
-          clearTimeout(t);
-          try {
-            btn.classList.remove("flash-once");
-          } catch {}
-        };
-      } else {
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightPid]);
+
+  // === Flash nút + Thêm khi có flashAddAt
+  useEffect(() => {
+    if (!flashAddAt) return;
+
+    // Hiệu ứng flash nút + Thêm
+    const btn = document.getElementById("patients-add-btn");
+    if (btn) {
+      try {
+        btn.focus();
+      } catch {}
+      btn.classList.add("flash-once");
+      const t = setTimeout(() => {
+        btn.classList.remove("flash-once");
         ackFlashAdd();
-      }
-    }, [flashAddAt, ackFlashAdd, setPatientPrefill]);
+      }, 5000);
+      return () => {
+        clearTimeout(t);
+        try {
+          btn.classList.remove("flash-once");
+        } catch {}
+      };
+    } else {
+      ackFlashAdd();
+    }
+  }, [flashAddAt, ackFlashAdd]);
   
 
   // Clear prefill khi rời trang
@@ -429,7 +422,7 @@ export default function Patients() {
   }, [items]);
 
   async function handleAction(type, p) {
-    clearPatientPrefill();
+    // Không clear prefill ở đây, chỉ clear khi đóng modal Add
     if (!p) return;
 
     const pid =
@@ -496,28 +489,47 @@ export default function Patients() {
 
       return;
     }
-// ===== XỬ LÝ & CHẨN ĐOÁN =====
-if (type === "process") {
-  // Mở modal xử lý & chẩn đoán (không qua store)
-  setModal({ open: true, mode: "process", patient: p });
+    // ===== XỬ LÝ & CHẨN ĐOÁN =====
+    if (type === "process") {
+      // Mở modal xử lý & chẩn đoán
+      setModal({ open: true, mode: "process", patient: p });
 
-  if (!pid) return;
+      if (pid) {
+        // Tìm phiếu khám từ MaBenhNhan để lấy maPhieuKham và gọi getFinalDiagnosis
+        // Modal sẽ tự fetch dữ liệu khi cần
+        try {
+          // Tìm phiếu khám đang thực hiện hoặc mới nhất
+          const clinicalList = await searchClinicalRaw({
+            MaBenhNhan: pid,
+            TrangThai: "dang_thuc_hien",
+          });
 
-  try {
-    // GỌI API Lấy chẩn đoán cuối
-    // GET /api/clinical/{maPhieuKham}/final-diagnosis
-    // backend sẽ hiểu pid là mã bệnh nhân theo yêu cầu của anh
-    await getFinalDiagnosis(pid);
+          if (Array.isArray(clinicalList) && clinicalList.length > 0) {
+            // Lấy phiếu khám đầu tiên (đang thực hiện)
+            const latestClinical = clinicalList[0];
+            const maPhieuKham = 
+              latestClinical?.MaPhieuKham ||
+              latestClinical?.maPhieuKham ||
+              latestClinical?.id ||
+              null;
 
-    // Chưa cần lưu đâu cả, tab xử lý & chẩn đoán sẽ làm sau
-    // Có thể tạm console.log nếu muốn debug:
-    // console.log("Final diagnosis:", dx);
-  } catch (err) {
-    console.error("Lỗi khi gọi lấy chẩn đoán cuối:", err);
-  }
+            if (maPhieuKham) {
+              // Call GET /api/clinical/{maPhieuKham}/final-diagnosis
+              // Modal sẽ tự xử lý khi cần
+              try {
+                await getFinalDiagnosis(maPhieuKham);
+              } catch (err) {
+                console.error("Không lấy được chẩn đoán cuối:", err);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Lỗi khi tìm phiếu khám để lấy chẩn đoán:", err);
+        }
+      }
 
-  return;
-}
+      return;
+    }
   }
 
 
@@ -544,22 +556,28 @@ if (type === "process") {
               open: true,
               mode: "add",
               patient: {
+                // ID/Mã bệnh nhân từ prefill hoặc lịch hẹn
+                id: patientPrefill?.code ||
+                    patientPrefill?.maBenhNhan ||
+                    latest?.MaBenhNhan ||
+                    latest?.patientCode ||
+                    "",
                 // Tên ưu tiên:
                 // 1. từ prefill (check-in truyền qua)
-                // 2. nếu không có thì lấy từ lịch hẹn: TenBenhNhan / HoTen
+                // 2. nếu không có thì lấy từ lịch hẹn: TenBenhNhan / HoTen / patientName
                 name:
                   patientPrefill?.name ||
                   latest?.TenBenhNhan ||
                   latest?.HoTen ||
+                  latest?.patientName ||
                   "",
-        
-               
         
                 // SĐT nếu BE có trả:
                 phone:
                   patientPrefill?.phone ||
                   latest?.SoDienThoai ||
                   latest?.DienThoai ||
+                  latest?.phone ||
                   "",
         
                 // giữ luôn bản ghi lịch hẹn để tab tạo sau này muốn lấy thêm
@@ -618,16 +636,12 @@ if (type === "process") {
             open={modal.open}
             patient={patientForModal}
             onClose={() => {
+              const wasAddMode = modal.mode === "add";
               setModal({ open: false, mode: "view", patient: null });
-      
-              // Nếu đang ở mode Add thì clear luôn prefill,
-              // trong đó có cả latestAppointment -> "giải phóng"
-              if (modal.mode === "add") {
-                clearPatientPrefill(); 
-                // hoặc nếu muốn giữ lại name/code mà chỉ xóa lịch hẹn:
-                // if (patientPrefill) {
-                //   setPatientPrefill({ ...patientPrefill, latestAppointment: null });
-                // }
+              
+              // Nếu đang ở mode Add thì clear luôn prefill sau khi đóng modal
+              if (wasAddMode) {
+                clearPatientPrefill();
               }
             }}
             onSaved={(p) => {

@@ -287,16 +287,6 @@ export const upsertPatient = async (payload = {}) => {
   return res.data || res;
 };
 
-/**
- * Dùng UpsertPatient cho flow cập nhật từ FE.
- * Nếu server sau này tách riêng UpdatePatient thì hàm này sẽ map sang API mới.
- */
-export const updatePatient = async ({ id, patch } = {}) => {
-  // Hiện tại API chỉ có UpsertPatient → truyền toàn bộ payload lên
-  const body = buildPatientPayload({ ...(patch || {}), id });
-  const res = await http.post("/patient", body);
-  return res.data || res;
-};
 
 /**
  * UpdateDailyStatus
@@ -317,85 +307,8 @@ export const updatePatientStatus = async ({ id, status } = {}) => {
   return res.data || res;
 };
 
-/**
- * MasterDataController
- * GET /api/master-data/departments
- * Lấy danh sách khoa/phòng cho dropdown trong PatientModal
- */
-export const listDepartments = async () => {
-  const res = await http.get("/master-data/departments");
-  return res.data || res;
-};
 
-/**
- * Các API meta khác (chưa có spec rõ trong API doc):
- * - listExamTemplates
- * - listExtraFields
- * - getDoctorsQueue
- * - listAppointmentHolds
- * - createFollowupHold
- *
- * Tạm thời:
- *  - listExamTemplates & listExtraFields & getDoctorsQueue & listAppointmentHolds: trả [] để UI không crash.
- *  - createFollowupHold: throw Error để dev biết BE chưa hỗ trợ.
- */
 
-export const listExamTemplates = async () => {
-  return [];
-};
-
-export const listExtraFields = async () => {
-  return [];
-};
-
-export const getDoctorsQueue = async () => {
-  return [];
-};
-
-export const listAppointmentHolds = async (_id) => {
-  return [];
-};
-
-export const createFollowupHold = async (_args = {}) => {
-  throw new Error(
-    "createFollowupHold: Backend chưa định nghĩa API hold hẹn tái khám cho bệnh nhân."
-  );
-};
-
-/**
- * markServiceDispatched / markServiceDone / markWaitDoctorReview
- * Không có API riêng trong spec → dùng UpdateDailyStatus để chuyển Patient.TrangThaiHomNay.
- */
-
-export const markServiceDispatched = async (args = {}) => {
-  const id = args.id ?? args.pid ?? args.code;
-  if (!id) throw new Error("Missing patient id for markServiceDispatched");
-
-  // Khi dịch vụ được gửi đi CLS → trạng thái chờ CLS
-  const status = STATUSES.WAIT_CLS;
-  await updatePatientStatus({ id, status });
-  return { pid: id, state: status };
-};
-
-export const markServiceDone = async (args = {}) => {
-  const id = args.id ?? args.pid ?? args.code;
-  if (!id) throw new Error("Missing patient id for markServiceDone");
-
-  // Khi CLS hoàn tất, chờ bác sĩ xử lý kết quả → chờ xử lý (dịch vụ)
-  const status = STATUSES.WAIT_PROC_SVC;
-  await updatePatientStatus({ id, status });
-  return { pid: id, state: status };
-};
-
-export const markWaitDoctorReview = async (args = {}) => {
-  const id = args.id ?? args.pid ?? args.code;
-  if (!id) throw new Error("Missing patient id for markWaitDoctorReview");
-
-  // Sau khi dịch vụ trả kết quả, chờ bác sĩ xem → chờ xử lý chung
-  const status = STATUSES.WAIT_PROC;
-  await updatePatientStatus({ id, status });
-  return { pid: id, state: status };
-};
 
 /* ===== React Query hooks ===== */
 
@@ -417,7 +330,7 @@ export function usePatientsList(params = {}, options) {
   });
 }
 
-// Tạo mới bệnh nhân
+// Tạo mới bệnh nhân +// Cập nhật bệnh nhân
 export function useCreatePatient() {
   const qc = useQueryClient();
   return useMutation({
@@ -428,16 +341,8 @@ export function useCreatePatient() {
   });
 }
 
-// Cập nhật bệnh nhân
-export function useUpdatePatient() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, patch }) => updatePatient({ id, patch }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["patients"] });
-    },
-  });
-}
+
+
 
 // Cập nhật trạng thái trong ngày
 export function useUpdatePatientStatus() {
@@ -456,7 +361,7 @@ export function useUpdatePatientStatus() {
   });
 }
 
-// Detail cho PatientModal / trang chi tiết bệnh nhân
+// Detail cho PatientModal / trang chi tiết bệnh nhân bao gồm lịch sử khám +giao dịch
 export function usePatientDetail(id, options = {}) {
   const enabled = (options.enabled ?? true) && !!id;
 
@@ -465,108 +370,13 @@ export function usePatientDetail(id, options = {}) {
     queryFn: () => getPatientDetail(id),
     enabled,
     select: (dto) => normalizePatientDetail(dto),
-    staleTime: options.staleTime ?? 10_000,
+    staleTime: options.staleTime ?? 30_000,
     ...options,
   });
 }
 
-// Meta: templates, extra fields, departments, queue
-export function useExamTemplates() {
-  return useQuery({
-    queryKey: ["exam-templates"],
-    queryFn: () => listExamTemplates(),
-    staleTime: 60_000,
-  });
-}
 
-export function useExtraFields() {
-  return useQuery({
-    queryKey: ["extra-fields"],
-    queryFn: () => listExtraFields(),
-    staleTime: 60_000,
-  });
-}
 
-export function useDepartments(options) {
-  return useQuery({
-    queryKey: ["departments"],
-    queryFn: () => listDepartments(),
-    ...(options || {}),
-  });
-}
-
-export function useDoctorsQueue() {
-  return useQuery({
-    queryKey: ["queue"],
-    queryFn: () => getDoctorsQueue(),
-    staleTime: 5_000,
-  });
-}
-
-export function useAppointmentHolds(id) {
-  return useQuery({
-    queryKey: ["appointment-holds", id],
-    queryFn: () => listAppointmentHolds(id),
-    enabled: !!id,
-    staleTime: 5_000,
-  });
-}
-
-export function useCreateFollowupHold() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (args) => createFollowupHold(args),
-    onSuccess: (_res, vars) => {
-      const key = vars?.id ?? vars?.pid ?? vars?.code;
-      if (key) {
-        qc.invalidateQueries({ queryKey: ["appointment-holds", key] });
-      }
-    },
-  });
-}
-
-// Hooks cho các action dịch vụ
-export function useMarkServiceDispatched() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (args) => markServiceDispatched(args),
-    onSuccess: (_res, vars) => {
-      const key = vars?.id ?? vars?.pid ?? vars?.code;
-      if (!key) return;
-      qc.invalidateQueries({ queryKey: ["patients"] });
-      qc.invalidateQueries({ queryKey: ["visits", key] });
-      qc.invalidateQueries({ queryKey: ["queue"] });
-    },
-  });
-}
-
-export function useMarkServiceDone() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (args) => markServiceDone(args),
-    onSuccess: (_res, vars) => {
-      const key = vars?.id ?? vars?.pid ?? vars?.code;
-      if (!key) return;
-      qc.invalidateQueries({ queryKey: ["patients"] });
-      qc.invalidateQueries({ queryKey: ["visits", key] });
-      qc.invalidateQueries({ queryKey: ["queue"] });
-    },
-  });
-}
-
-export function useMarkWaitDoctorReview() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (args) => markWaitDoctorReview(args),
-    onSuccess: (_res, vars) => {
-      const key = vars?.id ?? vars?.pid ?? vars?.code;
-      if (!key) return;
-      qc.invalidateQueries({ queryKey: ["patients"] });
-      qc.invalidateQueries({ queryKey: ["visits", key] });
-      qc.invalidateQueries({ queryKey: ["queue"] });
-    },
-  });
-}
 
 // Cho phép import normalizePatientFields từ bên ngoài nếu cần
 export { normalizePatientFields };

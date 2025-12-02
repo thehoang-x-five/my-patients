@@ -172,7 +172,7 @@ export default function PatientExamMode({
           <div className="rounded-xl p-3.5 bg-cyan-50/60 ring-1 ring-cyan-100">
             <div className="text-xs text-slate-600 mb-1">Loại khám</div>
             <div className="font-bold text-slate-900">
-              {exam.type || tpl?.title || "Khám thường"}
+              {exam.type || tpl?.title || "(Chưa chọn loại khám)"}
             </div>
           </div>
           <div className="rounded-xl p-3.5 bg-amber-50/60 ring-1 ring-amber-100">
@@ -229,7 +229,7 @@ export default function PatientExamMode({
                       selectTemplates.find((t) => t.id === newId) || tpl;
                     setExam((s) => ({
                       ...s,
-                      type: found?.title || s.type || "Khám thường",
+                      type: found?.title || s.type || "",
                     }));
                   }}
                   className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition shadow-sm"
