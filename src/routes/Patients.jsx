@@ -16,6 +16,7 @@ import {
   
   STATUSES,
 } from "../api/patients";
+import { useQueryClient } from "@tanstack/react-query";
 import { APPT_STATUS, searchAppointmentsRaw } from "../api/appointments";
 import { searchClinicalRaw, getFinalDiagnosis } from "../api/examination";
 
@@ -155,6 +156,7 @@ export default function Patients() {
 
   const highlightPid = useUIStore((s) => s.highlightPid);
   const clearHighlight = useUIStore((s) => s.clearHighlight);
+  const setHighlightPid = useUIStore((s) => s.setHighlightPid);
 
   const flashAddAt = useUIStore((s) => s.flashAddAt);
   const ackFlashAdd = useUIStore((s) => s.ackFlashAdd);
@@ -188,6 +190,7 @@ export default function Patients() {
   const { mutateAsync: createPatient } = useCreatePatient();
   const { mutateAsync: updatePatient } = useUpdatePatient();
   const { mutateAsync: updatePatientStatus } = useUpdatePatientStatus();
+  const qc = useQueryClient();
 
 
   // === Auto clear highlight sau 5s
@@ -644,24 +647,37 @@ export default function Patients() {
             open={modal.open}
             patient={patientForModal}
             onClose={() => {
+              // Do not clear `patientPrefill` here — keep prefill in store
+              // so user can re-open Add modal without losing data.
+              setModal({ open: false, mode: "view", patient: null });
+            }}
+            onSaved={(p) => {
+              // đóng modal
               const wasAddMode = modal.mode === "add";
               setModal({ open: false, mode: "view", patient: null });
-              
-              // Nếu đang ở mode Add thì clear luôn prefill sau khi đóng modal
+
+              // điều hướng + focus vào BN vừa thao tác
+              const pid =
+                p?.id || p?.pid || p?.MaBenhNhan || p?.maBenhNhan;
+              if (pid) {
+                // Highlight the newly created/updated patient row
+                try {
+                  setHighlightPid(pid);
+                } catch {}
+
+                nav(`/patients?pid=${encodeURIComponent(pid)}`);
+
+                // Force refetch patients list to ensure 'All' tab includes new record
+                try {
+                  qc.refetchQueries({ queryKey: ["patients"], exact: false });
+                } catch {}
+              }
+
+              // Nếu modal là Add thì clear prefill sau khi tạo thành công
               if (wasAddMode) {
                 clearPatientPrefill();
               }
             }}
-            onSaved={(p) => {
-                       // đóng modal
-                       setModal({ open: false, mode: "view", patient: null });
-                       // điều hướng + focus vào BN vừa thao tác
-                       const pid = p?.id || p?.pid || p?.MaBenhNhan || p?.maBenhNhan;
-                       if (pid) {
-                         nav(`/patients?pid=${encodeURIComponent(pid)}`);
-                         toast.info("Đang hiển thị thông tin bệnh nhân vừa tạo.");
-                       }
-                     }}
                      onSave={async (data) => {
                        try {
                          if (modal.mode === "add") {

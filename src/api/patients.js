@@ -226,27 +226,67 @@ function normalizePatientDetail(dto) {
 
 // Map payload FE → PatientCreateUpdateRequest (UpsertPatient)
 function buildPatientPayload(input = {}) {
-  return {
-    // API UpsertPatient: PatientCreateUpdateRequest
-    HoTen: input.name ?? input.hoTen ?? "",
-    NgaySinh: input.dob ?? input.ngaySinh ?? null,
-    GioiTinh:
-      input.gioi_tinh ?? input.gioiTinh ?? input.gender ?? "Khác",
-    DienThoai: input.phone ?? input.dienThoai ?? "",
-    Email: input.email ?? "",
-    DiaChi: input.address ?? input.diaChi ?? "",
+  const isNew = !(
+    input?.MaBenhNhan ||
+    input?.maBenhNhan ||
+    input?.id ||
+    input?.pid ||
+    input?.pid
+  );
 
-    // Bệnh sử
-    DiUng: input.di_ung ?? input.diUng ?? "",
-    ChongChiDinh: input.chong_chi_dinh ?? input.chongChiDinh ?? "",
-    ThuocDangDung: input.thuoc_dang_dung ?? input.thuocDangDung ?? "",
-    TieuSuBenh: input.tieu_su_benh ?? input.tieuSuBenh ?? "",
+  const payload = {
+    // API UpsertPatient: PatientCreateUpdateRequest
+    HoTen:
+      input.HoTen ?? input.name ?? input.hoTen ?? input.ho_ten ?? "",
+    NgaySinh: input.NgaySinh ?? input.dob ?? input.ngaySinh ?? null,
+    GioiTinh:
+      input.GioiTinh ??
+      input.gioi_tinh ??
+      input.gioiTinh ??
+      input.gender ??
+      "Khác",
+    DienThoai: input.DienThoai ?? input.phone ?? input.dienThoai ?? "",
+    Email: input.Email ?? input.email ?? "",
+    DiaChi: input.DiaChi ?? input.address ?? input.diaChi ?? "",
+
+    // Bệnh sử (chấp nhận cả PascalCase, camelCase và snake_case)
+    DiUng: input.DiUng ?? input.di_ung ?? input.diUng ?? "",
+    ChongChiDinh:
+      input.ChongChiDinh ?? input.chong_chi_dinh ?? input.chongChiDinh ?? "",
+    ThuocDangDung:
+      input.ThuocDangDung ?? input.thuoc_dang_dung ?? input.thuocDangDung ?? "",
+    TieuSuBenh:
+      input.TieuSuBenh ?? input.tieu_su_benh ?? input.tieuSuBenh ?? "",
     TienSuPhauThuat:
-      input.tien_su_phau_thuat ?? input.tienSuPhauThuat ?? "",
-    NhomMau: input.nhom_mau ?? input.nhomMau ?? "",
-    BenhManTinh: input.benh_man_tinh ?? input.benhManTinh ?? "",
-    SinhHieu: input.sinh_hieu ?? input.sinhHieu ?? "",
+      input.TienSuPhauThuat ??
+      input.tien_su_phau_thuat ??
+      input.tienSuPhauThuat ??
+      "",
+    NhomMau: input.NhomMau ?? input.nhom_mau ?? input.nhomMau ?? "",
+    BenhManTinh:
+      input.BenhManTinh ?? input.benh_man_tinh ?? input.benhManTinh ?? "",
+    SinhHieu: input.SinhHieu ?? input.sinh_hieu ?? input.sinhHieu ?? "",
+    // Trạng thái tài khoản (BE field: TrangThaiTaiKhoan)
+    TrangThaiTaiKhoan:
+      input.TrangThaiTaiKhoan ??
+      input.trangThaiTaiKhoan ??
+      input.accountStatus ??
+      (isNew ? "hoat_dong" : undefined),
+
+    // Trạng thái trong ngày (BE field: TrangThaiHomNay)
+    TrangThaiHomNay:
+      input.TrangThaiHomNay ??
+      input.trangThaiHomNay ??
+      input.status ??
+      (isNew ? STATUSES.WAIT_INTAKE : undefined),
   };
+
+  // Remove any undefined values so BE receives only intended fields
+  Object.keys(payload).forEach((k) => {
+    if (payload[k] === undefined) delete payload[k];
+  });
+
+  return payload;
 }
 
 /* ===== Core REST theo API doc ===== */
@@ -283,8 +323,15 @@ export const getPatientDetail = async (id) => {
  */
 export const upsertPatient = async (payload = {}) => {
   const body = buildPatientPayload(payload);
-  const res = await http.post("/patient", body);
-  return res.data || res;
+  console.log("[Patient API] Upsert payload:", body);
+  try {
+    const res = await http.post("/patient", body);
+    console.log("[Patient API] Upsert response:", res.data || res);
+    return res.data || res;
+  } catch (err) {
+    console.error("[Patient API] Upsert error:", err);
+    throw err;
+  }
 };
 
 
@@ -335,8 +382,11 @@ export function useCreatePatient() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload) => upsertPatient(payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["patients"] });
+    onSuccess: async () => {
+      try {
+        await qc.invalidateQueries({ queryKey: ["patients"], exact: false });
+        await qc.refetchQueries({ queryKey: ["patients"], exact: false });
+      } catch {}
     },
   });
 }
@@ -351,7 +401,7 @@ export function useUpdatePatient() {
       return upsertPatient(payload);
     },
     onSuccess: (_res, vars) => {
-      qc.invalidateQueries({ queryKey: ["patients"] });
+      qc.invalidateQueries({ queryKey: ["patients"], exact: false });
       // Invalidate detail nếu có id
       const pid = vars?.id ?? vars?.patch?.id ?? vars?.patch?.pid;
       if (pid) {
