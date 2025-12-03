@@ -23,6 +23,7 @@ import { useUIStore, useExamStore } from "../components/stores/appStore.js";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
+import { toast } from "react-toastify";
 
 // Lấy chuỗi yyyy-MM-dd của hôm nay
 const todayStr = () => {
@@ -188,36 +189,6 @@ export default function Patients() {
   const { mutateAsync: updatePatient } = useUpdatePatient();
   const { mutateAsync: updatePatientStatus } = useUpdatePatientStatus();
 
-  // === Query → tự mở modal
-  useEffect(() => {
-    const pid = sp.get("pid");
-    const action = sp.get("action");
-    const defaultCode = sp.get("defaultCode") || "";
-    const defaultName = sp.get("defaultName") || "";
-    const focus = sp.get("focus") === "true";
-
-    if (pid && focus) {
-      const p = items.find((x) => x.id === pid || x.pid === pid);
-      if (p) {
-        setModal({
-          open: true,
-          mode: "view",
-          patient: p,
-        });
-      }
-    } else if (action === "add") {
-      setModal({
-        open: true,
-        mode: "add",
-        patient: {
-          id: defaultCode || "",
-          name: defaultName || "",
-          status: STATUSES.WAIT_INTAKE,
-        },
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, items]);
 
   // === Auto clear highlight sau 5s
   useEffect(() => {
@@ -253,6 +224,7 @@ export default function Patients() {
         }
       } catch (err) {
         console.error("Không lấy được lịch hẹn đã check-in khi highlight:", err);
+        toast.error("Không thể tải thông tin lịch hẹn. Vui lòng thử lại.");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,6 +241,7 @@ export default function Patients() {
         btn.focus();
       } catch {}
       btn.classList.add("flash-once");
+      toast.info("Vui lòng thêm bệnh nhân mới từ lịch hẹn đã check-in.");
       const t = setTimeout(() => {
         btn.classList.remove("flash-once");
         ackFlashAdd();
@@ -283,6 +256,40 @@ export default function Patients() {
       ackFlashAdd();
     }
   }, [flashAddAt, ackFlashAdd]);
+
+  // === Khi có flashAddAt -> call API searchAppointmentsRaw với LoaiHen "kham_moi" + TrangThai "da_checkin"
+  useEffect(() => {
+    if (!flashAddAt) return;
+
+    (async () => {
+      try {
+        // Call API search appointments với LoaiHen "kham_moi" + TrangThai "da_checkin"
+        const appts = await searchAppointmentsRaw({
+          LoaiHen: "kham_moi",
+          TrangThai: APPT_STATUS.DA_CHECKIN,
+        });
+
+        if (Array.isArray(appts) && appts.length > 0) {
+          // Lọc lấy kết quả với NgayHen và GioHen mới nhất
+          const latest = pickLatestAppointment(appts);
+          
+          if (latest) {
+            // Lưu vào store patientPrefill với tên và sdt
+            setPatientPrefill({
+              name: latest.TenBenhNhan || latest.HoTen || latest.patientName || "",
+              phone: latest.SoDienThoai || latest.DienThoai || latest.phone || "",
+              latestAppointment: latest,
+            });
+            toast.info("Đã tải thông tin bệnh nhân từ lịch hẹn đã check-in.");
+          }
+        }
+      } catch (err) {
+        console.error("Không lấy được lịch hẹn đã check-in khi flash add:", err);
+        toast.warn("Không thể tải thông tin từ lịch hẹn. Vui lòng nhập thủ công.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flashAddAt]);
   
 
   // Clear prefill khi rời trang
@@ -464,6 +471,7 @@ export default function Patients() {
           }
         } catch (err) {
           console.error("Không lấy được lịch hẹn đã check-in:", err);
+          toast.warn("Không thể tải thông tin lịch hẹn. Vui lòng thử lại.");
         }
 
         // 2. Search phiếu khám LS đang thực hiện (dang_thuc_hien)
@@ -481,6 +489,7 @@ export default function Patients() {
           }
         } catch (err) {
           console.error("Không lấy được phiếu khám đang thực hiện:", err);
+          toast.warn("Không thể tải thông tin phiếu khám. Vui lòng thử lại.");
         }
       }
 
@@ -517,11 +526,13 @@ export default function Patients() {
                 await getFinalDiagnosis(maPhieuKham);
               } catch (err) {
                 console.error("Không lấy được chẩn đoán cuối:", err);
+                toast.warn("Không thể tải chẩn đoán cuối. Vui lòng thử lại.");
               }
             }
           }
         } catch (err) {
           console.error("Lỗi khi tìm phiếu khám để lấy chẩn đoán:", err);
+          toast.error("Không thể tải thông tin phiếu khám. Vui lòng thử lại.");
         }
       }
 
@@ -547,35 +558,34 @@ export default function Patients() {
           viewMode={viewMode}
           onChangeViewMode={setViewMode}
           onAdd={() => {
+            // Nếu có patientPrefill (từ flashAddAt) -> fill sẵn tên + sdt
+            // Nếu không có patientPrefill -> mở bình thường không fill
+            const hasPrefill = !!patientPrefill;
             const latest = patientPrefill?.latestAppointment;
         
             setModal({
               open: true,
               mode: "add",
               patient: {
-                // ID/Mã bệnh nhân từ prefill hoặc lịch hẹn
-                id: patientPrefill?.code ||
-                    patientPrefill?.maBenhNhan ||
-                    latest?.MaBenhNhan ||
-                    latest?.patientCode ||
-                    "",
-                // Tên ưu tiên:
-                // 1. từ prefill (check-in truyền qua)
-                // 2. nếu không có thì lấy từ lịch hẹn: TenBenhNhan / HoTen / patientName
-                name:
-                  patientPrefill?.name ||
-                  latest?.TenBenhNhan ||
-                  latest?.HoTen ||
-                  latest?.patientName ||
-                  "",
+                // Mã bệnh nhân: để trống (backend tự sinh)
+                id: "",
+                // Tên: chỉ fill nếu có prefill
+                name: hasPrefill
+                  ? (patientPrefill?.name ||
+                     latest?.TenBenhNhan ||
+                     latest?.HoTen ||
+                     latest?.patientName ||
+                     "")
+                  : "",
         
-                // SĐT nếu BE có trả:
-                phone:
-                  patientPrefill?.phone ||
-                  latest?.SoDienThoai ||
-                  latest?.DienThoai ||
-                  latest?.phone ||
-                  "",
+                // SĐT: chỉ fill nếu có prefill
+                phone: hasPrefill
+                  ? (patientPrefill?.phone ||
+                     latest?.SoDienThoai ||
+                     latest?.DienThoai ||
+                     latest?.phone ||
+                     "")
+                  : "",
         
                 // giữ luôn bản ghi lịch hẹn để tab tạo sau này muốn lấy thêm
                 latestAppointment: latest || null,
@@ -586,14 +596,15 @@ export default function Patients() {
             setFilterAnchor(filterBtnRef.current);
             setFilterOpen(true);
           }}
-          onResetFilters={() =>
+          onResetFilters={() => {
             setFilter({
               keyword: "",
               accountStatus: "all",
               todayStatus: "all",
               todayOnly: false,
-            })
-          }
+            });
+            toast.info("Đã đặt lại bộ lọc về mặc định.");
+          }}
           sort={sort}
           onChangeSort={setSort}
           filterBtnRef={filterBtnRef}
@@ -648,18 +659,34 @@ export default function Patients() {
                        const pid = p?.id || p?.pid || p?.MaBenhNhan || p?.maBenhNhan;
                        if (pid) {
                          nav(`/patients?pid=${encodeURIComponent(pid)}`);
+                         toast.info("Đang hiển thị thông tin bệnh nhân vừa tạo.");
                        }
                      }}
                      onSave={async (data) => {
-                       if (modal.mode === "add") {
-                         // createPatient (mutateAsync) trả về entity đã lưu
-                         return await createPatient(data);
+                       try {
+                         if (modal.mode === "add") {
+                           // createPatient (mutateAsync) trả về entity đã lưu
+                           const result = await createPatient(data);
+                           toast.success("Đã tạo bệnh nhân mới thành công.");
+                           return result;
+                         }
+                         // update
+                         const result = await updatePatient({
+                           id: data?.id || data?.pid,
+                           patch: data,
+                         });
+                         toast.success("Đã cập nhật thông tin bệnh nhân thành công.");
+                         return result;
+                       } catch (err) {
+                         const msg =
+                           err?.response?.data?.message ||
+                           err?.message ||
+                           (modal.mode === "add"
+                             ? "Không thể tạo bệnh nhân. Vui lòng thử lại."
+                             : "Không thể cập nhật bệnh nhân. Vui lòng thử lại.");
+                         toast.error(msg);
+                         throw err;
                        }
-                       // update
-                       return await updatePatient({
-                         id: data?.id || data?.pid,
-                         patch: data,
-                       });
                      }}
                      onMutatePatient={async (id, next) => {
                       const pid = id || modal?.patient?.id || modal?.patient?.pid;
@@ -686,11 +713,21 @@ export default function Patients() {
                       }
                     
                       if (!payload || !payload.status) return;
-                    
-                      await updatePatientStatus({
-                        id: pid,
-                        ...payload,
-                      });
+                     
+                      try {
+                        await updatePatientStatus({
+                          id: pid,
+                          ...payload,
+                        });
+                        toast.success("Đã cập nhật trạng thái bệnh nhân thành công.");
+                      } catch (err) {
+                        const msg =
+                          err?.response?.data?.message ||
+                          err?.message ||
+                          "Không thể cập nhật trạng thái. Vui lòng thử lại.";
+                        toast.error(msg);
+                        throw err;
+                      }
                     }}
                     
           />

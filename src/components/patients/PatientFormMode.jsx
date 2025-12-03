@@ -44,9 +44,10 @@ export default function PatientFormMode({
             ref={firstRef}
             value={form.id || ""}
             onChange={(e) => change("id", e.target.value)}
-            required
-            disabled={mode === "edit"} // Sửa: không cho đổi mã BN khi edit
+            required={mode !== "add"} // Không required khi add (backend tự sinh)
+            disabled={mode === "edit" || mode === "add"} // Không cho nhập khi edit hoặc add (backend tự sinh)
             className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm disabled:bg-slate-50 disabled:text-slate-500"
+            placeholder={mode === "add" ? "Mã bệnh nhân sẽ được tự động tạo" : ""}
           />
         </label>
         <label className="text-sm font-semibold text-slate-700">

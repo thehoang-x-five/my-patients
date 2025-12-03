@@ -373,6 +373,15 @@ export default function Appointments() {
 
     const name = appt.patientName || appt.patient || "";
 
+    // Xác định loại hẹn (khám mới hay tái khám)
+    const apptTypeRaw = appt.apptType || appt.loaiHen || appt.LoaiHen || appt.type || "";
+    const apptTypeStr = String(apptTypeRaw).toLowerCase();
+    const isKhamMoi = 
+      apptTypeStr === "kham_moi" || 
+      apptTypeStr.includes("mới") || 
+      apptTypeStr.includes("new") ||
+      (!apptTypeStr.includes("tái") && !apptTypeStr.includes("tai_kham") && !apptTypeStr.includes("follow"));
+
     try {
       // ❌ KHÔNG enqueue queue ở đây nữa
       // ✅ Chỉ cập nhật trạng thái lịch hẹn -> đã check-in
@@ -385,24 +394,44 @@ export default function Appointments() {
       toast.error(msg);
       return;
     }
-    if (!pid) {
-      // Không có mã BN: chỉ lưu prefill tối thiểu và flash UI bên Patients
+
+    // Nếu là khám mới và không có mã BN: chỉ flash nút add, không mở sẵn tab
+    if (isKhamMoi && !pid) {
       const store = useUIStore.getState();
       store.setPatientPrefill({ name });
       store.flashAdd();
-      navigate(`/patients?action=add`);
+      navigate(`/patients`); // Chỉ chuyển trang, không có query params
+      toast.info(
+        "Đã check-in. Vui lòng tạo hồ sơ bệnh nhân trong danh sách để lập phiếu khám."
+      );
+      closeDetail();
+      return;
+    }
+
+    // Nếu là tái khám và có mã BN: chỉ highlight dòng bệnh nhân, không mở sẵn tab
+    if (!isKhamMoi && pid) {
+      useUIStore.getState().setPatientPrefill({ name });
+      useUIStore.getState().setHighlightPid(pid);
+      navigate(`/patients`); // Chỉ chuyển trang, không có query params
+      toast.success("Đã check-in. Vui lòng lập phiếu khám cho bệnh nhân.");
+      closeDetail();
+      return;
+    }
+
+    // Trường hợp khác: giữ logic cũ (fallback)
+    if (!pid) {
+      const store = useUIStore.getState();
+      store.setPatientPrefill({ name });
+      store.flashAdd();
+      navigate(`/patients`);
       toast.info(
         "Đã check-in. Vui lòng tạo hồ sơ bệnh nhân trong danh sách để lập phiếu khám."
       );
       closeDetail();
     } else {
-      // ✅ Prefill cho trang Patients (lúc lập phiếu mới enqueue)
       useUIStore.getState().setPatientPrefill({ name });
       useUIStore.getState().setHighlightPid(pid);
-
-      // ✅ Sau khi check-in xong, chuyển sang trang bệnh nhân
-      navigate(`/patients?pid=${encodeURIComponent(pid)}`);
-
+      navigate(`/patients`);
       toast.success("Đã check-in. Vui lòng lập phiếu khám cho bệnh nhân.");
       closeDetail();
     }
