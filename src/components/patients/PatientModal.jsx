@@ -49,6 +49,7 @@ export default function PatientModal({
   patient,
   onClose,
   onSave,
+  onSaved,
   onMutatePatient,
 }) {
   const firstRef = useRef(null);
@@ -312,6 +313,27 @@ export default function PatientModal({
   useEffect(() => {
     if (!open) return;
     setForm(patient || {});
+    // Normalize NgaySinh -> input type=date expects yyyy-MM-dd
+    if (patient) {
+      const rawDob = patient.NgaySinh ?? patient.ngaySinh ?? patient.dob ?? null;
+      if (rawDob) {
+        try {
+          const d = new Date(rawDob);
+          if (!Number.isNaN(d.getTime())) {
+            const iso = d.toISOString().slice(0, 10);
+            setForm((s) => ({ ...(s || {}), dob: iso }));
+          }
+        } catch {}
+      }
+    }
+    // Ensure default values for add mode: account = hoat_dong, status = cho_tiep_nhan
+    if (mode === "add") {
+      setForm((s) => ({
+        ...(s || {}),
+        accountStatus: s?.accountStatus || "hoat_dong",
+        status: s?.status || STATUSES.WAIT_INTAKE,
+      }));
+    }
     // Không hardcode template ID, để user chọn từ danh sách
     setTplId(null);
     setExam({ type: "", dept: "", room: "", symptoms: "", note: "" });
@@ -484,7 +506,7 @@ const transactions = useMemo(() => {
     0
   );
 
-  function saveEdit(e) {
+  async function saveEdit(e) {
     e.preventDefault();
     const src = form || {};
   
@@ -538,6 +560,8 @@ const transactions = useMemo(() => {
       DiaChi: src.DiaChi || src.diaChi || src.address || "",
       TrangThaiTaiKhoan:
         src.TrangThaiTaiKhoan || src.accountStatus || "hoat_dong",
+      // Trạng thái trong ngày (FE -> API build sẽ map sang TrangThaiHomNay)
+      status: src.status || src.trangThaiHomNay || src.TrangThaiHomNay,
   
       // Không gửi TrangThaiHomNay ở đây – update qua API UpdateDailyStatus riêng
   
@@ -551,7 +575,16 @@ const transactions = useMemo(() => {
       address: src.address,
     };
   
-    onSave?.(payload, mode);
+    try {
+      const result = await onSave?.(payload, mode);
+      // Gọi callback onSaved sau khi lưu thành công
+      if (result) {
+        onSaved?.(result);
+      }
+    } catch (err) {
+      // Error đã được xử lý ở Patients.jsx, chỉ cần throw lại
+      throw err;
+    }
   }
   
 

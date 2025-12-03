@@ -3,7 +3,7 @@ import React from "react";
 import { motion } from "framer-motion";
 
 // Đúng: từ src/components/patients -> lên src -> vào api
-import { STATUSES } from "../../api/patients";
+import { STATUSES, TODAY_STATUS_MAP } from "../../api/patients";
 // Dùng EXTRA_FIELDS chung để hiển thị combobox “Thông tin bổ sung” (bệnh sử)
 import { EXTRA_FIELDS } from "../../api/examination";
 
@@ -110,7 +110,8 @@ export default function PatientFormMode({
           Trạng thái tài khoản
           <select
             value={form.accountStatus || "hoat_dong"}
-            onChange={(e) => change("accountStatus", e.target.value)}
+              onChange={(e) => change("accountStatus", e.target.value)}
+              disabled={mode === "add"}
             className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
           >
             <option value="hoat_dong">Hoạt động</option>
@@ -124,35 +125,23 @@ export default function PatientFormMode({
           <select
             value={form.status || STATUSES.WAIT_INTAKE}
             onChange={(e) => change("status", e.target.value)}
+            disabled={mode === "add"}
             className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
           >
             {mode === "add" ? (
               <>
                 <option value={STATUSES.WAIT_INTAKE}>
-                  {STATUSES.WAIT_INTAKE}
-                </option>
-                <option value={STATUSES.SCHEDULED_APPT}>
-                  {STATUSES.SCHEDULED_APPT}
+                  {TODAY_STATUS_MAP[STATUSES.WAIT_INTAKE] || STATUSES.WAIT_INTAKE}
                 </option>
               </>
             ) : (
               <>
-                <option value={STATUSES.WAIT_INTAKE}>
-                  {STATUSES.WAIT_INTAKE}
-                </option>
-                <option value={STATUSES.WAIT_EXAM}>
-                  {STATUSES.WAIT_EXAM}
-                </option>
-                <option value={STATUSES.WAIT_PROC}>
-                  {STATUSES.WAIT_PROC}
-                </option>
-                <option value={STATUSES.SCHEDULED_APPT}>
-                  {STATUSES.SCHEDULED_APPT}
-                </option>
-                <option value={STATUSES.SCHEDULED_FUP}>
-                  {STATUSES.SCHEDULED_FUP}
-                </option>
-                <option value={STATUSES.DONE}>{STATUSES.DONE}</option>
+                <option value="">—</option>
+                {Object.entries(TODAY_STATUS_MAP).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
               </>
             )}
           </select>
