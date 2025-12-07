@@ -1,6 +1,7 @@
 // src/api/queue.js
 // Minimal client for QueueController endpoints described in API doc
 
+import { useMemo } from "react";
 import { http } from "./http";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ensureStarted, on } from "./realtime";
@@ -122,10 +123,63 @@ export async function dequeueNext(maPhong, loaiHangDoi = null) {
   return normalizeQueueItem(res?.data ?? res);
 }
 
+// Helper để lấy MaNhanSu từ auth store
+function getCurrentUserMaNhanSu() {
+  if (typeof window === "undefined") return null;
+  
+  try {
+    // Thử lấy từ localStorage
+    const authData = localStorage.getItem("his-auth");
+    if (authData) {
+      const parsed = JSON.parse(authData);
+      const user = parsed?.user;
+      if (user) {
+        // Thử các field có thể chứa MaNhanSu
+        return user.MaNhanSu || user.maNhanSu || user.id || user.userId || null;
+      }
+    }
+    // Thử lấy từ window.APP_USER
+    if (window.APP_USER) {
+      return window.APP_USER.MaNhanSu || window.APP_USER.maNhanSu || window.APP_USER.id || window.APP_USER.userId || null;
+    }
+  } catch (err) {
+    console.warn("Không thể lấy MaNhanSu:", err);
+  }
+  return null;
+}
+
+// Helper để lấy VaiTro từ auth store
+function getCurrentUserVaiTro() {
+  if (typeof window === "undefined") return null;
+  
+  try {
+    const authData = localStorage.getItem("his-auth");
+    if (authData) {
+      const parsed = JSON.parse(authData);
+      const user = parsed?.user;
+      if (user) {
+        return user.VaiTro || user.vaiTro || user.role || null;
+      }
+    }
+    if (window.APP_USER) {
+      return window.APP_USER.VaiTro || window.APP_USER.vaiTro || window.APP_USER.role || null;
+    }
+  } catch (err) {
+    console.warn("Không thể lấy VaiTro:", err);
+  }
+  return null;
+}
+
 // Search: POST /api/queue/search
 export async function search(filter = {}) {
+  // Lấy MaNhanSu và VaiTro từ user hiện tại nếu không được truyền vào
+  const maNhanSu = filter.MaNhanSu ?? filter.maNhanSu ?? getCurrentUserMaNhanSu();
+  const vaiTro = filter.VaiTro ?? filter.vaiTro ?? getCurrentUserVaiTro();
+  
   const body = cleanup({
     MaPhong: filter.MaPhong ?? filter.maPhong ?? filter.roomId ?? null,
+    VaiTro: vaiTro,
+    MaNhanSu: maNhanSu,
     LoaiHangDoi: filter.LoaiHangDoi ?? filter.loaiHangDoi ?? null,
     TrangThai: filter.TrangThai ?? filter.trangThai ?? null,
     FromTime: filter.FromTime ?? filter.fromTime ?? null,
@@ -173,7 +227,70 @@ export function useDequeueNext(options = {}) {
 }
 
 export function useQueueSearch(params = {}, options = {}) {
-  return useQuery({ queryKey: ["queue", "search", params], queryFn: () => search(params), keepPreviousData: true, staleTime: 10000, ...options });
+  // Normalize params để query key ổn định (tránh gọi API lặp do object reference thay đổi)
+  const normalizedParams = useMemo(() => {
+    // Chuyển đổi Date objects thành ISO strings để so sánh ổn định
+    const fromTime = params.FromTime ?? params.fromTime;
+    const toTime = params.ToTime ?? params.toTime;
+    const fromTimeStr = fromTime ? (typeof fromTime === 'string' ? fromTime : fromTime.toISOString()) : null;
+    const toTimeStr = toTime ? (typeof toTime === 'string' ? toTime : toTime.toISOString()) : null;
+    
+    return {
+      MaPhong: params.MaPhong ?? params.maPhong ?? null,
+      VaiTro: params.VaiTro ?? params.vaiTro ?? null,
+      MaNhanSu: params.MaNhanSu ?? params.maNhanSu ?? null,
+      LoaiHangDoi: params.LoaiHangDoi ?? params.loaiHangDoi ?? null,
+      TrangThai: params.TrangThai ?? params.trangThai ?? null,
+      FromTime: fromTimeStr,
+      ToTime: toTimeStr,
+      SortBy: params.SortBy ?? params.sortBy ?? null,
+      SortDirection: params.SortDirection ?? params.sortDirection ?? null,
+      Page: params.Page ?? params.page ?? 1,
+      PageSize: params.PageSize ?? params.pageSize ?? 50,
+    };
+  }, [
+    params.MaPhong,
+    params.maPhong,
+    params.VaiTro,
+    params.vaiTro,
+    params.MaNhanSu,
+    params.maNhanSu,
+    params.LoaiHangDoi,
+    params.loaiHangDoi,
+    params.TrangThai,
+    params.trangThai,
+    params.FromTime,
+    params.fromTime,
+    params.ToTime,
+    params.toTime,
+    params.SortBy,
+    params.sortBy,
+    params.SortDirection,
+    params.sortDirection,
+    params.Page,
+    params.page,
+    params.PageSize,
+    params.pageSize,
+  ]);
+  
+  // Tạo query key ổn định từ normalizedParams (serialize thành string để đảm bảo ổn định)
+  const queryKey = useMemo(() => {
+    return ["queue", "search", JSON.stringify(normalizedParams)];
+  }, [normalizedParams]);
+  
+  return useQuery({ 
+    queryKey, 
+    queryFn: () => search(normalizedParams), 
+    keepPreviousData: true, 
+    staleTime: 60000, // Tăng staleTime lên 60s
+    gcTime: 300000, // Cache 5 phút
+    refetchOnWindowFocus: false, // Tắt refetch khi focus window
+    refetchOnMount: false, // Tắt refetch khi mount lại
+    refetchOnReconnect: false, // Tắt refetch khi reconnect
+    refetchInterval: false, // Tắt auto refetch để tránh gọi lặp
+    retry: 1, // Chỉ retry 1 lần nếu lỗi
+    ...options 
+  });
 }
 
 export { normalizeQueueItem };
@@ -185,12 +302,34 @@ export { normalizeQueueItem };
 
 // useQueueToday: convenience hook that searches today's range
 export function useQueueToday(options = {}) {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  from.setHours(0, 0, 0, 0);
-  const to = new Date();
-  const params = { FromTime: from.toISOString(), ToTime: to.toISOString(), Page: 1, PageSize: 500 };
-  return useQueueSearch(params, options);
+  // Memoize params để tránh tạo object mới mỗi lần render
+  // Chỉ tính toán một lần khi mount, không phụ thuộc vào thời gian thực
+  const params = useMemo(() => {
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    from.setHours(0, 0, 0, 0);
+    const to = new Date();
+    return { 
+      FromTime: from.toISOString(), 
+      ToTime: to.toISOString(), 
+      Page: 1, 
+      PageSize: 500 
+    };
+  }, []); // Empty deps - chỉ tính toán một lần khi mount
+  
+  // Merge options với các settings mặc định để đảm bảo chỉ gọi một lần
+  const mergedOptions = {
+    staleTime: 60000,
+    gcTime: 300000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
+    retry: 1,
+    ...options,
+  };
+  
+  return useQueueSearch(params, mergedOptions);
 }
 
 // Backwards-compatible enqueue flavors
