@@ -1,6 +1,6 @@
 // src/api/history.js
 // API & hooks cho trang Lịch sử (Khám bệnh  Giao dịch)
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { http } from "./http.js";
 import { on } from "./realtime.js";
 
@@ -422,5 +422,72 @@ export function useHistoryTransactions(options = {}) {
 export function subscribeHistory(handler) {
   return on("history.updated", (evt) => {
     if (typeof handler === "function") handler(evt);
+  });
+}
+
+// Tạo 1 lượt khám (HistoryVisitCreate)
+export async function createHistoryVisit(payload = {}) {
+  if (!payload) throw new Error("createHistoryVisit: missing payload");
+
+  // Normalize FE-friendly keys into HistoryVisitCreateRequest expected by BE
+  const maHangDoi =
+    payload.MaHangDoi ?? payload.maHangDoi ?? payload.queueId ?? payload.queueCode ?? "";
+
+  const maNhanSu =
+    payload.MaNhanSuThucHien ??
+    payload.maNhanSuThucHien ??
+    payload.MaBacSi ??
+    payload.maBacSi ??
+    payload.doctorId ??
+    null;
+
+  const maYTa = payload.MaYTaHoTro ?? payload.maYTaHoTro ?? payload.nurseId ?? null;
+
+  const thoiGianBatDau =
+    payload.ThoiGianBatDau ?? payload.thoiGianBatDau ?? payload.startTime ?? null;
+
+  const thoiGianKetThuc =
+    payload.ThoiGianKetThuc ?? payload.thoiGianKetThuc ?? payload.endTime ?? null;
+
+  // LoaiLuot: accept FE values like 'clinic'|'service' and map to backend enums if needed
+  let loaiLuot = payload.LoaiLuot ?? payload.loaiLuot ?? payload.type ?? null;
+  if (loaiLuot === "clinic") loaiLuot = "kham_moi";
+  if (loaiLuot === "service") loaiLuot = "kham_dich_vu";
+
+  const body = {
+    MaHangDoi: maHangDoi,
+    MaNhanSuThucHien: maNhanSu,
+    MaYTaHoTro: maYTa,
+    ThoiGianBatDau: thoiGianBatDau,
+    ThoiGianKetThuc: thoiGianKetThuc,
+    LoaiLuot: loaiLuot,
+    TrangThai: payload.TrangThai ?? payload.trangThai ?? "dang_thuc_hien",
+    MaBenhNhan: payload.MaBenhNhan ?? payload.maBenhNhan ?? payload.pid ?? payload.patientId ?? null,
+    MaPhieuKhamLs: payload.MaPhieuKhamLs ?? payload.maPhieuKhamLs ?? payload.maPhieuKham ?? payload.maPhieuKhamLs ?? null,
+    MaKhoa: payload.MaKhoa ?? payload.maKhoa ?? payload.deptId ?? payload.MaKhoa ?? null,
+    MaPhong: payload.MaPhong ?? payload.maPhong ?? payload.roomId ?? null,
+    MaBacSi: payload.MaBacSi ?? payload.maBacSi ?? payload.doctorId ?? null,
+    GhiChu: payload.GhiChu ?? payload.ghiChu ?? payload.note ?? payload.description ?? null,
+  };
+
+  console.log("[History API] createHistoryVisit payload:", body);
+  try {
+    const res = await http.post("/history/visits", body);
+    console.log("[History API] createHistoryVisit response:", res.data || res);
+    return res.data || res;
+  } catch (err) {
+    console.error("[History API] createHistoryVisit error:", err?.response ?? err);
+    throw err;
+  }
+}
+export function useCreateHistoryVisit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload) => createHistoryVisit(payload),
+    onSuccess: () => {
+      try {
+        qc.invalidateQueries({ queryKey: ["history", "visits"] });
+      } catch (err) {}
+    },
   });
 }
