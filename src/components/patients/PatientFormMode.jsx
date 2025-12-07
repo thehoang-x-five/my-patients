@@ -128,7 +128,7 @@ export default function PatientFormMode({
         <label className="text-sm font-semibold text-slate-700">
           Trạng thái trong ngày
           <select
-            value={form.status || STATUSES.WAIT_INTAKE}
+            value={mode === "add" ? (form.status || STATUSES.WAIT_INTAKE) : (form.status || "")}
             onChange={(e) => change("status", e.target.value)}
             disabled={mode === "add"}
             className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"

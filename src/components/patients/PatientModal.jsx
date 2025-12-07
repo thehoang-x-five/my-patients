@@ -146,8 +146,9 @@ export default function PatientModal({
   );
 
   // Thông tin khoa + phòng + bác sĩ của dịch vụ hiện tại
+  // Chỉ gọi API khi không ở mode "edit" hoặc "add" (không cần service info khi chỉnh sửa form)
   const { data: serviceInfo } = useServiceInfo(tpl?.id, {
-    enabled: !!tpl?.id,
+    enabled: !!tpl?.id && mode !== "edit" && mode !== "add",
   });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -333,30 +334,37 @@ export default function PatientModal({
     
     // Sử dụng patientForView thay vì patient vì nó có dữ liệu đầy đủ từ API
     const sourcePatient = patientForView || patient;
-    setForm(sourcePatient || {});
     
     // Ensure the status field holds the raw status code (used by the select)
+    let statusCodeToSet = null;
     if (sourcePatient) {
       // Prefer raw canonical status code properties if available.
       // Lưu ý: trang_thai_hom_nay là label, không phải code!
-      let statusCode =
-        sourcePatient.trang_thai_hom_nay_code ??
-        sourcePatient.trangThaiHomNay ??
-        sourcePatient.TrangThaiHomNay ??
-        sourcePatient.statusCode ??
-        null;
+      // Ưu tiên lấy từ các field chứa code (không phải label)
+      let statusCode = null;
+
+      // Thử lấy từ các field code (ưu tiên cao nhất)
+      if (sourcePatient.trang_thai_hom_nay_code && sourcePatient.trang_thai_hom_nay_code !== "") {
+        statusCode = sourcePatient.trang_thai_hom_nay_code;
+      } else if (sourcePatient.trangThaiHomNay && sourcePatient.trangThaiHomNay !== "") {
+        statusCode = sourcePatient.trangThaiHomNay;
+      } else if (sourcePatient.TrangThaiHomNay && sourcePatient.TrangThaiHomNay !== "") {
+        statusCode = sourcePatient.TrangThaiHomNay;
+      } else if (sourcePatient.statusCode && sourcePatient.statusCode !== "") {
+        statusCode = sourcePatient.statusCode;
+      }
 
       // Nếu vẫn chưa có code, thử lấy từ _raw (dữ liệu gốc từ API)
       if (!statusCode && sourcePatient._raw) {
-        statusCode =
-          sourcePatient._raw.TrangThaiHomNay ??
-          sourcePatient._raw.trangThaiHomNay ??
-          null;
+        const rawStatus = sourcePatient._raw.TrangThaiHomNay || sourcePatient._raw.trangThaiHomNay;
+        if (rawStatus && rawStatus !== "" && rawStatus !== null) {
+          statusCode = rawStatus;
+        }
       }
 
       // If we don't have a code but have a human label (e.g., "Chờ tiếp nhận"),
       // try reverse-lookup into TODAY_STATUS_MAP to recover the canonical code.
-      if (!statusCode && sourcePatient.status) {
+      if ((!statusCode || statusCode === "") && sourcePatient.status) {
         try {
           const rev = Object.entries(TODAY_STATUS_MAP).reduce((acc, [k, v]) => {
             acc[String(v || "").toLowerCase()] = k;
@@ -370,7 +378,7 @@ export default function PatientModal({
       }
 
       // Nếu vẫn chưa có, thử reverse lookup từ trang_thai_hom_nay (label)
-      if (!statusCode && sourcePatient.trang_thai_hom_nay) {
+      if ((!statusCode || statusCode === "") && sourcePatient.trang_thai_hom_nay) {
         try {
           const rev = Object.entries(TODAY_STATUS_MAP).reduce((acc, [k, v]) => {
             acc[String(v || "").toLowerCase()] = k;
@@ -383,17 +391,34 @@ export default function PatientModal({
         }
       }
 
-      if (statusCode) {
-        setForm((s) => ({ ...(s || {}), status: statusCode }));
+      // Set status: nếu có code (không null và không empty) thì dùng code, nếu không thì set rỗng để hiển thị "—"
+      // Đảm bảo statusCode là string hợp lệ
+      if (statusCode && statusCode !== "" && typeof statusCode === "string") {
+        statusCodeToSet = statusCode;
       }
-      // Ensure accountStatus (select) uses code if available
+    }
+    
+    // Set form với status đã được xử lý
+    setForm((prevForm) => {
+      const newForm = sourcePatient ? { ...sourcePatient } : {};
+      // Override status với giá trị đã xử lý
+      if (statusCodeToSet !== null) {
+        newForm.status = statusCodeToSet;
+      } else {
+        // Nếu không có statusCode, set rỗng để hiển thị "—"
+        newForm.status = "";
+      }
+      return newForm;
+    });
+    
+    // Ensure accountStatus (select) uses code if available
+    if (sourcePatient) {
       const acct = sourcePatient.accountStatus ?? sourcePatient.TrangThaiTaiKhoan ?? sourcePatient.trangThaiTaiKhoan ?? null;
       if (acct) {
         setForm((s) => ({ ...(s || {}), accountStatus: acct }));
       }
-    }
-    // Normalize NgaySinh -> input type=date expects yyyy-MM-dd
-    if (sourcePatient) {
+      
+      // Normalize NgaySinh -> input type=date expects yyyy-MM-dd
       const rawDob = sourcePatient.NgaySinh ?? sourcePatient.ngaySinh ?? sourcePatient.dob ?? null;
       if (rawDob) {
         try {
@@ -744,7 +769,10 @@ const transactions = useMemo(() => {
   }, [serviceInfo]);
 
   // Lấy danh sách hàng đợi để tính số lượng chờ theo khoa
-  const { data: queueData } = useQueueToday();
+  // Chỉ gọi API khi không ở mode "edit" hoặc "add" (không cần queue data khi chỉnh sửa form)
+  const { data: queueData } = useQueueToday({
+    enabled: mode !== "edit" && mode !== "add",
+  });
   const queueItems = Array.isArray(queueData?.items) ? queueData.items : [];
 
   // Hook để tạo phiếu khám lâm sàng

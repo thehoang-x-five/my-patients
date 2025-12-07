@@ -185,6 +185,8 @@ export default function Patients() {
           filter.accountStatus === "all" ? undefined : filter.accountStatus,
         // map sang OnlyToday trong PatientSearchFilter
         todayOnly: viewMode === "today",
+        // Khi todayOnly=true, tăng PageSize lên 500 để lấy đủ dữ liệu
+        pageSize: viewMode === "today" ? 500 : 500,
       });
 
   const { mutateAsync: createPatient } = useCreatePatient();
