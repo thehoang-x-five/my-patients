@@ -2,6 +2,33 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 
+// Resolve fields that may be PascalCase, camelCase, or nested (supports dotted paths)
+function fld(obj, ...paths) {
+  if (!obj) return undefined;
+  for (const p of paths) {
+    if (!p) continue;
+    const parts = String(p).split(".");
+    let cur = obj;
+    for (const part of parts) {
+      if (cur == null) break;
+      if (Object.prototype.hasOwnProperty.call(cur, part)) {
+        cur = cur[part];
+      } else {
+        const alt = part.charAt(0).toLowerCase() + part.slice(1);
+        if (Object.prototype.hasOwnProperty.call(cur, alt)) {
+          cur = cur[alt];
+        } else {
+          cur = undefined;
+          break;
+        }
+      }
+    }
+    if (cur !== undefined && cur !== null && cur !== "") return cur;
+  }
+  return undefined;
+}
+
+
 function InitialAvatar({ name = "", id = "" }) {
   const seed = (name || id || "A").charCodeAt(0) % 5;
   const colors = [
@@ -182,7 +209,12 @@ function ActionButton({ active, onClick }) {
 }
 
 function getKey(p) {
-  return p?.id ?? p?.queueId ?? p?.pid;
+  return (
+    fld(p, "MaHangDoi", "MaPhieuKham", "MaBenhNhan", "id", "queueId", "pid") ||
+    p?.id ||
+    p?.queueId ||
+    p?.pid
+  );
 }
 
 export default function PatientTable({ items = [], onStart, inProgress = new Set(), stretch = false }) {
@@ -226,30 +258,80 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                   const key = getKey(p);
                   const active = inProgress.has(key);
                   const t = tone(p, active);
+                  const queueType = fld(p, "LoaiHangDoi", "loaiHangDoi", "queueType");
+
+                  // Resolve patient display values depending on queue type (LS vs CLS)
+                  const patientId = fld(p, "MaBenhNhan", "maBenhNhan", "pid", "id");
+                  const patientName =
+                    fld(
+                      p,
+                      "PhieuKhamLsFull.HoTen",
+                      "PhieuKhamLs.TenBenhNhan",
+                      "PhieuKhamClsFull.HoTen",
+                      "PhieuKhamCls.TenBenhNhan",
+                      "HoTen",
+                      "TenBenhNhan",
+                      "name"
+                    ) || "";
+
+                  const deptName = fld(
+                    p,
+                    "PhieuKhamLsFull.TenKhoa",
+                    "PhieuKhamClsFull.TenKhoa",
+                    "TenKhoa",
+                    "dept",
+                    "department"
+                  );
+
+                  const doctorName = fld(
+                    p,
+                    "PhieuKhamLsFull.TenBacSiKham",
+                    "PhieuKhamLs.TenBacSi",
+                    "PhieuKhamLs.TenBacSiKham",
+                    "PhieuKhamClsFull.TenNguoiLap",
+                    "TenBacSi",
+                    "doctor"
+                  );
+
+                  // Appointment time: prefer explicit timestamp fields, otherwise combine NgayLap+GioLap when present
+                  let apptTimeRaw = fld(p, "ThoiGianLichHen", "thoiGianLichHen", "time");
+                  if (!apptTimeRaw) {
+                    const ngayLap = fld(p, "PhieuKhamLs.NgayLap", "PhieuKhamLsFull.NgayLap", "PhieuKhamCls.NgayGioLap");
+                    const gioLap = fld(p, "PhieuKhamLs.GioLap", "PhieuKhamLsFull.GioLap", "PhieuKhamCls.GioLap");
+                    if (ngayLap && gioLap) {
+                      // gioLap might be a time-only string like "07:15:00"
+                      const datePart = (new Date(ngayLap)).toISOString().slice(0,10);
+                      apptTimeRaw = `${datePart}T${gioLap}`;
+                    } else if (ngayLap) {
+                      apptTimeRaw = ngayLap;
+                    }
+                  }
+                  const checkinRaw = fld(p, "ThoiGianCheckin", "thoiGianCheckin", "checkIn");
+                  const noteText = fld(p, "Nhan", "nhan", "GhiChu", "note", "symptoms");
                   return (
                     <Row key={key ?? i} i={i}>
                       <Td first><i className={`inline-block w-2 h-2 rounded-full ${pillTone[t].dot}`} title={t} /></Td>
                       <Td>{i + 1}</Td>
-                      <Td><span className="font-mono font-semibold truncate block">{p.MaBenhNhan || p.pid || "—"}</span></Td>
+                      <Td><span className="font-mono font-semibold truncate block">{patientId || "—"}</span></Td>
                       <Td>
                         <div className="flex items-center gap-2 min-w-0">
-                          <InitialAvatar name={p.name || p.HoTen} id={p.MaBenhNhan || p.pid} />
+                          <InitialAvatar name={patientName || ""} id={patientId || ""} />
                           <div className="min-w-0">
-                            <div className="font-semibold truncate text-slate-900">{p.name || p.HoTen || "—"}</div>
-                            {(p.Nguon || p.nguon || p.source) === "walkin" && <div className="text-[11px] text-slate-500 truncate">Khách đến trực tiếp</div>}
+                            <div className="font-semibold truncate text-slate-900" title={Object.keys(p).join(", ")}>{patientName || "—"}</div>
+                            {(fld(p, "Nguon", "nguon", "source") === "walkin") && <div className="text-[11px] text-slate-500 truncate">Khách đến trực tiếp</div>}
                           </div>
                         </div>
                       </Td>
-                      <Td><span className="truncate block">{p.dept || p.department || p.TenKhoa || "—"}</span></Td>
-                      <Td><span className="truncate block">{p.doctor || p.TenBacSi || "—"}</span></Td>
-                      <Td><span className="truncate block">{p.time || (p.ThoiGianLichHen ? new Date(p.ThoiGianLichHen).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—")}</span></Td>
-                      <Td title={p.ThoiGianCheckin || p.checkIn ? new Date(p.ThoiGianCheckin || p.checkIn).toLocaleString() : ""}>
+                      <Td><span className="truncate block">{deptName || "—"}</span></Td>
+                      <Td><span className="truncate block">{doctorName || "—"}</span></Td>
+                      <Td><span className="truncate block">{apptTimeRaw ? new Date(apptTimeRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—"}</span></Td>
+                      <Td title={checkinRaw ? new Date(checkinRaw).toLocaleString() : ""}>
                         <span className="truncate block">
-                          {(p.ThoiGianCheckin || p.checkIn) ? new Date(p.ThoiGianCheckin || p.checkIn).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                          {checkinRaw ? new Date(checkinRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—"}
                         </span>
                       </Td>
                       <Td><StatusPills  item={p} /></Td>
-                      <Td><div className="truncate text-slate-700 max-w-[8rem] break-words">{p.Nhan || p.nhan || p.note || p.symptoms || p.GhiChu || "—"}</div></Td>
+                      <Td><div className="truncate text-slate-700 max-w-[8rem] break-words">{noteText || "—"}</div></Td>
                       <Td last right ><div className="flex items-center justify-end gap-3"><ActionButton active={active} onClick={() => onStart?.(p)} /></div></Td>
                     </Row>
                   );
