@@ -20,6 +20,7 @@ import {
   useCreateExamOrder,
   useCreateDiagnosis,
 } from "../api/examination.js";
+import { useCreateHistoryVisit } from "../api/history.js";
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function Examination() {
@@ -37,6 +38,7 @@ export default function Examination() {
   const finishMut = useFinishRemove();
   const orderMut = useCreateExamOrder();
   const dxMut = useCreateDiagnosis();
+  const createVisitMut = useCreateHistoryVisit();
 
   const [active, setActive] = useState(null);
   const [inProgress, setInProgress] = useState(() => new Set());
@@ -49,14 +51,14 @@ export default function Examination() {
   });
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // Lấy số đang chờ và đang khám từ BE (trang_thai) cho chuẩn
+  // Lấy số đang chờ và đang khám từ BE (TrangThai) cho chuẩn
   const waitingCount = useMemo(
-    () => patients.filter((p) => p.trang_thai === "cho_goi").length,
+    () => patients.filter((p) => (p.TrangThai || p.trangThai || p.status) === "cho_goi").length,
     [patients]
   );
 
   const inProgressCount = useMemo(
-    () => patients.filter((p) => p.trang_thai === "dang_kham").length,
+    () => patients.filter((p) => (p.TrangThai || p.trangThai || p.status) === "dang_thuc_hien" || (p.TrangThai || p.trangThai || p.status) === "dang_kham").length,
     [patients]
   );
 
@@ -76,13 +78,13 @@ export default function Examination() {
 
     if (source !== "all") {
       arr = arr.filter(
-        (p) => (p.nguon || p.source || "walkin") === source
+        (p) => (p.Nguon || p.nguon || p.source || "walkin") === source
       );
     }
 
     if (kind !== "all") {
       arr = arr.filter((p) => {
-        const qt = p.loai_hang_doi || p.queueType || p.visitType;
+        const qt = p.LoaiHangDoi || p.loaiHangDoi || p.queueType || p.visitType;
         const isCLS = qt === "can_lam_sang" || qt === "cls";
         return kind === "cls" ? isCLS : !isCLS;
       });
@@ -102,11 +104,66 @@ export default function Examination() {
     return arr;
   }, [patients, filter]);
 
-  const getKey = (p) => p?.id ?? p?.queueId ?? p?.pid;
+  const getKey = (p) => p?.MaHangDoi ?? p?.maHangDoi ?? p?.id ?? p?.queueId ?? p?.pid;
+
+  // Helper để lấy MaNhanSu từ user hiện tại
+  function getCurrentUserMaNhanSu() {
+    if (typeof window === "undefined") return null;
+    
+    try {
+      const authData = localStorage.getItem("his-auth");
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        const user = parsed?.user;
+        if (user) {
+          return user.MaNhanSu || user.maNhanSu || user.id || user.userId || null;
+        }
+      }
+      if (window.APP_USER) {
+        return window.APP_USER.MaNhanSu || window.APP_USER.maNhanSu || window.APP_USER.id || window.APP_USER.userId || null;
+      }
+    } catch (err) {
+      console.warn("Không thể lấy MaNhanSu:", err);
+    }
+    return null;
+  }
 
   async function handleStart(p) {
     const key = getKey(p);
     if (!key) return;
+    
+    // Lấy thông tin từ queue item
+    const maHangDoi = p.MaHangDoi || p.maHangDoi || key;
+    const maNhanSuThucHien = getCurrentUserMaNhanSu();
+    const loaiHangDoi = p.LoaiHangDoi || p.loaiHangDoi || p.queueType || p.visitType;
+    
+    // Map LoaiHangDoi sang LoaiLuot
+    let loaiLuot = null;
+    if (loaiHangDoi === "can_lam_sang" || loaiHangDoi === "cls") {
+      loaiLuot = "kham_dich_vu";
+    } else {
+      loaiLuot = "kham_moi"; // hoặc có thể lấy từ p.LoaiLuot nếu có
+    }
+    
+    const now = new Date();
+    const thoiGianBatDau = now.toISOString();
+    
+    // Gọi API tạo lượt khám
+    try {
+      await createVisitMut.mutateAsync({
+        MaHangDoi: maHangDoi,
+        MaNhanSuThucHien: maNhanSuThucHien,
+        MaYTaHoTro: null, // Có thể thêm sau nếu cần
+        ThoiGianBatDau: thoiGianBatDau,
+        ThoiGianKetThuc: null, // Sẽ cập nhật khi kết thúc
+        LoaiLuot: loaiLuot,
+        TrangThai: "dang_thuc_hien",
+      });
+    } catch (err) {
+      console.error("Lỗi khi tạo lượt khám:", err);
+      // Vẫn tiếp tục với flow bình thường nếu lỗi
+    }
+    
     setInProgress((prev) => {
       const s = new Set(prev);
       s.add(key);

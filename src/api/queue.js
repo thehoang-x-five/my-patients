@@ -38,8 +38,11 @@ export const QUEUE_STATUS = {
 
 function normalizeQueueItem(raw = {}) {
   if (!raw) return null;
-  return {
+  
+  // Map các field từ API response (PascalCase) sang cả PascalCase và camelCase để tương thích
+  const normalized = {
     _raw: raw,
+    // Queue fields (PascalCase - giữ nguyên từ API)
     MaHangDoi: raw.MaHangDoi ?? raw.maHangDoi ?? raw.id ?? null,
     MaBenhNhan: raw.MaBenhNhan ?? raw.maBenhNhan ?? raw.pid ?? null,
     MaPhong: raw.MaPhong ?? raw.maPhong ?? raw.ma_phong ?? null,
@@ -54,7 +57,46 @@ function normalizeQueueItem(raw = {}) {
     TrangThai: raw.TrangThai ?? raw.trangThai ?? raw.status ?? null,
     MaPhieuKham: raw.MaPhieuKham ?? raw.maPhieuKham ?? null,
     MaChiTietDv: raw.MaChiTietDv ?? raw.maChiTietDv ?? null,
+    
+    // Alias fields cho tương thích với code hiện tại (camelCase)
+    id: raw.MaHangDoi ?? raw.maHangDoi ?? raw.id ?? null,
+    queueId: raw.MaHangDoi ?? raw.maHangDoi ?? raw.id ?? null,
+    pid: raw.MaBenhNhan ?? raw.maBenhNhan ?? raw.pid ?? null,
+    maPhong: raw.MaPhong ?? raw.maPhong ?? raw.ma_phong ?? null,
+    loaiHangDoi: raw.LoaiHangDoi ?? raw.loaiHangDoi ?? null,
+    queueType: raw.LoaiHangDoi ?? raw.loaiHangDoi ?? null,
+    visitType: raw.LoaiHangDoi ?? raw.loaiHangDoi ?? null,
+    nguon: raw.Nguon ?? raw.nguon ?? null,
+    source: raw.Nguon ?? raw.nguon ?? null,
+    nhan: raw.Nhan ?? raw.nhan ?? null,
+    capCuu: raw.CapCuu ?? raw.capCuu ?? !!raw.emergency ?? false,
+    emergency: raw.CapCuu ?? raw.capCuu ?? !!raw.emergency ?? false,
+    phanLoaiDen: raw.PhanLoaiDen ?? raw.phanLoaiDen ?? null,
+    thoiGianCheckin: raw.ThoiGianCheckin ?? raw.thoiGianCheckin ?? null,
+    checkIn: raw.ThoiGianCheckin ?? raw.thoiGianCheckin ?? null,
+    thoiGianLichHen: raw.ThoiGianLichHen ?? raw.thoiGianLichHen ?? null,
+    time: raw.ThoiGianLichHen ? new Date(raw.ThoiGianLichHen).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : null,
+    doUuTien: Number(raw.DoUuTien ?? raw.doUuTien ?? 0) || 0,
+    priority: Number(raw.DoUuTien ?? raw.doUuTien ?? 0) || 0,
+    trangThai: raw.TrangThai ?? raw.trangThai ?? raw.status ?? null,
+    status: raw.TrangThai ?? raw.trangThai ?? raw.status ?? null,
+    maPhieuKham: raw.MaPhieuKham ?? raw.maPhieuKham ?? null,
+    maChiTietDv: raw.MaChiTietDv ?? raw.maChiTietDv ?? null,
+    
+    // Patient info từ nested object hoặc từ API khác (nếu có)
+    name: raw.HoTen ?? raw.hoTen ?? raw.name ?? raw.BenhNhan?.HoTen ?? raw.benhNhan?.hoTen ?? null,
+    hoTen: raw.HoTen ?? raw.hoTen ?? raw.name ?? raw.BenhNhan?.HoTen ?? raw.benhNhan?.hoTen ?? null,
+    dept: raw.TenKhoa ?? raw.tenKhoa ?? raw.dept ?? raw.department ?? raw.Khoa?.TenKhoa ?? raw.khoa?.tenKhoa ?? null,
+    department: raw.TenKhoa ?? raw.tenKhoa ?? raw.dept ?? raw.department ?? raw.Khoa?.TenKhoa ?? raw.khoa?.tenKhoa ?? null,
+    doctor: raw.TenBacSi ?? raw.tenBacSi ?? raw.doctor ?? raw.BacSi?.TenBacSi ?? raw.bacSi?.tenBacSi ?? null,
+    note: raw.GhiChu ?? raw.ghiChu ?? raw.note ?? raw.symptoms ?? null,
+    symptoms: raw.GhiChu ?? raw.ghiChu ?? raw.note ?? raw.symptoms ?? null,
+    age: raw.Tuoi ?? raw.tuoi ?? raw.age ?? null,
+    gender: raw.GioiTinh ?? raw.gioiTinh ?? raw.gender ?? null,
+    room: raw.MaPhong ?? raw.maPhong ?? raw.room ?? null,
   };
+  
+  return normalized;
 }
 
 function cleanup(obj = {}) {
@@ -305,10 +347,23 @@ export function useQueueToday(options = {}) {
   // Memoize params để tránh tạo object mới mỗi lần render
   // Chỉ tính toán một lần khi mount, không phụ thuộc vào thời gian thực
   const params = useMemo(() => {
+    // Lấy thời gian hiện tại (JavaScript Date tự động dùng timezone của máy)
+    // Nếu cần đảm bảo múi giờ +7, tạo Date với timezone UTC+7
     const now = new Date();
-    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    from.setHours(0, 0, 0, 0);
-    const to = new Date();
+    
+    // Tính toán thời gian UTC+7 (giờ Việt Nam)
+    // Lấy UTC time và cộng thêm 7 giờ
+    const utcNow = now.getTime() + (now.getTimezoneOffset() * 60 * 1000); // Chuyển sang UTC
+    const vietnamOffset = 7 * 60 * 60 * 1000; // +7 giờ tính bằng milliseconds
+    const vietnamTime = new Date(utcNow + vietnamOffset);
+    
+    // toTime = hiện tại (UTC+7)
+    const to = new Date(vietnamTime);
+    
+    // fromTime = hiện tại lùi 1 tháng (UTC+7)
+    const from = new Date(vietnamTime);
+    from.setMonth(from.getMonth() - 1);
+    
     return { 
       FromTime: from.toISOString(), 
       ToTime: to.toISOString(), 

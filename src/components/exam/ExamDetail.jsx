@@ -6,6 +6,7 @@ import {
   useExamServices,
   useCreateExamOrder,
   useCreateDiagnosis,
+  useClinicalExam,
 } from "../../api/examination.js";
 
 const MAX_NOTE_LEN = 200;
@@ -55,6 +56,12 @@ export default function ExamDetail({
     examServices.forEach((s) => m.set(s.id, s));
     return m;
   }, [examServices]);
+
+  // Lấy maPhieuKham từ patient để gọi API chi tiết phiếu khám
+  const maPhieuKham = patient?.MaPhieuKham || patient?.maPhieuKham || patient?.maPhieuKham || null;
+  const { data: clinicalExamData } = useClinicalExam(maPhieuKham, {
+    enabled: !!maPhieuKham, // Chỉ gọi API khi có maPhieuKham
+  });
 
   // Prefill nếu có serviceOrder.items (LS)
   useEffect(() => {
@@ -240,18 +247,19 @@ export default function ExamDetail({
   });
 
   // ----- PHÂN BIỆT LS / CLS -----
+  // Sử dụng field names từ API response (PascalCase hoặc camelCase alias)
   const queueType =
-    patient?.loai_hang_doi || patient?.queueType || patient?.visitType;
+    patient?.LoaiHangDoi || patient?.loaiHangDoi || patient?.queueType || patient?.visitType;
   const isCLS = queueType === "can_lam_sang" || queueType === "cls";
 
   // Loại lượt (Khám mới / Tái khám) chỉ hiển thị trong LS
-  const visitKind = patient?.loai_luot || patient?.visitKind; // kham_moi | tai_kham
+  const visitKind = patient?.LoaiLuot || patient?.loaiLuot || patient?.loai_luot || patient?.visitKind; // kham_moi | tai_kham
   let visitKindLabel = "";
   if (visitKind === "tai_kham") visitKindLabel = "Tái khám";
   else if (visitKind === "kham_moi") visitKindLabel = "Khám mới";
 
   // LS: có phải lượt "trả từ dịch vụ" hay không
-  const src = patient?.nguon || patient?.source; // appointment | walkin | service_return
+  const src = patient?.Nguon || patient?.nguon || patient?.source; // appointment | walkin | service_return
   const isReturnFromService =
     !isCLS &&
     (src === "service_return" || patient?.nguon_label === "Trả từ dịch vụ");
@@ -379,7 +387,7 @@ export default function ExamDetail({
                 </span>
               )}
 
-              {(patient.cap_cuu || patient.capCuu) && (
+              {(patient.CapCuu || patient.capCuu || patient.cap_cuu) && (
                 <span className="rounded-full bg-rose-100 text-rose-800 px-2 py-0.5">
                   Khẩn
                 </span>
@@ -401,11 +409,15 @@ export default function ExamDetail({
           <div className="grid md:grid-cols-2 gap-3">
         <motion.div whileHover={{ y: -1 }} className="rounded-2xl p-3 bg-white shadow-sm border border-slate-200">
           <b className="block mb-1 text-slate-900">Thông tin chi tiết</b>
-          <div className="text-sm max-h-40 overflow-y-auto scrollbar-none break-words">{patient.note || "—"}</div>
+          <div className="text-sm max-h-40 overflow-y-auto scrollbar-none break-words whitespace-pre-wrap">
+            {clinicalExamData?.ThongTinChiTiet || clinicalExamData?.thongTinChiTiet || patient?.note || "—"}
+          </div>
         </motion.div>
         <motion.div whileHover={{ y: -1 }} className="rounded-2xl p-3 bg-white shadow-sm border border-slate-200">
           <b className="block mb-1 text-slate-900">Ghi chú vào khám</b>
-          <div className="text-sm max-h-40 overflow-y-auto scrollbar-none break-words">{patient.note || "—"}</div>
+          <div className="text-sm max-h-40 overflow-y-auto scrollbar-none break-words whitespace-pre-wrap">
+            {clinicalExamData?.TrieuChung || clinicalExamData?.trieuChung || patient?.note || "—"}
+          </div>
         </motion.div>
       </div>
           {/* ================== MODE KHÁM LÂM SÀNG (LS) ================== */}
@@ -879,7 +891,7 @@ export default function ExamDetail({
                         <b>Loại dịch vụ:</b> {serviceName}
                       </p>
                     )}
-                    {(patient.cap_cuu || patient.capCuu) && (
+                    {(patient.CapCuu || patient.capCuu || patient.cap_cuu) && (
                       <p className="text-rose-600 font-semibold">
                         • Ca cấp cứu
                       </p>
