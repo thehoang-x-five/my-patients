@@ -28,12 +28,11 @@ import {
 // History (lượt khám)
 import { useCreateHistoryVisit } from "../../api/history";
 import { getClinicalExam } from "../../api/examination";
-import { useExamStore, useUIStore } from "../stores/appStore.js";
+import { useExamStore } from "../stores/appStore.js";
 import { useNavigate } from "react-router-dom";
 
 // Hàng đợi (enqueue khám LS, CLS, quay lại khám)
 import {
-  useQueueToday,
   enqueueFromAppointment,
   enqueueService,
   enqueueReturnToDoctor,
@@ -616,6 +615,24 @@ const transactions = useMemo(() => {
     e.preventDefault();
     const src = form || {};
   
+    // Lấy MaBenhNhan từ nhiều nguồn (ưu tiên từ form, sau đó từ patient prop)
+    const maBenhNhan =
+      src.MaBenhNhan ||
+      src.maBenhNhan ||
+      src.id ||
+      src.pid ||
+      patient?.MaBenhNhan ||
+      patient?.maBenhNhan ||
+      patient?.id ||
+      patient?.pid ||
+      null;
+
+    // Khi edit, bắt buộc phải có MaBenhNhan
+    if (mode === "edit" && !maBenhNhan) {
+      toast.error("Không tìm thấy mã bệnh nhân. Vui lòng thử lại.");
+      return;
+    }
+  
     // Map thông tin bổ sung
     const extrasMap = {};
     extras.forEach((ex) => {
@@ -650,35 +667,39 @@ const transactions = useMemo(() => {
       }
     });
   
+    // Lấy trạng thái mới - ưu tiên từ form state (UI input)
+    const newStatus = src.status || src.trangThaiHomNay || src.TrangThaiHomNay || null;
+  
+    // Ưu tiên lấy giá trị từ form state (các key mà UI sử dụng: name, phone, email, address, dob, gender, accountStatus)
+    // Sau đó mới fallback sang các key khác (HoTen, NgaySinh, ...) nếu không có
     const payload = {
       // Map sang BE UpsertPatient
-      MaBenhNhan:
-        src.MaBenhNhan ||
-        src.maBenhNhan ||
-        src.id ||
-        patient?.MaBenhNhan ||
-        "",
-      HoTen: src.HoTen || src.hoTen || src.name || "",
-      NgaySinh: src.NgaySinh || src.ngaySinh || src.dob || null,
-      GioiTinh: src.GioiTinh || src.gioiTinh || src.gender || "",
-      DienThoai: src.DienThoai || src.dienThoai || src.phone || "",
-      Email: src.Email || src.email || "",
-      DiaChi: src.DiaChi || src.diaChi || src.address || "",
+      MaBenhNhan: maBenhNhan || "",
+      // Ưu tiên lấy từ form state (UI input) trước
+      HoTen: src.name || src.HoTen || src.hoTen || "",
+      NgaySinh: src.dob || src.NgaySinh || src.ngaySinh || null,
+      GioiTinh: src.gender || src.GioiTinh || src.gioiTinh || "",
+      DienThoai: src.phone || src.DienThoai || src.dienThoai || "",
+      Email: src.email || src.Email || "",
+      DiaChi: src.address || src.DiaChi || src.diaChi || "",
       TrangThaiTaiKhoan:
-        src.TrangThaiTaiKhoan || src.accountStatus || "hoat_dong",
+        src.accountStatus || src.TrangThaiTaiKhoan || "hoat_dong",
       // Trạng thái trong ngày (FE -> API build sẽ map sang TrangThaiHomNay)
-      status: src.status || src.trangThaiHomNay || src.TrangThaiHomNay,
-  
-      // Không gửi TrangThaiHomNay ở đây – update qua API UpdateDailyStatus riêng
+      // Chỉ gửi nếu có giá trị
+      ...(newStatus ? { TrangThaiHomNay: newStatus, status: newStatus } : {}),
   
       ...extrasMap,
   
       // giữ lại vài field FE nếu hook upsert có dùng
-      id: src.id,
+      id: maBenhNhan || src.id,
+      pid: maBenhNhan || src.pid,
       name: src.name,
       phone: src.phone,
       email: src.email,
       address: src.address,
+      dob: src.dob,
+      gender: src.gender,
+      accountStatus: src.accountStatus,
     };
   
     // Client-side required checks for create mode: ensure dob, phone, email present
@@ -695,10 +716,18 @@ const transactions = useMemo(() => {
 
     try {
       const result = await onSave?.(payload, mode);
+      
+      // Nếu có thay đổi trạng thái và đã update thành công, cập nhật trạng thái riêng
+      // (mặc dù payload đã có TrangThaiHomNay, nhưng để đảm bảo, có thể gọi riêng)
+      // Tuy nhiên, nếu BE đã xử lý trong upsertPatient thì không cần gọi riêng
+      
       // Gọi callback onSaved sau khi lưu thành công
       if (result) {
         onSaved?.(result);
       }
+      
+      // Reset dirty flag sau khi lưu thành công
+      setIsDirty(false);
     } catch (err) {
       // Error đã được xử lý in parent (if provided) — rethrow so parent can show toast
       // If there's no parent handler, show local toast
@@ -768,26 +797,10 @@ const transactions = useMemo(() => {
     return [{ id, name, rooms: [], doctors: [] }];
   }, [serviceInfo]);
 
-  // Lấy danh sách hàng đợi để tính số lượng chờ theo khoa
-  // Chỉ gọi API khi không ở mode "edit" hoặc "add" (không cần queue data khi chỉnh sửa form)
-  const { data: queueData } = useQueueToday({
-    enabled: mode !== "edit" && mode !== "add",
-  });
-  const queueItems = Array.isArray(queueData?.items) ? queueData.items : [];
-
   // Hook để tạo phiếu khám lâm sàng
   const createClinicalExamMut = useCreateClinicalExam();
   const createHistoryVisitMut = useCreateHistoryVisit();
   const setExamActive = useExamStore((s) => s.setActive);
-
-  const waitingByDept = useMemo(() => {
-    const map = {};
-    queueItems.forEach((it) => {
-      const k = it.dept || "";
-      map[k] = (map[k] || 0) + 1;
-    });
-    return map;
-  }, [queueItems]);
 
   /* ==================== PRINT OVERLAY STATE ==================== */
   const [print, setPrint] = useState({ show: false, payload: null });
@@ -1264,28 +1277,46 @@ const transactions = useMemo(() => {
     onClose?.();
 
     try {
-      const setApptPrefill = useUIStore.getState().setApptPrefill;
-      const flashApptCreate = useUIStore.getState().flashApptCreate;
-
-      if (setApptPrefill) {
-        setApptPrefill({
-          patient: name,
-          code: pid,
-          phone:
-            patient?.DienThoai || patient?.dienThoai || patient?.phone || "",
-          type: "follow_up",
-          lastVisit: { patientName: name, patientCode: pid },
-        });
-      }
-      if (flashApptCreate) flashApptCreate();
-    } catch (err) {
-      // ignore
-    }
-
-    try {
+      // Lưu đầy đủ thông tin bệnh nhân vào localStorage để điền vào form tạo lịch hẹn
+      const sourcePatient = patientForView || patient || form || {};
+      const apptPrefillData = {
+        patient: name,
+        code: pid,
+        phone:
+          sourcePatient?.DienThoai ||
+          sourcePatient?.dienThoai ||
+          sourcePatient?.phone ||
+          "",
+        email:
+          sourcePatient?.Email ||
+          sourcePatient?.email ||
+          "",
+        dob:
+          sourcePatient?.NgaySinh ||
+          sourcePatient?.ngaySinh ||
+          sourcePatient?.dob ||
+          "",
+        gender:
+          sourcePatient?.GioiTinh ||
+          sourcePatient?.gioiTinh ||
+          sourcePatient?.gender ||
+          "",
+        address:
+          sourcePatient?.DiaChi ||
+          sourcePatient?.diaChi ||
+          sourcePatient?.address ||
+          "",
+        type: "follow_up",
+        lastVisit: { patientName: name, patientCode: pid },
+      };
+      
+      // Lưu vào localStorage
+      localStorage.setItem("appt-prefill", JSON.stringify(apptPrefillData));
+      
+      // Navigate to appointments page
       navigate("/appointments");
     } catch (err) {
-      // ignore
+      console.error("Lỗi khi lưu thông tin bệnh nhân:", err);
     }
   }
 
@@ -1509,8 +1540,6 @@ const transactions = useMemo(() => {
                     <div className="p-4 pt-2 overflow-y-auto max-h-[60vh] scrollbar-none">
                       <div className="space-y-2">
                         {availableRooms.map((room) => {
-                          const deptKey = exam.dept || booking.dept || "";
-                          const deptWaiting = waitingByDept[deptKey] || 0;
                           return (
                             <motion.button
                               key={room}
@@ -1520,13 +1549,9 @@ const transactions = useMemo(() => {
                                 setExam((s) => ({ ...s, room }));
                                 setShowRoomSelect(false);
                               }}
-                              className="w-full rounded-xl p-3 bg-white ring-1 ring-slate-200 hover:ring-emerald-300 hover:bg-emerald-50/50 transition text-left font-medium flex items-center justify-between"
+                              className="w-full rounded-xl p-3 bg-white ring-1 ring-slate-200 hover:ring-emerald-300 hover:bg-emerald-50/50 transition text-left font-medium"
                             >
                               <span>{room}</span>
-                              <span className="text-xs text-slate-500">
-                                Đang chờ trong khoa:{" "}
-                                <b className="text-slate-700">{deptWaiting}</b>
-                              </span>
                             </motion.button>
                           );
                         })}

@@ -137,34 +137,61 @@ export default function CreateDrawer({
 
     const t = setTimeout(() => firstFieldRef.current?.focus(), 60);
 
-    // ==== Prefill khi mở ====
+    // ==== Prefill khi mở drawer ====
+    // Chỉ điền thông tin khi drawer được mở (open = true)
     const mapTypeToKey = (t) => {
         const s = String(t || "").toLowerCase();
         if (s === "follow_up" || /tái\s*kha|khám\s*lại/.test(s)) return "follow_up";
         return "new";
       };
-      const dv = defaultValues || {};
+      
+    // Đọc từ localStorage trước (ưu tiên), sau đó mới từ defaultValues
+    let dv = defaultValues || {};
+    
+    // Kiểm tra localStorage có data không
+    try {
+      const stored = localStorage.getItem("appt-prefill");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Merge: localStorage có ưu tiên cao hơn defaultValues
+        dv = { ...dv, ...parsed };
+        // Xóa localStorage sau khi đã lấy
+        localStorage.removeItem("appt-prefill");
+      }
+    } catch (err) {
+      console.warn("Không thể đọc appt-prefill từ localStorage:", err);
+    }
   
-      setSelectedDeptCode(
-                dv.deptCode || dv.maKhoa || dv.MaKhoa || ""
-              );
-              setSelectedDeptName(
-                dv.dept ||
-                  dv.department ||
-                  dv.deptName ||
-                  dv.TenKhoa ||
-                  ""
-              );
-              setSelectedDoctor(
-                dv.doctor || dv.doctorName || dv.TenBacSiKham || ""
-              );
-      setApType(mapTypeToKey(dv.type));
-      setPatientName(dv.patient || "");
-      setPatientCode(dv.code || "");
-      setDateStr(dv.date || defaultDate);
-      setStartStr(dv.time || "08:00");
-      setNoteStr(dv.note || "");
-      setPhone(dv.phone || dv.so_dien_thoai || "");
+    // Điền thông tin vào form
+    setSelectedDeptCode(
+      dv.deptCode || dv.maKhoa || dv.MaKhoa || ""
+    );
+    setSelectedDeptName(
+      dv.dept ||
+      dv.department ||
+      dv.deptName ||
+      dv.TenKhoa ||
+      ""
+    );
+    setSelectedDoctor(
+      dv.doctor || dv.doctorName || dv.TenBacSiKham || ""
+    );
+    
+    // Ưu tiên set type từ defaultValues (nếu có), mặc định là "follow_up" nếu có thông tin bệnh nhân
+    const prefillType = dv.type 
+      ? mapTypeToKey(dv.type) 
+      : (dv.patient || dv.code || dv.patientName || dv.patientCode) 
+        ? "follow_up" 
+        : "new";
+    setApType(prefillType);
+    
+    // Điền thông tin bệnh nhân
+    setPatientName(dv.patient || dv.patientName || "");
+    setPatientCode(dv.code || dv.patientCode || "");
+    setPhone(dv.phone || dv.so_dien_thoai || "");
+    setDateStr(dv.date || defaultDate);
+    setStartStr(dv.time || dv.start || "08:00");
+    setNoteStr(dv.note || "");
 
     return () => {
       window.removeEventListener("keydown", handleKey);

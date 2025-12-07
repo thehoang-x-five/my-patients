@@ -168,7 +168,8 @@ export default function Appointments() {
     if (!apptPrefill) return;
     if (!flashApptCreateAt) return;
 
-    // Allow CreateDrawer to read the prop this render, then clear store shortly after
+    // Allow CreateDrawer to read the prop and fill the form first,
+    // then clear store after a delay to ensure form is filled
     const t = setTimeout(() => {
       try {
         clearApptPrefill();
@@ -176,7 +177,7 @@ export default function Appointments() {
       try {
         ackFlashApptCreate();
       } catch {}
-    }, 120);
+    }, 500); // Tăng thời gian để đảm bảo form đã điền xong
 
     return () => clearTimeout(t);
   }, [drawerOpen, apptPrefill, flashApptCreateAt, clearApptPrefill, ackFlashApptCreate]);
