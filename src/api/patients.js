@@ -12,16 +12,12 @@ export const STATUSES = {
   WAIT_INTAKE_SVC: "cho_tiep_nhan_dv",
   WAIT_EXAM: "cho_kham",
   WAIT_EXAM_SVC: "cho_kham_dv",
-  WAIT_CLS: "cho_cls",
   IN_EXAM: "dang_kham",
   IN_EXAM_SVC: "dang_kham_dv",
   WAIT_PROC: "cho_xu_ly",
   WAIT_PROC_SVC: "cho_xu_ly_dv",
-  SCHEDULED_APPT: "hen_kham",
-  SCHEDULED_FUP: "hen_tai_kham",
-  DONE_EXAM: "da_kham",
   DONE: "hoan_tat",
-  CANCELLED: "da_huy",
+  CANCELLED: "da_huy"||"huy",
 };
 
 export const ACCOUNT_STATUSES = ["hoat_dong", "khong_hoat_dong", "da_xoa"];
@@ -31,14 +27,10 @@ export const TODAY_STATUS_MAP = {
   cho_tiep_nhan_dv: "Chờ tiếp nhận (dịch vụ)",
   cho_kham: "Chờ khám",
   cho_kham_dv: "Chờ khám (dịch vụ)",
-  cho_cls: "Chờ CLS",
   dang_kham: "Đang khám",
   dang_kham_dv: "Đang khám (dịch vụ)",
   cho_xu_ly: "Chờ xử lý",
   cho_xu_ly_dv: "Chờ xử lý (dịch vụ)",
-  da_kham: "Đã khám",
-  hen_kham: "Hẹn khám",
-  hen_tai_kham: "Hẹn tái khám",
   da_huy: "Đã hủy",
   hoan_tat: "Hoàn thành",
 };
@@ -47,6 +39,88 @@ export function mapTodayStatusLabel(codeOrLabel) {
   if (!codeOrLabel) return "";
   const low = String(codeOrLabel).toLowerCase();
   return TODAY_STATUS_MAP[low] || codeOrLabel;
+}
+
+// Gender display map
+const GENDER_MAP = {
+  nam: "Nam",
+  nu: "Nữ",
+  nữ: "Nữ",
+  khac: "Khác",
+  other: "Khác",
+  male: "Nam",
+  female: "Nữ",
+};
+
+export function mapGenderLabel(value) {
+  if (!value && value !== 0) return "";
+  const t = String(value).trim().toLowerCase();
+  return GENDER_MAP[t] || (t ? t[0].toUpperCase() + t.slice(1) : "");
+}
+
+// Account status labels
+const ACCOUNT_STATUS_LABELS = {
+  hoat_dong: "Hoạt động",
+  khong_hoat_dong: "Không hoạt động",
+  da_xoa: "Đã xóa",
+  active: "Hoạt động",
+  inactive: "Không hoạt động",
+  deleted: "Đã xóa",
+};
+
+export function mapAccountStatusLabel(codeOrLabel) {
+  if (!codeOrLabel) return "";
+  const low = String(codeOrLabel).toLowerCase();
+  return ACCOUNT_STATUS_LABELS[low] || codeOrLabel;
+}
+
+// Visit type map (history)
+const VISIT_TYPE_MAP = {
+  clinic: "Khám lâm sàng",
+  service: "Dịch vụ/CLS",
+  walkin: "Tiếp nhận trực tiếp",
+  followup: "Tái khám",
+};
+
+export function mapVisitTypeLabel(t) {
+  if (!t) return "";
+  const low = String(t).toLowerCase();
+  return VISIT_TYPE_MAP[low] || t;
+}
+
+function capitalizeWords(s = "") {
+  return String(s || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0]?.toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function normalizePhone(p = "") {
+  if (!p) return "";
+  const s = String(p).trim();
+  // remove non-digits except +
+  const cleaned = s.replace(/[^+0-9]/g, "");
+  return cleaned;
+}
+
+// Transaction status labels
+const TRANSACTION_STATUS_MAP = {
+  paid: "Đã thanh toán",
+  da_thu: "Đã thanh toán",
+  pending: "Đang chờ",
+  cancelled: "Đã hủy",
+  refund: "Hoàn tiền",
+  da_thanh_toan: "Đã thanh toán",
+  cho_thanh_toan: "Đang chờ",
+  da_huy: "Đã hủy",
+  huy: "Đã hủy",
+};
+
+export function mapTransactionStatusLabel(s) {
+  if (!s && s !== 0) return "";
+  const low = String(s).toLowerCase();
+  return TRANSACTION_STATUS_MAP[low] || s;
 }
 
 /* ===== Helpers: build filter & normalize DTOs ===== */
@@ -111,6 +185,12 @@ function normalizePatientFields(dto = {}) {
     dto.accountStatus ||
     "hoat_dong";
 
+  // formatted values for UI
+  const nameFormatted = capitalizeWords(name || "");
+  const genderLabel = mapGenderLabel(gender);
+  const accountStatusLabel = mapAccountStatusLabel(accountStatus);
+  const phoneNormalized = normalizePhone(phone);
+
   return {
     _raw: dto,
 
@@ -122,15 +202,16 @@ function normalizePatientFields(dto = {}) {
 
     // Thông tin cơ bản
     name,
+    nameFormatted,
     hoTen: name,
     dob,
     ngaySinh: dob,
-    gioi_tinh: gender,
-    gioiTinh: gender,
-    gender,
+    gioi_tinh: genderLabel,
+    gioiTinh: genderLabel,
+    gender: genderLabel,
     phone,
-    dien_thoai: phone,
-    dienThoai: phone,
+    dien_thoai: phoneNormalized,
+    dienThoai: phoneNormalized,
     email,
     address,
     dia_chi: address,
@@ -138,11 +219,13 @@ function normalizePatientFields(dto = {}) {
 
     // Trạng thái tài khoản & trong ngày
     accountStatus,
-    trang_thai_tai_khoan: accountStatus,
-    trangThaiTaiKhoan: accountStatus,
+    accountStatusLabel,
+    trang_thai_tai_khoan: accountStatusLabel,
+    trangThaiTaiKhoan: accountStatusLabel,
 
     statusCode,
     status: mapTodayStatusLabel(statusCode),
+    statusLabel: mapTodayStatusLabel(statusCode),
     trang_thai_hom_nay: mapTodayStatusLabel(statusCode),
     trang_thai_hom_nay_code: statusCode,
     trangThaiHomNay: statusCode,
@@ -172,10 +255,12 @@ function normalizePatientDetail(dto) {
   const visits = visitsRaw.map((v) => ({
     _raw: v,
     date: v.Date || v.date || null,
-    dept: v.Dept || v.dept || "",
-    doctor: v.Doctor || v.doctor || "",
+    dateLabel: v.Date || v.date || null,
+    dept: capitalizeWords(v.Dept || v.dept || ""),
+    doctor: capitalizeWords(v.Doctor || v.doctor || ""),
     note: v.Note || v.note || "",
     type: v.Type || v.type || "",
+    typeLabel: mapVisitTypeLabel(v.Type || v.type || v.TypeName || v.typeName),
     by: v.By || v.by || "",
     ref: v.Ref || v.ref || "",
     maLuotKham: v.MaLuotKham || v.maLuotKham || "",
@@ -185,9 +270,11 @@ function normalizePatientDetail(dto) {
   const transactions = transactionsRaw.map((t) => ({
     _raw: t,
     date: t.Date || t.date || null,
+    dateLabel: t.Date || t.date || null,
     item: t.Item || t.item || "",
     amount: t.Amount || t.amount || 0,
     status: t.Status || t.status || "",
+    statusLabel: mapTransactionStatusLabel(t.Status || t.status || ""),
     ref: t.Ref || t.ref || "",
     maHoaDon: t.MaHoaDon || t.maHoaDon || "",
     loaiDotThu: t.LoaiDotThu || t.loaiDotThu || "",
@@ -230,12 +317,15 @@ function buildPatientPayload(input = {}) {
     input?.MaBenhNhan ||
     input?.maBenhNhan ||
     input?.id ||
-    input?.pid ||
-    input?.pid
+    input?.pid ||null
   );
 
   const payload = {
     // API UpsertPatient: PatientCreateUpdateRequest
+    MaBenhNhan:  input?.MaBenhNhan ||
+    input?.maBenhNhan ||
+    input?.id ||
+    input?.pid ||null,
     HoTen:
       input.HoTen ?? input.name ?? input.hoTen ?? input.ho_ten ?? "",
     NgaySinh: input.NgaySinh ?? input.dob ?? input.ngaySinh ?? null,
@@ -270,15 +360,13 @@ function buildPatientPayload(input = {}) {
     TrangThaiTaiKhoan:
       input.TrangThaiTaiKhoan ??
       input.trangThaiTaiKhoan ??
-      input.accountStatus ??
-      (isNew ? "hoat_dong" : undefined),
+      input.accountStatus,
 
     // Trạng thái trong ngày (BE field: TrangThaiHomNay)
     TrangThaiHomNay:
       input.TrangThaiHomNay ??
       input.trangThaiHomNay ??
-      input.status ??
-      (isNew ? STATUSES.WAIT_INTAKE : undefined),
+      input.status,
   };
 
   // Remove any undefined values so BE receives only intended fields
@@ -323,6 +411,7 @@ export const getPatientDetail = async (id) => {
  */
 export const upsertPatient = async (payload = {}) => {
   const body = buildPatientPayload(payload);
+  
   console.log("[Patient API] Upsert payload:", body);
   try {
     const res = await http.post("/patient", body);

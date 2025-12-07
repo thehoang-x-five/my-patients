@@ -65,6 +65,7 @@ export default function PatientFormMode({
             type="date"
             value={form.dob || ""}
             onChange={(e) => change("dob", e.target.value)}
+            required={mode === "add"}
             className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
           />
         </label>
@@ -84,16 +85,20 @@ export default function PatientFormMode({
         <label className="text-sm font-semibold text-slate-700">
           Điện thoại
           <input
+            type="tel"
             value={form.phone || ""}
             onChange={(e) => change("phone", e.target.value)}
+            required={mode === "add"}
             className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
           />
         </label>
         <label className="text-sm font-semibold text-slate-700">
           Email
           <input
+            type="email"
             value={form.email || ""}
             onChange={(e) => change("email", e.target.value)}
+            required={mode === "add"}
             className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
           />
         </label>

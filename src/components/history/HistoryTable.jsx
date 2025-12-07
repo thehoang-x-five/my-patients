@@ -89,21 +89,21 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
     const v = (kind || "").toLowerCase();
     if (v === "kham_lam_sang") {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+        <span className="w-full inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
           Khám lâm sàng
         </span>
       );
     }
     if (v === "can_lam_sang") {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200">
+        <span className="w-full inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200">
           Cận lâm sàng
         </span>
       );
     }
     if (v === "thuoc") {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 ring-1 ring-teal-200">
+        <span className="w-full inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 ring-1 ring-teal-200">
           Thuốc
         </span>
       );
@@ -256,7 +256,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
                 <Td>{r.name || r.ptName || "—"}</Td>
                 <Td>{renderKindChip(r.kind || r.type)}</Td>
                 <Td>
-                  <span className="text-slate-600">{r.content || "—"}</span>
+                  <span className="text-slate-600 max-w-[250px] break-words line-clamp-2">{r.content || "—"}</span>
                 </Td>
                 <Td right>
                   <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">

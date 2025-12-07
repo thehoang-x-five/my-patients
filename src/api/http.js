@@ -72,13 +72,38 @@ http.interceptors.response.use(
       return Promise.reject(err);
     }
 
-    const message =
-      response?.data?.message ||
-      response?.data?.error ||
-      response?.data?.errorMessage ||
-      response?.data?.title ||
-      response?.statusText ||
-      "Network error";
+    // Try to extract a useful error message from common BE shapes.
+    let message = "Network error";
+    try {
+      const data = response.data;
+      if (data != null) {
+        if (typeof data === "string") {
+          const t = data.trim();
+          if (t) message = t;
+        } else if (typeof data === "object") {
+          // Common .NET shapes: message/Message, title, detail, errors
+          if (data.message) message = data.message;
+          else if (data.Message) message = data.Message;
+          else if (data.error) message = data.error;
+          else if (data.errorMessage) message = data.errorMessage;
+          else if (data.title) message = data.title;
+          else if (data.detail) message = data.detail;
+          else if (data.errors) {
+            // errors can be an object or array
+            try {
+              if (Array.isArray(data.errors)) message = data.errors.join("; ");
+              else message = Object.values(data.errors).flat().join("; ");
+            } catch (e) {
+              // fallback
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // ignore extraction errors
+    }
+
+    if (!message || message === "") message = response.statusText || `HTTP ${response.status}`;
     return Promise.reject(new Error(message));
   }
 );

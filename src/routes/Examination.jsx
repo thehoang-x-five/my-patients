@@ -30,7 +30,9 @@ export default function Examination() {
 
   const qc = useQueryClient();
   const { data: queueData } = useQueueToday();
+ 
   const patients = Array.isArray(queueData?.items) ? queueData.items : [];
+  
   const startMut = useStartExam();
   const finishMut = useFinishRemove();
   const orderMut = useCreateExamOrder();

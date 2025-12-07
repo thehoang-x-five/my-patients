@@ -7,6 +7,7 @@ import {
   STATUSES,
   useUpdatePatientStatus,
   mapTodayStatusLabel,
+  TODAY_STATUS_MAP,
 } from "../../api/patients.js";
 
 import { useEnqueueService, useReturnToDoctor } from "../../api/queue.js";
@@ -41,25 +42,67 @@ function getVitals(p) {
 /* ===== UI helpers ===== */
 function StatusBadge({ s }) {
   const label = mapTodayStatusLabel(s);
-  const low = (label || "").toLowerCase();
-  const cls =
-    /hoàn thành/.test(low)
-      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-      : /hẹn tái khám/.test(low)
-      ? "bg-teal-50 text-teal-800 ring-teal-200"
-      : /hẹn khám/.test(low)
-      ? "bg-cyan-50 text-cyan-800 ring-cyan-200"
-      : /(chờ (tiếp nhận|khám|xử lý) \(dịch vụ\))|chờ khám/i.test(low)
-      ? "bg-amber-50 text-amber-700 ring-amber-200"
-      : /chờ/.test(low)
-      ? "bg-amber-50 text-amber-700 ring-amber-200"
-      : "bg-slate-50 text-slate-700 ring-slate-200";
-  const dot =
-    /hoàn thành/.test(low)
-      ? "bg-emerald-500"
-      : /hẹn|dịch vụ|chờ/.test(low)
-      ? "bg-amber-500"
-      : "bg-slate-400";
+
+  // Determine canonical status code for styling.
+  const input = String(s || "").trim();
+  const inputLower = input.toLowerCase();
+
+  // If input is already a code present in TODAY_STATUS_MAP, use it.
+  let code = null;
+  if (Object.prototype.hasOwnProperty.call(TODAY_STATUS_MAP, inputLower)) {
+    code = inputLower;
+  } else {
+    // Try reverse-lookup: label -> code
+    const rev = Object.entries(TODAY_STATUS_MAP).reduce((acc, [k, v]) => {
+      acc[String(v || "").toLowerCase()] = k;
+      return acc;
+    }, {});
+    if (rev[inputLower]) code = rev[inputLower];
+  }
+
+  // Default styling groups
+  let cls = "bg-slate-50 text-slate-700 ring-slate-200";
+  let dot = "bg-slate-400";
+
+  if (code) {
+    if (code === "hoan_tat") {
+      cls = "bg-emerald-50 text-emerald-700 ring-emerald-200";
+      dot = "bg-emerald-500";
+    } else if (code === "hen_tai_kham") {
+      cls = "bg-teal-50 text-teal-800 ring-teal-200";
+      dot = "bg-teal-600";
+    } else if (code === "hen_kham") {
+      cls = "bg-cyan-50 text-cyan-800 ring-cyan-200";
+      dot = "bg-cyan-600";
+    } else if (code === "da_huy") {
+      cls = "bg-rose-50 text-rose-700 ring-rose-200";
+      dot = "bg-rose-500";
+    } else if (/^cho_/.test(code) || /^wait_/.test(code) || code.includes("cho")) {
+      // any 'cho_*' waiting statuses
+      cls = "bg-amber-50 text-amber-700 ring-amber-200";
+      dot = "bg-amber-500";
+    } else if (/^dang_/.test(code) || code.includes("dang")) {
+      // in-progress statuses
+      cls = "bg-cyan-50 text-cyan-800 ring-cyan-200";
+      dot = "bg-cyan-500";
+    }
+  } else {
+    // fallback: try to infer from label text
+    const low = (label || "").toLowerCase();
+    if (/hoàn thành|hoan_tat/.test(low)) {
+      cls = "bg-emerald-50 text-emerald-700 ring-emerald-200";
+      dot = "bg-emerald-500";
+    } else if (/hẹn tái khám|hẹn tái|hen_tai_kham/.test(low)) {
+      cls = "bg-teal-50 text-teal-800 ring-teal-200";
+      dot = "bg-teal-600";
+    } else if (/hẹn khám|hen_kham/.test(low)) {
+      cls = "bg-cyan-50 text-cyan-800 ring-cyan-200";
+      dot = "bg-cyan-600";
+    } else if (/chờ|cho_/.test(low)) {
+      cls = "bg-amber-50 text-amber-700 ring-amber-200";
+      dot = "bg-amber-500";
+    }
+  }
 
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${cls}`}>

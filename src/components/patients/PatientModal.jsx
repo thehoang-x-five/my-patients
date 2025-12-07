@@ -15,6 +15,7 @@ import { StatusPill, ANIMATION_CONFIG, SERVICE_ROOMS } from "./Shared.jsx";
 import {
   STATUSES,
   mapTodayStatusLabel,
+  TODAY_STATUS_MAP,
   usePatientDetail,
 } from "../../api/patients";
 // Metadata khám LS (extra fields, dịch vụ khám)
@@ -24,6 +25,11 @@ import {
   useServiceInfo,
   useCreateClinicalExam,
 } from "../../api/examination";
+// History (lượt khám)
+import { useCreateHistoryVisit } from "../../api/history";
+import { getClinicalExam } from "../../api/examination";
+import { useExamStore, useUIStore } from "../stores/appStore.js";
+import { useNavigate } from "react-router-dom";
 
 // Hàng đợi (enqueue khám LS, CLS, quay lại khám)
 import {
@@ -60,7 +66,11 @@ export default function PatientModal({
  
   
   const [form, setForm] = useState(patient || {});
-  const change = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+  const [isDirty, setIsDirty] = useState(false);
+  const change = (k, v) => {
+    setForm((s) => ({ ...s, [k]: v }));
+    setIsDirty(true);
+  };
   // ===== Lấy chi tiết bệnh nhân để ViewMode hiển thị lịch sử khám/giao dịch =====
   const patientId =
     patient?.MaBenhNhan ||
@@ -82,6 +92,8 @@ export default function PatientModal({
     () => (patientDetail ? { ...patient, ...patientDetail } : patient),
     [patient, patientDetail]
   );
+
+  const navigate = useNavigate();
 
   // ================= EXAM TEMPLATE / BOOKING =================
 
@@ -311,8 +323,49 @@ export default function PatientModal({
   
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // reset dirty flag when modal closes
+      setIsDirty(false);
+      return;
+    }
+    // If the user already started editing, don't overwrite their changes
+    if (isDirty) return;
     setForm(patient || {});
+    // Ensure the status field holds the raw status code (used by the select)
+    if (patient) {
+      // Prefer raw canonical status code properties if available.
+      let statusCode =
+        patient.trang_thai_hom_nay_code ??
+        patient.trangThaiHomNay ??
+        patient.TrangThaiHomNay ??
+        patient.trang_thai_hom_nay ??
+        patient.statusCode ??
+        null;
+
+      // If we don't have a code but have a human label (e.g., "Chờ tiếp nhận"),
+      // try reverse-lookup into TODAY_STATUS_MAP to recover the canonical code.
+      if (!statusCode && patient.status) {
+        try {
+          const rev = Object.entries(TODAY_STATUS_MAP).reduce((acc, [k, v]) => {
+            acc[String(v || "").toLowerCase()] = k;
+            return acc;
+          }, {});
+          const low = String(patient.status || "").toLowerCase();
+          if (rev[low]) statusCode = rev[low];
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      if (statusCode) {
+        setForm((s) => ({ ...(s || {}), status: s?.status || statusCode }));
+      }
+      // Ensure accountStatus (select) uses code if available
+      const acct = patient.accountStatus ?? patient.TrangThaiTaiKhoan ?? patient.trangThaiTaiKhoan ?? null;
+      if (acct) {
+        setForm((s) => ({ ...(s || {}), accountStatus: s?.accountStatus || acct }));
+      }
+    }
     // Normalize NgaySinh -> input type=date expects yyyy-MM-dd
     if (patient) {
       const rawDob = patient.NgaySinh ?? patient.ngaySinh ?? patient.dob ?? null;
@@ -575,6 +628,18 @@ const transactions = useMemo(() => {
       address: src.address,
     };
   
+    // Client-side required checks for create mode: ensure dob, phone, email present
+    if (mode === "add") {
+      const missing = [];
+      if (!src.dob && !src.NgaySinh && !src.ngaySinh) missing.push("Ngày sinh");
+      if (!src.phone && !src.DienThoai && !src.dienThoai) missing.push("SĐT");
+      if (!src.email && !src.Email) missing.push("Email");
+      if (missing.length) {
+        toast.error(`Vui lòng nhập ${missing.join(", ")} khi tạo bệnh nhân.`);
+        return;
+      }
+    }
+
     try {
       const result = await onSave?.(payload, mode);
       // Gọi callback onSaved sau khi lưu thành công
@@ -582,7 +647,11 @@ const transactions = useMemo(() => {
         onSaved?.(result);
       }
     } catch (err) {
-      // Error đã được xử lý ở Patients.jsx, chỉ cần throw lại
+      // Error đã được xử lý in parent (if provided) — rethrow so parent can show toast
+      // If there's no parent handler, show local toast
+      if (!onSave) {
+        toast.error(err?.message || "Lưu bệnh nhân thất bại.");
+      }
       throw err;
     }
   }
@@ -652,6 +721,8 @@ const transactions = useMemo(() => {
 
   // Hook để tạo phiếu khám lâm sàng
   const createClinicalExamMut = useCreateClinicalExam();
+  const createHistoryVisitMut = useCreateHistoryVisit();
+  const setExamActive = useExamStore((s) => s.setActive);
 
   const waitingByDept = useMemo(() => {
     const map = {};
@@ -857,8 +928,44 @@ const transactions = useMemo(() => {
     // Hóa đơn sẽ được tạo tự động bởi BE khi tạo phiếu khám
     // Hàng đợi sẽ được tạo tự động bởi BE khi tạo phiếu khám
     // Không cần gọi enqueueWalkin nữa
-    
+
+    // Tạo lịch sử lượt khám (history.visit) để hiện trong History và thống kê
+    try {
+      await createHistoryVisitMut.mutateAsync({
+        MaBenhNhan: pid,
+        MaPhieuKhamLs: maPhieuKham,
+        MaKhoa: maKhoa,
+        MaPhong: maPhong,
+        MaBacSi: maBacSi,
+        LoaiLuot: isServiceIntake ? "service" : "clinic",
+        GhiChu: examNote,
+      });
+    } catch (err) {
+      console.warn("Không thể tạo lịch sử lượt khám:", err);
+    }
+
     onMutatePatient?.(pid, { status: STATUSES.WAIT_EXAM });
+
+    // Lấy chi tiết phiếu khám để prefill trang Khám nếu có
+    try {
+      const clinicalDetail = await getClinicalExam(maPhieuKham);
+      if (clinicalDetail) {
+        // Set active patient/exam in exam store (dùng để prefill)
+        try {
+          setExamActive({ ...form, clinical: clinicalDetail });
+        } catch (e) {
+          console.warn("setExamActive failed:", e);
+        }
+        // Emit event để trang khám có thể lắng nghe và prefill
+        window.dispatchEvent(
+          new CustomEvent("app:exam-prefill", {
+            detail: { clinical: clinicalDetail, patient: { ...form } },
+          })
+        );
+      }
+    } catch (err) {
+      console.warn("Không thể lấy chi tiết phiếu khám:", err);
+    }
 
     window.dispatchEvent(
       new CustomEvent("app:navigate", {
@@ -1100,15 +1207,30 @@ const transactions = useMemo(() => {
 
     onClose?.();
 
-    window.dispatchEvent(
-      new CustomEvent("patient:createAppointmentFromView", {
-        detail: {
-          patientId: pid,
-          name,
-          patient: patient || form,
-        },
-      })
-    );
+    try {
+      const setApptPrefill = useUIStore.getState().setApptPrefill;
+      const flashApptCreate = useUIStore.getState().flashApptCreate;
+
+      if (setApptPrefill) {
+        setApptPrefill({
+          patient: name,
+          code: pid,
+          phone:
+            patient?.DienThoai || patient?.dienThoai || patient?.phone || "",
+          type: "follow_up",
+          lastVisit: { patientName: name, patientCode: pid },
+        });
+      }
+      if (flashApptCreate) flashApptCreate();
+    } catch (err) {
+      // ignore
+    }
+
+    try {
+      navigate("/appointments");
+    } catch (err) {
+      // ignore
+    }
   }
 
   // ================== RENDER ==================

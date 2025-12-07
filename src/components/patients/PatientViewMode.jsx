@@ -3,6 +3,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import Chip from "../ui/Chip.jsx"; // từ /patients -> /ui
 import { ANIMATION_CONFIG, StatusPill } from "./Shared.jsx";
+import { mapTodayStatusLabel, mapGenderLabel, mapVisitTypeLabel } from "../../api/patients";
 
 export default function PatientViewMode({
   patient,
@@ -20,6 +21,7 @@ export default function PatientViewMode({
     "";
 
   const name =
+    patient?.nameFormatted ||
     patient?.HoTen ||
     patient?.hoTen ||
     patient?.name ||
@@ -38,9 +40,8 @@ export default function PatientViewMode({
   }
 
   const gender =
-    patient?.GioiTinh ||
-    patient?.gioiTinh ||
     patient?.gender ||
+    mapGenderLabel(patient?.GioiTinh || patient?.gioiTinh || patient?.gender) ||
     "—";
 
   const phone =
@@ -62,9 +63,8 @@ export default function PatientViewMode({
 
   // Trạng thái trong ngày (BE: TrangThaiHomNay)
   const todayStatus =
-    patient?.TrangThaiHomNay ||
-    patient?.trangThaiHomNay ||
-    patient?.status ||
+    patient?.statusLabel ||
+    mapTodayStatusLabel(patient?.TrangThaiHomNay || patient?.trangThaiHomNay || patient?.status) ||
     "";
 
   // BMI nếu sau này có chiều cao / cân nặng
@@ -182,19 +182,13 @@ export default function PatientViewMode({
           <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1 scrollbar-none">
             {safeVisits.length ? (
               safeVisits.map((v, i) => {
-                // Ưu tiên field đã normalize ở FE; fallback PascalCase nếu BE trả thô
-                const dateText =
-                  v.date || v.Date || v.ngay || v.Ngay || "";
-                const deptText =
-                  v.dept || v.Dept || v.khoa || v.Khoa || "";
-                const doctorText =
-                  v.doctor || v.Doctor || v.bacSi || v.BacSi || "";
-                const noteText =
-                  v.note || v.Note || v.ghiChu || v.GhiChu || "";
-                const typeText =
-                  v.type || v.Type || v.loai || v.Loai || "—";
-                const byText =
-                  v.by || v.By || v.nguoiLap || v.NguoiLap || "—";
+                // Prefer normalized display fields from FE; fallback to BE shapes
+                const dateText = v.dateLabel || v.date || v.Date || v.ngay || v.Ngay || "";
+                const deptText = v.dept || v.Dept || v.khoa || v.Khoa || "";
+                const doctorText = v.doctor || v.Doctor || v.bacSi || v.BacSi || "";
+                const noteText = v.note || v.Note || v.ghiChu || v.GhiChu || "";
+                const typeText = v.typeLabel || mapVisitTypeLabel(v.type || v.Type) || "—";
+                const byText = v.by || v.By || v.nguoiLap || v.NguoiLap || "—";
 
                 return (
                   <motion.div
@@ -274,8 +268,7 @@ export default function PatientViewMode({
                   t.item || t.Item || t.noiDung || t.NoiDung || "";
                 const amountVal =
                   t.amount || t.Amount || t.soTien || t.SoTien || 0;
-                const statusText =
-                  t.status || t.Status || t.trangThai || t.TrangThai || "";
+                const statusText = t.statusLabel || t.status || t.Status || t.trangThai || t.TrangThai || "";
 
                 return (
                   <motion.div

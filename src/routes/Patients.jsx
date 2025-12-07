@@ -191,6 +191,8 @@ export default function Patients() {
   const { mutateAsync: updatePatient } = useUpdatePatient();
   const { mutateAsync: updatePatientStatus } = useUpdatePatientStatus();
   const qc = useQueryClient();
+  // Map to suppress duplicate success toasts for the same patient
+  const suppressedStatusToast = React.useRef(new Map());
 
 
   // === Auto clear highlight sau 5s
@@ -683,7 +685,7 @@ export default function Patients() {
                          if (modal.mode === "add") {
                            // createPatient (mutateAsync) trả về entity đã lưu
                            const result = await createPatient(data);
-                           toast.success("Đã tạo bệnh nhân mới thành công.");
+                          toast.success("Đã tạo bệnh nhân mới thành công.");
                            return result;
                          }
                          // update
@@ -691,7 +693,12 @@ export default function Patients() {
                            id: data?.id || data?.pid,
                            patch: data,
                          });
-                         toast.success("Đã cập nhật thông tin bệnh nhân thành công.");
+                        // Show update toast and mark pid to suppress an immediate status-toast
+                        const pidForToast = result?.id || result?.pid || result?.MaBenhNhan || result?.maBenhNhan;
+                        if (pidForToast) {
+                          suppressedStatusToast.current.set(pidForToast, Date.now());
+                        }
+                        toast.success("Đã cập nhật thông tin bệnh nhân thành công.");
                          return result;
                        } catch (err) {
                          const msg =
@@ -735,7 +742,15 @@ export default function Patients() {
                           id: pid,
                           ...payload,
                         });
-                        toast.success("Đã cập nhật trạng thái bệnh nhân thành công.");
+                        // Avoid duplicate toast if an info-update just occurred for the same pid
+                        const ts = suppressedStatusToast.current.get(pid);
+                        const now = Date.now();
+                        if (ts && now - ts < 3000) {
+                          // suppress this status-toast and remove the marker
+                          suppressedStatusToast.current.delete(pid);
+                        } else {
+                          toast.success("Đã cập nhật trạng thái bệnh nhân thành công.");
+                        }
                       } catch (err) {
                         const msg =
                           err?.response?.data?.message ||

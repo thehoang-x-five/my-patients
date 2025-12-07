@@ -22,6 +22,7 @@ export default function Chip({
     red: "bg-red-50 ring-red-200",
     rose: "bg-rose-50 ring-rose-200",
     indigo: "bg-indigo-50 ring-indigo-200", // thêm indigo
+    cyan: "bg-cyan-50 ring-cyan-200",
   };
   
   const dotMap = {

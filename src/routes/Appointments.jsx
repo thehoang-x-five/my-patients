@@ -160,6 +160,27 @@ export default function Appointments() {
   const ackFlashApptCreate = useUIStore((s) => s.ackFlashApptCreate);
   const clearApptPrefill = useUIStore((s) => s.clearApptPrefill);
 
+  // When the Create Drawer is opened as a result of a patient->appointments flow
+  // (flashApptCreateAt set) we want the drawer to receive the prefill once,
+  // and then clear the prefill so subsequent opens don't auto-fill or highlight.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    if (!apptPrefill) return;
+    if (!flashApptCreateAt) return;
+
+    // Allow CreateDrawer to read the prop this render, then clear store shortly after
+    const t = setTimeout(() => {
+      try {
+        clearApptPrefill();
+      } catch {}
+      try {
+        ackFlashApptCreate();
+      } catch {}
+    }, 120);
+
+    return () => clearTimeout(t);
+  }, [drawerOpen, apptPrefill, flashApptCreateAt, clearApptPrefill, ackFlashApptCreate]);
+
   const clearIfAnyPrefill = () => {
     if (useUIStore.getState().apptPrefill) clearApptPrefill();
   };
