@@ -330,45 +330,71 @@ export default function PatientModal({
     }
     // If the user already started editing, don't overwrite their changes
     if (isDirty) return;
-    setForm(patient || {});
+    
+    // Sử dụng patientForView thay vì patient vì nó có dữ liệu đầy đủ từ API
+    const sourcePatient = patientForView || patient;
+    setForm(sourcePatient || {});
+    
     // Ensure the status field holds the raw status code (used by the select)
-    if (patient) {
+    if (sourcePatient) {
       // Prefer raw canonical status code properties if available.
+      // Lưu ý: trang_thai_hom_nay là label, không phải code!
       let statusCode =
-        patient.trang_thai_hom_nay_code ??
-        patient.trangThaiHomNay ??
-        patient.TrangThaiHomNay ??
-        patient.trang_thai_hom_nay ??
-        patient.statusCode ??
+        sourcePatient.trang_thai_hom_nay_code ??
+        sourcePatient.trangThaiHomNay ??
+        sourcePatient.TrangThaiHomNay ??
+        sourcePatient.statusCode ??
         null;
+
+      // Nếu vẫn chưa có code, thử lấy từ _raw (dữ liệu gốc từ API)
+      if (!statusCode && sourcePatient._raw) {
+        statusCode =
+          sourcePatient._raw.TrangThaiHomNay ??
+          sourcePatient._raw.trangThaiHomNay ??
+          null;
+      }
 
       // If we don't have a code but have a human label (e.g., "Chờ tiếp nhận"),
       // try reverse-lookup into TODAY_STATUS_MAP to recover the canonical code.
-      if (!statusCode && patient.status) {
+      if (!statusCode && sourcePatient.status) {
         try {
           const rev = Object.entries(TODAY_STATUS_MAP).reduce((acc, [k, v]) => {
             acc[String(v || "").toLowerCase()] = k;
             return acc;
           }, {});
-          const low = String(patient.status || "").toLowerCase();
+          const low = String(sourcePatient.status || "").toLowerCase();
           if (rev[low]) statusCode = rev[low];
-        } catch (err) {
+        } catch {
+          // ignore
+        }
+      }
+
+      // Nếu vẫn chưa có, thử reverse lookup từ trang_thai_hom_nay (label)
+      if (!statusCode && sourcePatient.trang_thai_hom_nay) {
+        try {
+          const rev = Object.entries(TODAY_STATUS_MAP).reduce((acc, [k, v]) => {
+            acc[String(v || "").toLowerCase()] = k;
+            return acc;
+          }, {});
+          const low = String(sourcePatient.trang_thai_hom_nay || "").toLowerCase();
+          if (rev[low]) statusCode = rev[low];
+        } catch {
           // ignore
         }
       }
 
       if (statusCode) {
-        setForm((s) => ({ ...(s || {}), status: s?.status || statusCode }));
+        setForm((s) => ({ ...(s || {}), status: statusCode }));
       }
       // Ensure accountStatus (select) uses code if available
-      const acct = patient.accountStatus ?? patient.TrangThaiTaiKhoan ?? patient.trangThaiTaiKhoan ?? null;
+      const acct = sourcePatient.accountStatus ?? sourcePatient.TrangThaiTaiKhoan ?? sourcePatient.trangThaiTaiKhoan ?? null;
       if (acct) {
-        setForm((s) => ({ ...(s || {}), accountStatus: s?.accountStatus || acct }));
+        setForm((s) => ({ ...(s || {}), accountStatus: acct }));
       }
     }
     // Normalize NgaySinh -> input type=date expects yyyy-MM-dd
-    if (patient) {
-      const rawDob = patient.NgaySinh ?? patient.ngaySinh ?? patient.dob ?? null;
+    if (sourcePatient) {
+      const rawDob = sourcePatient.NgaySinh ?? sourcePatient.ngaySinh ?? sourcePatient.dob ?? null;
       if (rawDob) {
         try {
           const d = new Date(rawDob);
@@ -376,7 +402,9 @@ export default function PatientModal({
             const iso = d.toISOString().slice(0, 10);
             setForm((s) => ({ ...(s || {}), dob: iso }));
           }
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
     }
     // Ensure default values for add mode: account = hoat_dong, status = cho_tiep_nhan
@@ -391,8 +419,8 @@ export default function PatientModal({
     setTplId(null);
     setExam({ type: "", dept: "", room: "", symptoms: "", note: "" });
     const preExtras = EXTRA_FIELDS.filter(
-      (f) => patient?.[f.key] && String(patient[f.key]).trim().length
-    ).map((f) => ({ key: f.key, value: String(patient[f.key]) }));
+      (f) => sourcePatient?.[f.key] && String(sourcePatient[f.key]).trim().length
+    ).map((f) => ({ key: f.key, value: String(sourcePatient[f.key]) }));
     setExamExtras(preExtras);
 
     setBooking({
@@ -423,10 +451,10 @@ export default function PatientModal({
       );
     }
 
-    if (patient && mode === "edit") {
+    if (sourcePatient && mode === "edit") {
       const pre = EXTRA_FIELDS.filter(
-        (f) => patient[f.key] && String(patient[f.key]).trim().length
-      ).map((f) => ({ key: f.key, value: String(patient[f.key]) }));
+        (f) => sourcePatient[f.key] && String(sourcePatient[f.key]).trim().length
+      ).map((f) => ({ key: f.key, value: String(sourcePatient[f.key]) }));
       setExtras(pre);
     } else {
       setExtras([]);
@@ -434,7 +462,7 @@ export default function PatientModal({
 
     const t = setTimeout(() => firstRef.current?.focus(), 60);
     return () => clearTimeout(t);
-  }, [open, patient, mode, today]);
+  }, [open, patient, patientForView, mode, today, isDirty]);
 
 
 
