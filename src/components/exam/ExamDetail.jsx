@@ -3,8 +3,10 @@ import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import RxPickerModal from "./RxPickerModal.jsx";
 import {
+  useExamServices,
   useCreateExamOrder,
   useCreateDiagnosis,
+  useClinicalExam,
 } from "../../api/examination.js";
 
 const MAX_NOTE_LEN = 200;
@@ -48,21 +50,18 @@ export default function ExamDetail({
   const [clsResult, setClsResult] = useState("");
   const [clsFiles, setClsFiles] = useState([]);
 
-  // ----- PHÂN BIỆT LS / CLS -----
-  // Sử dụng field names từ API response (PascalCase hoặc camelCase alias)
-  const queueType =
-    patient?.LoaiHangDoi || patient?.loaiHangDoi || patient?.queueType || patient?.visitType;
-  const isCLS = queueType === "can_lam_sang" || queueType === "cls";
-
-  // Extract data from patient object instead of API calls
-  const examServices = patient.servicesOverview || [];
+  const { data: examServices = [] } = useExamServices();
   const svcMap = useMemo(() => {
     const m = new Map();
     examServices.forEach((s) => m.set(s.id, s));
     return m;
   }, [examServices]);
 
-  const clinicalExamData = isCLS ? patient.PhieuKhamClsFull : patient.PhieuKhamLsFull;
+  // Lấy maPhieuKham từ patient để gọi API chi tiết phiếu khám
+  const maPhieuKham = patient?.MaPhieuKham || patient?.maPhieuKham || patient?.maPhieuKham || null;
+  const { data: clinicalExamData } = useClinicalExam(maPhieuKham, {
+    enabled: !!maPhieuKham, // Chỉ gọi API khi có maPhieuKham
+  });
 
   // Prefill nếu có serviceOrder.items (LS)
   useEffect(() => {
@@ -246,6 +245,12 @@ export default function ExamDetail({
     hour: "2-digit",
     minute: "2-digit",
   });
+
+  // ----- PHÂN BIỆT LS / CLS -----
+  // Sử dụng field names từ API response (PascalCase hoặc camelCase alias)
+  const queueType =
+    patient?.LoaiHangDoi || patient?.loaiHangDoi || patient?.queueType || patient?.visitType;
+  const isCLS = queueType === "can_lam_sang" || queueType === "cls";
 
   // Loại lượt (Khám mới / Tái khám) chỉ hiển thị trong LS
   const visitKind = patient?.LoaiLuot || patient?.loaiLuot || patient?.loai_luot || patient?.visitKind; // kham_moi | tai_kham
