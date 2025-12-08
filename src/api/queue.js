@@ -6,6 +6,94 @@ import { http } from "./http";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ensureStarted, on } from "./realtime";
 
+// Lưu mã hàng đợi đã chuyển đi CLS, chỉ hiển thị lại khi nguồn = service_return
+const RETURN_QUEUE_STORAGE_KEY = "queue-awaiting-service-return";
+
+function loadReturnQueueIds() {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(RETURN_QUEUE_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return new Set(parsed.map((x) => String(x)));
+    }
+  } catch (err) {
+    console.warn("Không thể đọc danh sách mã hàng đợi chờ trả kết quả:", err);
+  }
+  return new Set();
+}
+
+function persistReturnQueueIds(set) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      RETURN_QUEUE_STORAGE_KEY,
+      JSON.stringify(Array.from(set))
+    );
+  } catch (err) {
+    console.warn("Không thể lưu danh sách mã hàng đợi chờ trả kết quả:", err);
+  }
+}
+
+// Ghi nhận một mã hàng đợi đã được chuyển đi CLS
+export function rememberQueueAwaitingReturn(maHangDoi) {
+  if (!maHangDoi) return;
+  const ids = loadReturnQueueIds();
+  const key = String(maHangDoi);
+  if (!ids.has(key)) {
+    ids.add(key);
+    persistReturnQueueIds(ids);
+  }
+}
+
+// Ẩn các mã hàng đợi đã chuyển CLS cho tới khi nguồn = service_return
+function filterReturnQueues(items = []) {
+  const ids = loadReturnQueueIds();
+  if (!ids.size) return { filtered: items, changed: false };
+
+  let changed = false;
+  const filtered = [];
+
+  for (const item of items) {
+    const id =
+      item?.MaHangDoi ??
+      item?.maHangDoi ??
+      item?.queueId ??
+      item?.id ??
+      null;
+
+    if (!id) {
+      filtered.push(item);
+      continue;
+    }
+
+    const key = String(id);
+    const source = item?.Nguon ?? item?.nguon ?? item?.source ?? null;
+
+    if (!ids.has(key)) {
+      filtered.push(item);
+      continue;
+    }
+
+    // Nếu quay lại với nguồn service_return => hiển thị và xóa khỏi danh sách ẩn
+    if (source === "service_return") {
+      ids.delete(key);
+      filtered.push(item);
+      changed = true;
+    } else {
+      // vẫn ẩn, giữ trong localStorage
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    persistReturnQueueIds(ids);
+  }
+
+  return { filtered, changed };
+}
+
 /* =========================================================
  * 1. CONSTANTS (TYPE / SOURCE / STATUS)
  * =======================================================*/
@@ -272,10 +360,22 @@ export async function search(filter = {}) {
   const res = await http.post(`/queue/search`, body);
   const data = res?.data ?? res;
   const items = data?.items ?? data?.Items ?? [];
- 
+
+  const normalizedItems = Array.isArray(items)
+    ? items.map((x) => normalizeQueueItem(x))
+    : [];
+
+  // Ẩn các mã hàng đợi đã chuyển đi CLS cho tới khi quay lại (nguồn service_return)
+  const { filtered } = filterReturnQueues(normalizedItems);
+
   return {
-    items: Array.isArray(items) ? items.map((x) => normalizeQueueItem(x)) : [],
-    totalItems: data?.TotalItems ?? data?.totalItems ?? data?.total ?? null,
+    items: filtered,
+    totalItems:
+      data?.TotalItems ??
+      data?.totalItems ??
+      data?.total ??
+      filtered.length ??
+      null,
     page: data?.Page ?? data?.page ?? body.Page ?? 1,
     pageSize: data?.PageSize ?? data?.pageSize ?? body.PageSize ?? 50,
   };

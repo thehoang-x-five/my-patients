@@ -603,19 +603,20 @@ export async function searchClinicalRaw(params = {}) {
 }
 
 // Xuất chẩn đoán cuối cùng (bao gồm dx/rx/CLS result...) từ màn LS/CLS
-export function useCreateDiagnosis() {
+export function useCreateDiagnosis(options = {}) {
   const qc = useQueryClient();
   return useMutation({
-    // payload hiện tại từ Examination: { pid, dx, rx, services, files, result, note }
-    mutationFn: async (payload) => {
-      // TODO: Map sang FinalDiagnosisCreateRequest (MaPhieuKham, ChanDoanChinh, ...).
-      // Tạm thời forward payload để bạn điều chỉnh dần cho khớp API mới.
-      return upsertFinalDiagnosis(payload);
+    mutationFn: async (payload) => upsertFinalDiagnosis(payload),
+    onSuccess: (data, vars, ctx) => {
+      if (!options.skipInvalidate) {
+        qc.invalidateQueries({ queryKey: ["queue"] });
+        qc.invalidateQueries({ queryKey: ["visits"] });
+        qc.invalidateQueries({ queryKey: ["patients"] });
+      }
+      if (typeof options.onSuccess === "function") {
+        options.onSuccess(data, vars, ctx);
+      }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["queue"] });
-      qc.invalidateQueries({ queryKey: ["visits"] });
-      qc.invalidateQueries({ queryKey: ["patients"] });
-    },
+    ...options,
   });
 }

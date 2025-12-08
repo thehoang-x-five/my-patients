@@ -9,7 +9,8 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
   const [rows, setRows] = useState([]); // [{code,name,unit,price,dose,qty,usage}]
   const inputRef = useRef(null);
 
-  const { data: stock = [] } = useStock();
+  // Chỉ gọi /api/pharmacy/stock khi modal mở
+  const { data: stock = [], isFetching } = useStock({ enabled: !!open });
 
   useEffect(() => {
     if (open) {
@@ -95,8 +96,11 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
                   </label>
                 </div>
 
-                <div className="max-h-80 overflow-y-auto p-2">
-                  {filtered.map((d, i) => {
+                <div className="max-h-80 overflow-y-auto p-2 scrollbar-none">
+                  {isFetching && (
+                    <div className="p-3 text-sm text-slate-500">Đang tải kho thuốc...</div>
+                  )}
+                  {!isFetching && filtered.map((d, i) => {
                     const picked = alreadyPicked(d.code);
                     return (
                       <motion.button
@@ -134,7 +138,7 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
                 <div className="p-3 border-b border-slate-200 font-semibold flex items-center justify-between">
                   <span>Thuốc đã chọn</span>
                 </div>
-                <div className="max-h-80 overflow-y-auto">
+                <div className="max-h-80 overflow-y-auto scrollbar-none">
                   <table className="min-w-full text-sm">
                     <thead className="text-left text-slate-700 sticky top-0 bg-white shadow-[inset_0_-1px_0_rgba(15,23,42,.06)]">
                       <tr><th className="px-3 py-2">Thuốc</th><th className="px-3 py-2">Liều</th><th className="px-3 py-2 w-24">SL</th><th className="px-3 py-2 w-10">Xóa</th></tr>

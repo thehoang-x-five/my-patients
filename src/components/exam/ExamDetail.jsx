@@ -6,7 +6,6 @@ import {
   useExamServices,
   useCreateExamOrder,
   useCreateDiagnosis,
-  useClinicalExam,
 } from "../../api/examination.js";
 
 const MAX_NOTE_LEN = 200;
@@ -58,9 +57,7 @@ export default function ExamDetail({
  "";
 
 // /api/master-data/services/overview?MaPhong=...
-const { data: rawExamServices = [] } = useExamServices({
- maPhong: roomId,
-});
+const { data: rawExamServices = [] } = useExamServices();
 
 // Chuẩn hóa dữ liệu dịch vụ về { id, name, type, _raw }
 const examServices = useMemo(
@@ -86,10 +83,15 @@ const svcMap = useMemo(() => {
 }, [examServices]);
 
   // Lấy maPhieuKham từ patient để gọi API chi tiết phiếu khám
-  const maPhieuKham = patient?.MaPhieuKham || patient?.maPhieuKham || patient?.maPhieuKham || null;
-  const { data: clinicalExamData } = useClinicalExam(maPhieuKham, {
-    enabled: !!maPhieuKham, // Chỉ gọi API khi có maPhieuKham
-  });
+  const maPhieuKham =
+    patient?.MaPhieuKham ||
+    patient?.maPhieuKham ||
+    patient?.maPhieuKham ||
+    null;
+
+  // Ưu tiên dùng dữ liệu kèm trong queue (không gọi API chi tiết phiếu)
+  const clinicalExamData =
+    patient?.PhieuKhamLsFull || patient?.PhieuKhamLs || {};
 
   // Prefill nếu có serviceOrder.items (LS)
   useEffect(() => {
@@ -172,6 +174,9 @@ const svcMap = useMemo(() => {
         name: r.name,
         dose: (r.dose ?? "").trim(),
         qty: Math.max(1, Number.parseInt(r.qty ?? 0, 10) || 0),
+        price: Number(r.price || 0) || 0,
+        unit: r.unit || "",
+        usage: r.usage || "",
       }))
       .filter(
         (r) =>
@@ -196,29 +201,113 @@ const svcMap = useMemo(() => {
     };
   }
 
+
+  // Helper: lay ma nguoi lap de gui kem payload tao phieu CLS
+  function getCurrentUserMaNguoiLap() {
+    if (typeof window === "undefined") return null;
+
+    try {
+      const authData = localStorage.getItem("his-auth");
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        const user = parsed?.user;
+        if (user) {
+          return (
+            user.MaNhanSu ||
+            user.maNhanSu ||
+            user.MaNguoiLap ||
+            user.maNguoiLap ||
+            user.id ||
+            user.userId ||
+            null
+          );
+        }
+      }
+      if (window.APP_USER) {
+        const u = window.APP_USER;
+        return (
+          u.MaNhanSu ||
+          u.maNhanSu ||
+          u.MaNguoiLap ||
+          u.maNguoiLap ||
+          u.id ||
+          u.userId ||
+          null
+        );
+      }
+    } catch (err) {
+      console.warn("Khong the lay MaNguoiLap:", err);
+    }
+    return null;
+  }
+
+  function buildClsOrderPayload() {
+    const orderId =
+      patient?.MaPhieuKhamCls ??
+      patient?.maPhieuKhamCls ??
+      patient?.PhieuKhamCls?.MaPhieuKhamCls ??
+      patient?.phieuKhamCls?.MaPhieuKhamCls ??
+      `cls-${Date.now()}`;
+
+    const listItemDV = rows
+      .filter((r) => (r.svcId || "").trim())
+      .map((r) => ({
+        MaPhieuKhamCls: orderId,
+        MaDichVu: r.svcId,
+        GhiChu: r.note || "",
+        TrangThai: "chua_co_ket_qua",
+      }));
+
+    const maNguoiLap =
+      patient?.MaNguoiLap ??
+      patient?.maNguoiLap ??
+      getCurrentUserMaNguoiLap() ??
+      patient?.MaBacSiKham ??
+      patient?.maBacSiKham ??
+      "system";
+
+    const maPhieuKhamLs =
+      patient?.MaPhieuKham ??
+      patient?.maPhieuKham ??
+      patient?.MaPhieuKhamLs ??
+      patient?.maPhieuKhamLs ??
+      patient?.PhieuKhamLs?.MaPhieuKham ??
+      patient?.phieuKhamLs?.MaPhieuKham ??
+      maPhieuKham ??
+      null;
+
+    return {
+      MaBenhNhan:
+        patient?.MaBenhNhan ??
+        patient?.maBenhNhan ??
+        patient?.pid ??
+        patient?.id ??
+        null,
+      MaPhieuKhamLs: maPhieuKhamLs,
+      MaPhieuKhamCls: orderId,
+      MaNguoiLap: maNguoiLap,
+      AutoPublishEnabled: true,
+      GhiChu: listItemDV.map((i) => i.GhiChu).filter(Boolean).join("; "),
+      TrangThai: "cho_thuc_hien",
+      ListItemDV: listItemDV,
+    };
+  }
+
   // Mutations (fallback nếu không có callback từ parent)
   const orderMut = useCreateExamOrder();
   const dxMut = useCreateDiagnosis();
 
   async function handleExportOrder() {
     if (!hasOrder) return;
-    const payload = buildPayloadCommon();
-    const pid = patient?.pid || patient?.id;
+    const payload = buildClsOrderPayload();
+    if (!payload?.ListItemDV?.length) return;
 
     if (onExportOrder) {
       await onExportOrder(patient, payload);
       return;
     }
 
-    await orderMut.mutateAsync({
-      pid,
-      services: payload.orderRows.map((r) => ({ id: r.id, note: r.note })),
-      note: payload.orderRows
-        .map((r) => r.note)
-        .filter(Boolean)
-        .join("; "),
-      fromDoctor: patient?.doctor || "Bác sĩ phụ trách",
-    });
+    await orderMut.mutateAsync(payload);
   }
 
   async function handleExportDiagnosisLS() {

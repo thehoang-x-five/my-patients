@@ -10,18 +10,43 @@ import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
 import {
-    useQueueToday,
-    useFinishRemove,
-    subscribeQueue,
-    getQueueById,
-  } from "../api/queue.js";
-  
-  import {
-    useCreateExamOrder,
-    useCreateDiagnosis,
-  } from "../api/examination.js";
-  import { useCreateHistoryVisit } from "../api/history.js";
-  import { useQueryClient } from "@tanstack/react-query";
+  useQueueToday,
+  useFinishRemove,
+  subscribeQueue,
+  getQueueById,
+  rememberQueueAwaitingReturn,
+} from "../api/queue.js";
+
+import {
+  useCreateExamOrder,
+  useCreateDiagnosis,
+} from "../api/examination.js";
+import { useCreateHistoryVisit } from "../api/history.js";
+import { useQueryClient } from "@tanstack/react-query";
+
+const CLS_CREATED_KEY = "cls-orders-created";
+
+function loadClsCreatedSet() {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(CLS_CREATED_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) return new Set(arr.map((x) => String(x)));
+  } catch (err) {
+    console.warn("KhA'ng th ¯Ÿ load danh sA­ch CLS dA3 tA1o:", err);
+  }
+  return new Set();
+}
+
+function persistClsCreatedSet(set) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CLS_CREATED_KEY, JSON.stringify(Array.from(set)));
+  } catch (err) {
+    console.warn("KhA'ng th ¯Ÿ l­u danh sA­ch CLS dA3 tA1o:", err);
+  }
+}
 
 export default function Examination() {
   useViewportVH();
@@ -34,9 +59,20 @@ export default function Examination() {
  
   const patients = Array.isArray(queueData?.items) ? queueData.items : [];
   
+  // Chuẩn hóa chữ cái đầu cho nhãn hiển thị (ví dụ: "nam" -> "Nam")
+  function titleCase(val) {
+    if (typeof val !== "string") return val;
+    if (!val.trim()) return val;
+    const lower = val.trim().toLowerCase();
+    if (lower === "nu" || lower === "nữ") return "Nữ";
+    if (lower === "nam") return "Nam";
+    if (lower === "khac" || lower === "khác") return "Khác";
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  }
+  
     const finishMut = useFinishRemove();
     const orderMut = useCreateExamOrder();
-    const dxMut = useCreateDiagnosis();
+    const dxMut = useCreateDiagnosis({ skipInvalidate: true });
   const createVisitMut = useCreateHistoryVisit();
 
   const [active, setActive] = useState(null);
@@ -151,6 +187,8 @@ export default function Examination() {
       return s;
     });
 
+    let mappedPatient = null;
+    let createdVisitMaLuot = null;
     try {
       // 1) Lấy chi tiết hàng đợi
       const queueItem = await getQueueById(key);
@@ -174,7 +212,7 @@ export default function Examination() {
     raw.MaBacSi ?? // fallback
     null;
 
-        await createVisitMut.mutateAsync({
+        const visitRes = await createVisitMut.mutateAsync({
           MaHangDoi: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
           MaNhanSuThucHien:maBacSi ,
           MaYTaHoTro: null,
@@ -201,6 +239,13 @@ export default function Examination() {
             MaPhong: maPhong,
             MaBacSi: maBacSi,
           });
+        createdVisitMaLuot =
+          visitRes?.MaLuotKham ??
+          visitRes?.maLuotKham ??
+          visitRes?.MaLuot ??
+          visitRes?.maLuot ??
+          visitRes?.id ??
+          null;
       } catch (err) {
         console.error("[Examination] createHistoryVisit error:", err);
       }
@@ -231,8 +276,8 @@ export default function Examination() {
         }
       }
 
-      const mappedPatient = {
-        ...p,
+        mappedPatient = {
+          ...p,
         // id / queueId dùng chung MaHangDoi
         queueId: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
         id: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
@@ -249,11 +294,12 @@ export default function Examination() {
           raw.TenBenhNhan ??
           p?.name ??
           "",
-        gender:
+        gender: titleCase(
           phieuLsFull?.GioiTinh ??
-          phieuClsFull?.GioiTinh ??
-          p?.gender ??
-          "",
+            phieuClsFull?.GioiTinh ??
+            p?.gender ??
+            ""
+        ),
         age,
 
         // khoa / phòng / bác sĩ
@@ -349,12 +395,55 @@ export default function Examination() {
                 ),
               }
             : p?.serviceOrder,
+
+        // Mã phiếu khám LS (bắt buộc cho tạo CLS)
+        MaPhieuKham:
+          raw.MaPhieuKham ??
+          phieuLsFull?.MaPhieuKham ??
+          p?.MaPhieuKham ??
+          p?.maPhieuKham ??
+          null,
+        maPhieuKham:
+          raw.MaPhieuKham ??
+          phieuLsFull?.MaPhieuKham ??
+          p?.maPhieuKham ??
+          p?.MaPhieuKham ??
+          null,
+        MaPhieuKhamLs:
+          raw.MaPhieuKham ??
+          phieuLsFull?.MaPhieuKham ??
+          p?.MaPhieuKhamLs ??
+          p?.maPhieuKhamLs ??
+          null,
+        MaLuotKham:
+          raw.MaLuotKham ??
+          raw.MaLuot ??
+          phieuLsFull?.MaLuotKham ??
+          phieuClsFull?.MaLuotKham ??
+          p?.MaLuotKham ??
+          p?.maLuotKham ??
+          p?.visitId ??
+          createdVisitMaLuot ??
+          null,
+        MaLuotKham:
+          raw.MaLuotKham ??
+          raw.MaLuot ??
+          phieuLsFull?.MaLuotKham ??
+          phieuClsFull?.MaLuotKham ??
+          p?.MaLuotKham ??
+          p?.maLuotKham ??
+          p?.visitId ??
+          createdVisitMaLuot ??
+          null,
+        visitIdCreated: createdVisitMaLuot ?? p?.visitIdCreated ?? null,
       };
 
       // đẩy vào ExamDetail
       setActive(mappedPatient);
     } catch (err) {
       console.error("[Examination] handleStart error:", err);
+      // giữ lại data đã map được; fallback tối thiểu là p
+      setActive(mappedPatient || p);
     }
   }
 
@@ -364,33 +453,79 @@ export default function Examination() {
   }
 
   // Gọi khi LS xuất phiếu khám (chỉ định CLS)
-  async function handleExportOrder(patient, payload) {
+  async function handleExportOrder(patient, orderPayload) {
     const key = getKey(patient);
     if (!key) return;
 
-    await finishMut.mutateAsync(key);
+    const existingClsId =
+      patient?.MaPhieuKhamCls ||
+      patient?.maPhieuKhamCls ||
+      patient?.PhieuKhamCls?.MaPhieuKhamCls ||
+      patient?.phieuKhamCls?.MaPhieuKhamCls ||
+      null;
+
+    const maPhieuKhamLs =
+      orderPayload?.MaPhieuKhamLs ||
+      patient?.MaPhieuKhamLs ||
+      patient?.maPhieuKhamLs ||
+      patient?.MaPhieuKham ||
+      patient?.maPhieuKham ||
+      null;
+
+    const createdSet = loadClsCreatedSet();
+    if (maPhieuKhamLs && createdSet.has(String(maPhieuKhamLs))) {
+      setActive(null);
+      return;
+    }
+
     setInProgress((prev) => {
       const s = new Set(prev);
       s.delete(key);
       return s;
     });
 
-    const pid = patient?.pid || patient?.id;
+    const payload = {
+      MaBenhNhan:
+        orderPayload?.MaBenhNhan ??
+        patient?.MaBenhNhan ??
+        patient?.pid ??
+        patient?.id ??
+        null,
+      MaPhieuKhamLs: maPhieuKhamLs,
+      ...orderPayload,
+    };
 
-    await orderMut.mutateAsync({
-      pid,
-      services: (payload?.orderRows || []).map((r) => ({
-        id: r.id,
-        note: r.note,
-      })),
-      note: (payload?.orderRows || [])
-        .map((r) => r.note)
-        .filter(Boolean)
-        .join("; "),
-      fromDoctor: patient?.doctor || "Bác sĩ phụ trách",
-    });
+    rememberQueueAwaitingReturn(key);
 
-   
+    // Tránh lỗi duplicate khi CLS đã tồn tại cho cùng MaPhieuKhamLs
+    if (!existingClsId) {
+      try {
+        await orderMut.mutateAsync(payload);
+        if (maPhieuKhamLs) {
+          createdSet.add(String(maPhieuKhamLs));
+          persistClsCreatedSet(createdSet);
+        }
+      } catch (err) {
+        const msg = String(err?.message || err || "");
+        const respData =
+          err?.response?.data &&
+          (typeof err.response.data === "string"
+            ? err.response.data
+            : JSON.stringify(err.response.data));
+
+        const combined = `${msg} ${respData || ""}`;
+        const isDuplicate =
+          combined.includes("Duplicate entry") ||
+          combined.includes("IX_phieu_kham_can_lam_sang_MaPhieuKhamLs") ||
+          combined.includes("MaPhieuKhamLs");
+
+        if (!isDuplicate) throw err;
+        if (maPhieuKhamLs) {
+          createdSet.add(String(maPhieuKhamLs));
+          persistClsCreatedSet(createdSet);
+        }
+      }
+    }
 
     setActive(null);
   }
@@ -399,27 +534,75 @@ export default function Examination() {
   async function handleExportDiagnosis(patient, payload) {
     const key = getKey(patient);
     if (!key) return;
+    const nowIso = new Date().toISOString();
+    const maPhieuKham =
+      patient?.MaPhieuKham ||
+      patient?.maPhieuKham ||
+      patient?.MaPhieuKhamLs ||
+      patient?.maPhieuKhamLs ||
+      null;
+    if (!maPhieuKham) return;
 
-    await finishMut.mutateAsync(key);
+    const donThuoc =
+      (payload?.rxRows || []).map((r) => {
+        const qty = Number.parseInt(String(r.qty || 0), 10) || 0;
+        const price = Number(r.price || 0) || 0;
+        return {
+          MaThuoc: r.code,
+          SoLuong: qty,
+          ChiDinhSuDung: r.dose || "",
+          ThanhTien: price * qty,
+        };
+      }) || [];
+
+    const flags = payload?.dx?.flags || {};
+    const huongXuTriArr = [];
+    if (flags.choVe) huongXuTriArr.push("Cho về");
+    if (flags.choThuocVe) huongXuTriArr.push("Cho thuốc về");
+    if (flags.taiKham) huongXuTriArr.push("Tái khám");
+    const huongXuTri =
+      huongXuTriArr.join("; ") || payload?.dx?.plan || payload?.dx?.advice || "";
+
+    const finalPayload = {
+      MaPhieuKham: maPhieuKham,
+      MaLuotKham:
+        patient?.MaLuotKham ||
+        patient?.maLuotKham ||
+        patient?.MaLuot ||
+        patient?.maLuot ||
+        patient?.visitId ||
+        patient?.visitIdCreated ||
+        null,
+      MaHangDoi:
+        patient?.MaHangDoi ||
+        patient?.maHangDoi ||
+        patient?.queueId ||
+        patient?.id ||
+        null,
+      TrangThaiLuot: "hoan_tat",
+      ThoiGianKetThuc: nowIso,
+      MaDonThuoc: null,
+      MaBacSiKeDon:
+        patient?.MaNguoiLap ||
+        patient?.maNguoiLap ||
+        patient?.MaBacSiKham ||
+        patient?.maBacSiKham ||
+        null,
+      ChanDoanSoBo: payload?.dx?.pre || "",
+      ChanDoanCuoi: payload?.dx?.final || "",
+      NoiDungKham: payload?.dx?.note || "",
+      HuongXuTri: huongXuTri,
+      LoiKhuyen: payload?.dx?.advice || "",
+      PhatDoDieuTri: payload?.dx?.plan || "",
+      DonThuoc: donThuoc,
+    };
+
+    await dxMut.mutateAsync(finalPayload);
     setInProgress((prev) => {
       const s = new Set(prev);
       s.delete(key);
       return s;
     });
-
-    const pid = patient?.pid || patient?.id;
-
-    await dxMut.mutateAsync({
-      pid,
-      dx: payload?.dx || {},
-      rx: payload?.rxRows || [],
-      services:
-        payload?.services || (payload?.orderRows || []).map((r) => r.id),
-        files: payload?.files,
-      result: payload?.result,
-      note: payload?.note,
-    });
-
     setActive(null);
   }
 
