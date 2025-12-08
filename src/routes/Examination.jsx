@@ -10,18 +10,18 @@ import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
 import {
-  useQueueToday,
-  useStartExam,
-  useFinishRemove,
-  subscribeQueue,
-} from "../api/queue.js";
-
-import {
-  useCreateExamOrder,
-  useCreateDiagnosis,
-} from "../api/examination.js";
-import { useCreateHistoryVisit } from "../api/history.js";
-import { useQueryClient } from "@tanstack/react-query";
+    useQueueToday,
+    useFinishRemove,
+    subscribeQueue,
+    getQueueById,
+  } from "../api/queue.js";
+  
+  import {
+    useCreateExamOrder,
+    useCreateDiagnosis,
+  } from "../api/examination.js";
+  import { useCreateHistoryVisit } from "../api/history.js";
+  import { useQueryClient } from "@tanstack/react-query";
 
 export default function Examination() {
   useViewportVH();
@@ -34,10 +34,9 @@ export default function Examination() {
  
   const patients = Array.isArray(queueData?.items) ? queueData.items : [];
   
-  const startMut = useStartExam();
-  const finishMut = useFinishRemove();
-  const orderMut = useCreateExamOrder();
-  const dxMut = useCreateDiagnosis();
+    const finishMut = useFinishRemove();
+    const orderMut = useCreateExamOrder();
+    const dxMut = useCreateDiagnosis();
   const createVisitMut = useCreateHistoryVisit();
 
   const [active, setActive] = useState(null);
@@ -104,7 +103,7 @@ export default function Examination() {
     return arr;
   }, [patients, filter]);
 
-  const getKey = (p) => p?.MaHangDoi ?? p?.maHangDoi ?? p?.id ?? p?.queueId ?? p?.pid;
+ 
 
   // Helper để lấy MaNhanSu từ user hiện tại
   function getCurrentUserMaNhanSu() {
@@ -128,50 +127,237 @@ export default function Examination() {
     return null;
   }
 
+   // Lấy mã hàng đợi ưu tiên MaHangDoi
+   const getKey = (p) =>
+    p?.MaHangDoi ??
+    p?.maHangDoi ??
+    p?.queueId ??
+    p?.id ??
+    p?.pid ??
+    null;
+
+  // Khi bấm "Gọi vào":
+  // 1) GET /api/queue/{maHangDoi}       (getQueueById – queue.js)
+  // 2) POST /api/history/visits         (createHistoryVisit – history.js)
+  // 3) ExamDetail sẽ tự gọi /api/master-data/services/overview
   async function handleStart(p) {
     const key = getKey(p);
     if (!key) return;
-    
-    // Lấy thông tin từ queue item
-    const maHangDoi = p.MaHangDoi || p.maHangDoi || key;
-    const maNhanSuThucHien = getCurrentUserMaNhanSu();
-    const loaiHangDoi = p.LoaiHangDoi || p.loaiHangDoi || p.queueType || p.visitType;
-    
-    // Map LoaiHangDoi sang LoaiLuot
-    let loaiLuot = null;
-    if (loaiHangDoi === "can_lam_sang" || loaiHangDoi === "cls") {
-      loaiLuot = "kham_dich_vu";
-    } else {
-      loaiLuot = "kham_moi"; // hoặc có thể lấy từ p.LoaiLuot nếu có
-    }
-    
-    const now = new Date();
-    const thoiGianBatDau = now.toISOString();
-    
-    // Gọi API tạo lượt khám
-    try {
-      await createVisitMut.mutateAsync({
-        MaHangDoi: maHangDoi,
-        MaNhanSuThucHien: maNhanSuThucHien,
-        MaYTaHoTro: null, // Có thể thêm sau nếu cần
-        ThoiGianBatDau: thoiGianBatDau,
-        ThoiGianKetThuc: null, // Sẽ cập nhật khi kết thúc
-        LoaiLuot: loaiLuot,
-        TrangThai: "dang_thuc_hien",
-      });
-    } catch (err) {
-      console.error("Lỗi khi tạo lượt khám:", err);
-      // Vẫn tiếp tục với flow bình thường nếu lỗi
-    }
-    
+
+    // đánh dấu đang khám
     setInProgress((prev) => {
       const s = new Set(prev);
       s.add(key);
       return s;
     });
-    await startMut.mutateAsync(key);
-    setActive(p);
+
+    try {
+      // 1) Lấy chi tiết hàng đợi
+      const queueItem = await getQueueById(key);
+      const raw = queueItem?._raw ?? queueItem ?? {};
+
+      // 2) Tạo lượt khám (HistoryVisit)
+      const nowIso = new Date().toISOString();
+      try {
+            // >>>>>>>>>>>>> BỔ SUNG CHỖ NÀY <<<<<<<<<<<<<<
+    // Lấy mã phòng và mã bác sĩ từ hàng chờ
+    const maPhong =
+    queueItem?.MaPhong ??
+    raw.MaPhong ??
+    raw.PhieuKhamLsFull?.MaPhong ??
+    raw.PhieuKhamClsFull?.MaPhong ??
+    null;
+
+  const maBacSi =
+    raw.MaBacSiKham ?? // từ queue DTO LS
+    queueItem?.MaBacSi ?? // nếu BE có map sẵn
+    raw.MaBacSi ?? // fallback
+    null;
+
+        await createVisitMut.mutateAsync({
+          MaHangDoi: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
+          MaNhanSuThucHien:maBacSi ,
+          MaYTaHoTro: null,
+          ThoiGianBatDau: nowIso,
+          ThoiGianKetThuc: null,
+          LoaiLuot: queueItem?.LoaiHangDoi ?? raw.LoaiHangDoi ?? null,
+          TrangThai: "dang_thuc_hien",
+
+          // thêm các field BE cho phép, lấy trực tiếp từ queue
+          MaBenhNhan:
+            queueItem?.MaBenhNhan ??
+            raw.MaBenhNhan ??
+            p?.MaBenhNhan ??
+            p?.pid ??
+            null,
+          MaPhieuKhamLs:
+            raw.MaPhieuKham ??
+            raw.PhieuKhamLsFull?.MaPhieuKham ??
+            null,
+          MaKhoa:
+            queueItem?.MaKhoa ??
+            raw.MaKhoa ??
+            null,
+            MaPhong: maPhong,
+            MaBacSi: maBacSi,
+          });
+      } catch (err) {
+        console.error("[Examination] createHistoryVisit error:", err);
+      }
+
+      // 3) Map data hàng đợi -> model patient cho ExamDetail
+      const phieuLsFull = raw.PhieuKhamLsFull || null;
+      const phieuClsFull = raw.PhieuKhamClsFull || null;
+      const phieuClsItem = raw.PhieuKhamClsItem || null;
+
+      // tuổi (nếu có NgaySinh)
+      let age = null;
+      const dob =
+        phieuLsFull?.NgaySinh ??
+        phieuClsFull?.NgaySinh ??
+        null;
+      if (dob) {
+        const d = new Date(dob);
+        if (!Number.isNaN(d.getTime())) {
+          const today = new Date();
+          age =
+            today.getFullYear() -
+            d.getFullYear() -
+            (today.getMonth() < d.getMonth() ||
+              (today.getMonth() === d.getMonth() &&
+                today.getDate() < d.getDate())
+              ? 1
+              : 0);
+        }
+      }
+
+      const mappedPatient = {
+        ...p,
+        // id / queueId dùng chung MaHangDoi
+        queueId: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
+        id: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
+
+        // mã + tên + giới tính
+        pid:
+          queueItem?.MaBenhNhan ??
+          raw.MaBenhNhan ??
+          p?.pid ??
+          null,
+        name:
+          phieuLsFull?.HoTen ??
+          phieuClsFull?.HoTen ??
+          raw.TenBenhNhan ??
+          p?.name ??
+          "",
+        gender:
+          phieuLsFull?.GioiTinh ??
+          phieuClsFull?.GioiTinh ??
+          p?.gender ??
+          "",
+        age,
+
+        // khoa / phòng / bác sĩ
+        dept:
+          raw.TenKhoa ??
+          phieuLsFull?.TenKhoa ??
+          phieuClsFull?.TenKhoa ??
+          p?.dept ??
+          "",
+        department:
+          raw.TenKhoa ??
+          phieuLsFull?.TenKhoa ??
+          phieuClsFull?.TenKhoa ??
+          p?.department ??
+          "",
+        deptId:
+          raw.MaKhoa ??
+          phieuLsFull?.MaKhoa ??
+          phieuClsFull?.MaKhoa ??
+          null,
+        room:
+          raw.TenPhong ??
+          phieuClsItem?.TenPhong ??
+          phieuClsFull?.TenPhong ??
+          p?.room ??
+          "",
+        roomId:
+          raw.MaPhong ??
+          phieuClsItem?.MaPhong ??
+          phieuClsFull?.MaPhong ??
+          null,
+        doctor:
+          raw.TenBacSiKham ??
+          phieuClsFull?.TenNguoiLap ??
+          p?.doctor ??
+          "",
+
+        // loại hàng đợi / loại lượt / nguồn
+        loai_hang_doi:
+          raw.LoaiHangDoi ??
+          p?.loai_hang_doi ??
+          null,
+        queueType:
+          raw.LoaiHangDoi ??
+          p?.queueType ??
+          null,
+        visitType:
+          raw.LoaiHangDoi ??
+          p?.visitType ??
+          null,
+        nguon:
+          raw.Nguon ??
+          p?.nguon ??
+          null,
+        source:
+          raw.Nguon ??
+          p?.source ??
+          null,
+
+        // cấp cứu
+        capCuu:
+          raw.CapCuu ??
+          p?.capCuu ??
+          false,
+        cap_cuu:
+          raw.CapCuu ??
+          p?.cap_cuu ??
+          false,
+
+        // ghi chú / triệu chứng
+        note:
+          phieuLsFull?.TrieuChung ??
+          phieuLsFull?.ThongTinChiTiet ??
+          phieuClsFull?.GhiChu ??
+          p?.note ??
+          "",
+
+        // tên dịch vụ CLS (nếu là hàng CLS)
+        serviceName:
+          phieuClsItem?.TenDichVu ??
+          (Array.isArray(phieuClsFull?.ListItemDV) &&
+            phieuClsFull.ListItemDV[0]?.TenDichVu) ??
+          p?.serviceName ??
+          "",
+
+        // danh sách DV CLS để ExamDetail dùng nếu cần
+        serviceOrder:
+          Array.isArray(phieuClsFull?.ListItemDV) &&
+          phieuClsFull.ListItemDV.length
+            ? {
+                items: phieuClsFull.ListItemDV.map(
+                  (dv) => dv.MaDichVu || dv.MaChiTietDv
+                ),
+              }
+            : p?.serviceOrder,
+      };
+
+      // đẩy vào ExamDetail
+      setActive(mappedPatient);
+    } catch (err) {
+      console.error("[Examination] handleStart error:", err);
+    }
   }
+
 
   function handleBack() {
     setActive(null);

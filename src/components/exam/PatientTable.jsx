@@ -207,15 +207,17 @@ function ActionButton({ active, onClick }) {
     </motion.button>
   );
 }
-
 function getKey(p) {
   return (
-    fld(p, "MaHangDoi", "MaPhieuKham", "MaBenhNhan", "id", "queueId", "pid") ||
-    p?.id ||
-    p?.queueId ||
-    p?.pid
+    p?.MaHangDoi ??
+    p?.maHangDoi ??
+    p?.queueId ??
+    p?.id ??
+    p?.pid ??
+    null
   );
 }
+
 
 export default function PatientTable({ items = [], onStart, inProgress = new Set(), stretch = false }) {
   return (
@@ -265,33 +267,36 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                   const patientName =
                     fld(
                       p,
+                      "TenBenhNhan",                     // top-level từ /api/queue/search
+                      "PhieuKhamLsFull.TenBenhNhan",
                       "PhieuKhamLsFull.HoTen",
                       "PhieuKhamLs.TenBenhNhan",
+                      "PhieuKhamClsFull.TenBenhNhan",
                       "PhieuKhamClsFull.HoTen",
                       "PhieuKhamCls.TenBenhNhan",
                       "HoTen",
-                      "TenBenhNhan",
                       "name"
                     ) || "";
 
-                  const deptName = fld(
-                    p,
-                    "PhieuKhamLsFull.TenKhoa",
-                    "PhieuKhamClsFull.TenKhoa",
-                    "TenKhoa",
-                    "dept",
-                    "department"
-                  );
+                    const deptName = fld(
+                                          p,
+                                          "TenKhoa",                          // top-level từ /api/queue/search
+                                          "PhieuKhamLsFull.TenKhoa",
+                                          "PhieuKhamClsFull.TenKhoa",
+                                          "dept",
+                                          "department"
+                                        );
 
-                  const doctorName = fld(
-                    p,
-                    "PhieuKhamLsFull.TenBacSiKham",
-                    "PhieuKhamLs.TenBacSi",
-                    "PhieuKhamLs.TenBacSiKham",
-                    "PhieuKhamClsFull.TenNguoiLap",
-                    "TenBacSi",
-                    "doctor"
-                  );
+                                        const doctorName = fld(
+                                                              p,
+                                                              "TenBacSiKham",                     // top-level từ /api/queue/search
+                                                              "PhieuKhamLsFull.TenBacSiKham",
+                                                              "PhieuKhamLs.TenBacSiKham",
+                                                              "PhieuKhamLs.TenBacSi",
+                                                              "PhieuKhamClsFull.TenNguoiLap",
+                                                              "TenBacSi",
+                                                              "doctor"
+                                                            );
 
                   // Appointment time: prefer explicit timestamp fields, otherwise combine NgayLap+GioLap when present
                   let apptTimeRaw = fld(p, "ThoiGianLichHen", "thoiGianLichHen", "time");

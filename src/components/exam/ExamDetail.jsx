@@ -49,13 +49,41 @@ export default function ExamDetail({
   // CLS – thêm kết quả & file
   const [clsResult, setClsResult] = useState("");
   const [clsFiles, setClsFiles] = useState([]);
+ // Lấy mã phòng từ patient để truyền vào API overview
+ const roomId =
+ patient?.roomId ||
+ patient?.MaPhong ||
+ patient?.maPhong ||
+ patient?.room ||
+ "";
 
-  const { data: examServices = [] } = useExamServices();
-  const svcMap = useMemo(() => {
-    const m = new Map();
-    examServices.forEach((s) => m.set(s.id, s));
-    return m;
-  }, [examServices]);
+// /api/master-data/services/overview?MaPhong=...
+const { data: rawExamServices = [] } = useExamServices({
+ maPhong: roomId,
+});
+
+// Chuẩn hóa dữ liệu dịch vụ về { id, name, type, _raw }
+const examServices = useMemo(
+ () =>
+   (rawExamServices || []).map((s) => ({
+     id: s.id ?? s.MaDV ?? s.maDV ?? s.code ?? "",
+     name:
+       s.name ??
+       s.TenDV ??
+       s.tenDV ??
+       s.ten_dich_vu ??
+       "",
+     type: s.LoaiDichVu ?? s.loaiDichVu ?? s.type ?? "",
+     _raw: s,
+   })),
+ [rawExamServices]
+);
+
+const svcMap = useMemo(() => {
+ const m = new Map();
+ examServices.forEach((s) => m.set(s.id, s));
+ return m;
+}, [examServices]);
 
   // Lấy maPhieuKham từ patient để gọi API chi tiết phiếu khám
   const maPhieuKham = patient?.MaPhieuKham || patient?.maPhieuKham || patient?.maPhieuKham || null;

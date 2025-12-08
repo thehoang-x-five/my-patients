@@ -41,8 +41,11 @@ function normalizeQueueItem(raw = {}) {
   
   // Map các field từ API response (PascalCase) sang cả PascalCase và camelCase để tương thích
   const normalized = {
-    _raw: raw,
-    // Queue fields (PascalCase - giữ nguyên từ API)
+        // giữ nguyên toàn bộ field gốc từ BE (bao gồm các object lồng như PhieuKhamLs, PhieuKhamCls, PhieuKhamLsFull, PhieuKhamClsFull, ...)
+        ...raw,
+    
+        _raw: raw,
+        // Queue fields (PascalCase - giữ nguyên từ API)
     MaHangDoi: raw.MaHangDoi ?? raw.maHangDoi ?? raw.id ?? null,
     MaBenhNhan: raw.MaBenhNhan ?? raw.maBenhNhan ?? raw.pid ?? null,
     MaPhong: raw.MaPhong ?? raw.maPhong ?? raw.ma_phong ?? null,
@@ -83,12 +86,47 @@ function normalizeQueueItem(raw = {}) {
     maPhieuKham: raw.MaPhieuKham ?? raw.maPhieuKham ?? null,
     maChiTietDv: raw.MaChiTietDv ?? raw.maChiTietDv ?? null,
     
-    // Patient info từ nested object hoặc từ API khác (nếu có)
-    name: raw.HoTen ?? raw.hoTen ?? raw.name ?? raw.BenhNhan?.HoTen ?? raw.benhNhan?.hoTen ?? null,
-    hoTen: raw.HoTen ?? raw.hoTen ?? raw.name ?? raw.BenhNhan?.HoTen ?? raw.benhNhan?.hoTen ?? null,
-    dept: raw.TenKhoa ?? raw.tenKhoa ?? raw.dept ?? raw.department ?? raw.Khoa?.TenKhoa ?? raw.khoa?.tenKhoa ?? null,
-    department: raw.TenKhoa ?? raw.tenKhoa ?? raw.dept ?? raw.department ?? raw.Khoa?.TenKhoa ?? raw.khoa?.tenKhoa ?? null,
-    doctor: raw.TenBacSi ?? raw.tenBacSi ?? raw.doctor ?? raw.BacSi?.TenBacSi ?? raw.bacSi?.tenBacSi ?? null,
+   // Patient info từ nested object hoặc từ API khác (nếu có)
+    name:
+      raw.TenBenhNhan ??
+      raw.HoTen ??
+      raw.hoTen ??
+      raw.name ??
+      raw.BenhNhan?.HoTen ??
+      raw.benhNhan?.hoTen ??
+      null,
+    hoTen:
+      raw.TenBenhNhan ??
+      raw.HoTen ??
+      raw.hoTen ??
+      raw.name ??
+      raw.BenhNhan?.HoTen ??
+      raw.benhNhan?.hoTen ??
+      null,
+    dept:
+      raw.TenKhoa ??
+      raw.tenKhoa ??
+      raw.Khoa?.TenKhoa ??
+      raw.khoa?.tenKhoa ??
+      raw.dept ??
+      raw.department ??
+      null,
+    department:
+      raw.TenKhoa ??
+      raw.tenKhoa ??
+      raw.Khoa?.TenKhoa ??
+      raw.khoa?.tenKhoa ??
+      raw.dept ??
+      raw.department ??
+      null,
+    doctor:
+      raw.TenBacSiKham ??
+      raw.TenBacSi ??
+      raw.tenBacSi ??
+      raw.doctor ??
+      raw.BacSi?.TenBacSi ??
+      raw.bacSi?.tenBacSi ??
+      null,
     note: raw.GhiChu ?? raw.ghiChu ?? raw.note ?? raw.symptoms ?? null,
     symptoms: raw.GhiChu ?? raw.ghiChu ?? raw.note ?? raw.symptoms ?? null,
     age: raw.Tuoi ?? raw.tuoi ?? raw.age ?? null,
