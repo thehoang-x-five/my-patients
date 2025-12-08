@@ -14,13 +14,15 @@ import {
   useStartExam,
   useFinishRemove,
   subscribeQueue,
+  getQueueById,
 } from "../api/queue.js";
 
 import {
   useCreateExamOrder,
   useCreateDiagnosis,
+  getServicesOverview,
 } from "../api/examination.js";
-import { useCreateHistoryVisit } from "../api/history.js";
+import { useCreateHistoryVisit, createHistoryVisit } from "../api/history.js";
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function Examination() {
@@ -131,12 +133,13 @@ export default function Examination() {
   async function handleStart(p) {
     const key = getKey(p);
     if (!key) return;
-    
+
     // Lấy thông tin từ queue item
     const maHangDoi = p.MaHangDoi || p.maHangDoi || key;
     const maNhanSuThucHien = getCurrentUserMaNhanSu();
     const loaiHangDoi = p.LoaiHangDoi || p.loaiHangDoi || p.queueType || p.visitType;
-    
+    const maPhong = p.MaPhong || p.maPhong || null;
+
     // Map LoaiHangDoi sang LoaiLuot
     let loaiLuot = null;
     if (loaiHangDoi === "can_lam_sang" || loaiHangDoi === "cls") {
@@ -144,13 +147,17 @@ export default function Examination() {
     } else {
       loaiLuot = "kham_moi"; // hoặc có thể lấy từ p.LoaiLuot nếu có
     }
-    
+
     const now = new Date();
     const thoiGianBatDau = now.toISOString();
-    
-    // Gọi API tạo lượt khám
+
     try {
-      await createVisitMut.mutateAsync({
+      // 1. Gọi API /api/queue/{maHangDoi} để fill thông tin
+      const queueData = await getQueueById(maHangDoi);
+      console.log("Queue data:", queueData);
+
+      // 2. Gọi API /api/history/visits để tạo lượt khám
+      const visitResult = await createHistoryVisit({
         MaHangDoi: maHangDoi,
         MaNhanSuThucHien: maNhanSuThucHien,
         MaYTaHoTro: null, // Có thể thêm sau nếu cần
@@ -159,18 +166,35 @@ export default function Examination() {
         LoaiLuot: loaiLuot,
         TrangThai: "dang_thuc_hien",
       });
+      console.log("Visit created:", visitResult);
+
+      // 3. Gọi API /api/master-data/services/overview để lấy danh sách dịch vụ
+      const servicesData = await getServicesOverview({ maPhong });
+      console.log("Services overview:", servicesData);
+
+      // Cập nhật patient data với thông tin từ queue API
+      const updatedPatient = {
+        ...p,
+        ...queueData,
+        servicesOverview: servicesData,
+      };
+
+      setInProgress((prev) => {
+        const s = new Set(prev);
+        s.add(key);
+        return s;
+      });
+      setActive(updatedPatient);
     } catch (err) {
-      console.error("Lỗi khi tạo lượt khám:", err);
+      console.error("Lỗi khi gọi các API:", err);
       // Vẫn tiếp tục với flow bình thường nếu lỗi
+      setInProgress((prev) => {
+        const s = new Set(prev);
+        s.add(key);
+        return s;
+      });
+      setActive(p);
     }
-    
-    setInProgress((prev) => {
-      const s = new Set(prev);
-      s.add(key);
-      return s;
-    });
-    await startMut.mutateAsync(key);
-    setActive(p);
   }
 
   function handleBack() {
