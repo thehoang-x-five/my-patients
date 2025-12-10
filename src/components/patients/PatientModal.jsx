@@ -30,7 +30,7 @@ import {
 import { getStoredAccessToken } from "../../api/http.js";
 // History (lượt khám)
 import { useCreateHistoryVisit } from "../../api/history";
-import { getClinicalExam } from "../../api/examination";
+import { getClinicalExam, getFinalDiagnosis } from "../../api/examination";
 import { useExamStore } from "../stores/appStore.js";
 import { useNavigate } from "react-router-dom";
 
@@ -128,39 +128,52 @@ export default function PatientModal({
     ]
   );
 
+  // Gom các field trạng thái khả dụng để nhận diện đúng nhánh xử lý
+  const statusBag = useMemo(() => {
+    const raw = [
+      statusLow,
+      patientForView?.TrangThaiHomNay,
+      patientForView?.trang_thai_hom_nay_code,
+      patientForView?.statusCode,
+      patientForView?.todayStatus,
+      patient?.TrangThaiHomNay,
+      patient?.trang_thai_hom_nay_code,
+      patient?.statusCode,
+      patient?.todayStatus,
+    ];
+    return raw
+      .filter(Boolean)
+      .map((v) => String(v).toLowerCase())
+      .map((v) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  }, [statusLow, patientForView, patient]);
+
   const isSvcProcessingStatus = useMemo(() => {
-    if (!statusLow) return false;
-    const normalized = statusLow.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return (
-      statusLow === String(STATUSES.WAIT_PROC_SVC || "").toLowerCase() ||
-      statusLow.includes("cho_xu_ly_dv") ||
-      normalized.includes("cho xu ly dich vu")
-    );
-  }, [statusLow]);
+    const target = String(STATUSES.WAIT_PROC_SVC || "").toLowerCase();
+    return statusBag.some((s) => {
+      return (
+        s === target ||
+        s.includes("cho_xu_ly_dv") ||
+        s.includes("cho xu ly dv") ||
+        s.includes("cho xu ly dich vu")
+      );
+    });
+  }, [statusBag]);
 
   const isServiceIntake = useMemo(() => {
     if (isSvcProcessingStatus) return false;
 
     const svcCode = String(STATUSES.WAIT_INTAKE_SVC || "").toLowerCase();
-    const normalized = statusLow
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-
-    // Hỗ trợ cả code và label có dấu/không dấu
-    const labelAsciiMatches =
-      normalized.includes("cho tiep nhan dv") ||
-      normalized.includes("cho tiep nhan dich vu");
-
-    return (
-      statusLow === svcCode ||
-      statusLow.includes("chờ tiếp nhận (dịch vụ)") ||
-      statusLow.includes("chờ tiếp nhận dịch vụ") ||
-      statusLow.includes("cho_tiep_nhan_dv") ||
-      statusLow.includes("dịch vụ") ||
-      normalized.includes("dich vu") ||
-      labelAsciiMatches
-    );
-  }, [statusLow, isSvcProcessingStatus]);
+    return statusBag.some((s) => {
+      return (
+        s === svcCode ||
+        s.includes("cho_tiep_nhan_dv") ||
+        s.includes("cho tiep nhan dv") ||
+        s.includes("cho tiep nhan dich vu") ||
+        s.includes("chờ tiếp nhận") && s.includes("dich vu") ||
+        s.includes("dich vu")
+      );
+    });
+  }, [statusBag, isSvcProcessingStatus]);
 
   const navigate = useNavigate();
 
@@ -171,7 +184,7 @@ export default function PatientModal({
   // Lấy danh sách dịch vụ khám lâm sàng (overview) - BE đã normalize trong examination.js
   const { data: examServices = [] } = useExamServices(
     { loaiDichVu: "kham_lam_sang" },
-    { enabled: !isServiceIntake }
+    { enabled: !isServiceIntake && mode === "exam" }
   );
 
   // Map dịch vụ -> template cho tab khám
@@ -232,7 +245,7 @@ export default function PatientModal({
   // Chỉ gọi API khi không ở mode "edit" hoặc "add" (không cần service info khi chỉnh sửa form)
   const { data: serviceInfo } = useServiceInfo(tpl?.id, {
     enabled:
-      !!tpl?.id && mode !== "edit" && mode !== "add" && !isServiceIntake,
+      !!tpl?.id && mode !== "edit" && mode !== "add" && mode === "exam" && !isServiceIntake,
   });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -1251,6 +1264,7 @@ const transactions = useMemo(() => {
 
   // ----------------- FETCH FINAL DIAGNOSIS FOR PROCESS MODE -----------------
   const fetchFinalDiagnosis = async () => {
+    if (loadingFinalDiagnosis) return;
     if (!maPhieuKhamCurrent) {
       toast.error("Thiếu mã phiếu khám.");
       return;
@@ -1258,22 +1272,24 @@ const transactions = useMemo(() => {
     try {
       setLoadingFinalDiagnosis(true);
       const dxRes = await getFinalDiagnosis(maPhieuKhamCurrent);
-      if (dxRes) {
-        setDiagnosisData((prev) => ({
-          ...prev,
-          MaPhieuChanDoan: dxRes.MaPhieuChanDoan || dxRes.maPhieuChanDoan,
-          MaPhieuKham: dxRes.MaPhieuKham || dxRes.maPhieuKham,
-          MaDonThuoc: dxRes.MaDonThuoc || dxRes.maDonThuoc,
-          dxPrimary: dxRes.ChanDoanSoBo || dxRes.dxPrimary || "",
-          dxSecondary: dxRes.ChanDoanCuoi || dxRes.dxSecondary || "",
-          summary: dxRes.NoiDungKham || dxRes.summary || "",
-          orders: dxRes.PhatDoDieuTri || dxRes.orders || "",
-          advice: dxRes.LoiKhuyen || dxRes.advice || "",
-          followup: dxRes.HuongXuTri || dxRes.followup || "",
-          prescriptionCode: dxRes.MaDonThuoc || dxRes.maDonThuoc || "",
-        }));
-        toast.success("Đã tải chẩn đoán cuối.");
+      if (!dxRes) {
+        toast.error("Không tìm thấy chẩn đoán cuối.");
+        return;
       }
+      setDiagnosisData((prev) => ({
+        ...prev,
+        MaPhieuChanDoan: dxRes.MaPhieuChanDoan || dxRes.maPhieuChanDoan,
+        MaPhieuKham: dxRes.MaPhieuKham || dxRes.maPhieuKham,
+        MaDonThuoc: dxRes.MaDonThuoc || dxRes.maDonThuoc,
+        dxPrimary: dxRes.ChanDoanSoBo || dxRes.dxPrimary || "",
+        dxSecondary: dxRes.ChanDoanCuoi || dxRes.dxSecondary || "",
+        summary: dxRes.NoiDungKham || dxRes.summary || "",
+        orders: dxRes.PhatDoDieuTri || dxRes.orders || "",
+        advice: dxRes.LoiKhuyen || dxRes.advice || "",
+        followup: dxRes.HuongXuTri || dxRes.followup || "",
+        prescriptionCode: dxRes.MaDonThuoc || dxRes.maDonThuoc || "",
+      }));
+      toast.success("Đã tải chẩn đoán cuối.");
     } catch (err) {
       const msg =
         err?.response?.data?.Message ||

@@ -488,12 +488,12 @@ export function useQueueToday(options = {}) {
     const vietnamOffset = 7 * 60 * 60 * 1000; // +7 giờ tính bằng milliseconds
     const vietnamTime = new Date(utcNow + vietnamOffset);
     
-    // toTime = hiện tại (UTC+7)
-    const to = new Date(vietnamTime);
-    
-    // fromTime = hiện tại lùi 1 tháng (UTC+7)
+    // fromTime = 00:00 hôm nay (UTC+7)
     const from = new Date(vietnamTime);
-    from.setMonth(from.getMonth() - 1);
+    from.setHours(0, 0, 0, 0);
+    // toTime = 23:59:59.999 hôm nay (UTC+7)
+    const to = new Date(vietnamTime);
+    to.setHours(23, 59, 59, 999);
     
     return { 
       FromTime: from.toISOString(), 
