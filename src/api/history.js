@@ -430,8 +430,17 @@ export async function createHistoryVisit(payload = {}) {
   if (!payload) throw new Error("createHistoryVisit: missing payload");
 
   // Normalize FE-friendly keys into HistoryVisitCreateRequest expected by BE
+  const maHangDoiRaw =
+    payload.MaHangDoi ??
+    payload.maHangDoi ??
+    payload.queueId ??
+    payload.queueCode ??
+    null;
   const maHangDoi =
-    payload.MaHangDoi ?? payload.maHangDoi ?? payload.queueId ?? payload.queueCode ?? "";
+    typeof maHangDoiRaw === "string"
+      ? maHangDoiRaw.trim()
+      : maHangDoiRaw;
+  if (!maHangDoi) throw new Error("createHistoryVisit: missing MaHangDoi");
 
   const maNhanSu =
     payload.MaNhanSuThucHien ??
@@ -454,7 +463,7 @@ export async function createHistoryVisit(payload = {}) {
   if (loaiLuot === "clinic") loaiLuot = "kham_moi";
   if (loaiLuot === "service") loaiLuot = "kham_dich_vu";
 
-  const body = {
+  const rawBody = {
     MaHangDoi: maHangDoi,
     MaNhanSuThucHien: maNhanSu,
     MaYTaHoTro: maYTa,
@@ -469,6 +478,12 @@ export async function createHistoryVisit(payload = {}) {
     MaBacSi: payload.MaBacSi ?? payload.maBacSi ?? payload.doctorId ?? null,
     GhiChu: payload.GhiChu ?? payload.ghiChu ?? payload.note ?? payload.description ?? null,
   };
+
+  // Loại bỏ các field null/undefined để payload gọn đúng spec
+  const body = Object.entries(rawBody).reduce((acc, [k, v]) => {
+    if (v !== null && v !== undefined) acc[k] = v;
+    return acc;
+  }, {});
 
   console.log("[History API] createHistoryVisit payload:", body);
   try {

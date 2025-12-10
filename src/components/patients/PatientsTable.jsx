@@ -11,6 +11,7 @@ import {
 } from "../../api/patients.js";
 
 import { useEnqueueService, useReturnToDoctor } from "../../api/queue.js";
+import { useServicesOverview } from "../../api/examination.js";
 
 
 /* ===== Helpers normalize theo ERD ===== */
@@ -221,6 +222,9 @@ export default function PatientsTable({
   stretch = false,
   highlightPid = null,
 }) {
+  // Prefetch danh sách dịch vụ khám lâm sàng để PatientExamMode dùng ngay
+  useServicesOverview({ loaiDichVu: "kham_lam_sang" }, { enabled: true });
+
   // ===== mutations =====
   const enqueueServiceMut = useEnqueueService();
   const returnToDoctorMut = useReturnToDoctor();
@@ -370,9 +374,9 @@ export default function PatientsTable({
                 const isWaitIntake =
                   statusCode === STATUSES.WAIT_INTAKE ||
                   statusCode === STATUSES.WAIT_INTAKE_SVC;
-                const isWaitProc =
-                  statusCode === STATUSES.WAIT_PROC ||
+                const isWaitProcService =
                   statusCode === STATUSES.WAIT_PROC_SVC;
+                const isWaitProc = statusCode === STATUSES.WAIT_PROC;
 
                 const vitals = getVitals(p);
 
@@ -387,7 +391,8 @@ export default function PatientsTable({
                 let showProcessBtn = false;
 
                 if (accountActive && hasTodayStatus) {
-                  if (isWaitIntake) {
+                  if (isWaitIntake || isWaitProcService) {
+                    // Trạng thái "chờ xử lý (dịch vụ)" vẫn mở intake LS thay vì nút xử lý
                     showExamBtn = true;
                   } else if (isWaitProc) {
                     showProcessBtn = true;

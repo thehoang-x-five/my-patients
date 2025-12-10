@@ -1,4 +1,3 @@
-// src/components/patients/PatientExamMode.jsx
 import React from "react";
 import { motion } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
@@ -14,7 +13,6 @@ export default function PatientExamMode({
   setTplId,
   tpl,
   tplList = [],
-
   booking,
   setBooking,
   isServiceIntake,
@@ -35,8 +33,6 @@ export default function PatientExamMode({
   setNewExamVal,
   handleDirectExam,
   handleFollowupExam,
-
-  // ====== mới thêm (tuỳ chọn) ======
   clsSummary,
   clsItems = [],
   clsResults = [],
@@ -50,16 +46,14 @@ export default function PatientExamMode({
     booking?.code ||
     "";
 
-  // Loại hẹn trong lịch hẹn (kham_moi | tai_kham)
   const appointmentType =
     booking?.loaiHen || booking?.LoaiHen || booking?.appointmentType;
 
-  // Tái khám theo lịch hẹn (có mã lịch hẹn, LoaiHen = tai_kham)
   const isAppointmentFollowup = appointmentType === "tai_kham";
 
-  // Hình thức tiếp nhận:
-  // - service_return: chỉ dùng cho khám quay lại sau CLS (phiếu tổng hợp KQ CLS)
-  // - appointment: có mã lịch hẹn (kham_moi / tai_kham)
+  // Intake type:
+  // - service_return: tái khám sau CLS
+  // - appointment: có mã lịch hẹn
   // - walkin: đến trực tiếp
   const intakeType =
     exam?.hinhThucTiepNhan ||
@@ -76,13 +70,6 @@ export default function PatientExamMode({
       service_return: "Tái khám sau CLS",
     }[intakeType] || intakeType;
 
-  // Phí hiển thị:
-  // - Miễn phí nếu:
-  //    Lượt quay lại sau CLS (service_return / isFollowupStatus)
-  //    Hoặc lịch hẹn tái khám (LoaiHen = tai_kham)
-  // - Ngược lại:
-  //    Intake CLS: tổng phí dịch vụ CLS
-  //    Khám LS thường: giá khám từ booking
   const isFreeExam = isFollowupStatus || isAppointmentFollowup;
 
   const displayFee =
@@ -137,17 +124,25 @@ export default function PatientExamMode({
 
   const showClsResultTable = isFollowupStatus && clsDisplayRows.length > 0;
 
-  // Đồng bộ hinhThucTiepNhan vào state exam (để parent gửi BE nếu cần)
+  // Đồng bộ hinhThucTiepNhan vào state exam (parent gọi BE)
   React.useEffect(() => {
     if (!exam) return;
     if (exam.hinhThucTiepNhan === intakeType) return;
     setExam((s) => ({ ...s, hinhThucTiepNhan: intakeType }));
   }, [intakeType, exam, setExam]);
 
-  // Danh sách template khám dùng cho dropdown:
-  // Modal (cha) đã build từ API overview & truyền xuống qua tplList
   const selectTemplates =
     (tplList && tplList.length && tplList) || (tpl ? [tpl] : []);
+
+  const defaultExamTitle = isServiceIntake
+    ? "Phiếu cận lâm sàng"
+    : "Khám lâm sàng";
+  const examTitle = exam?.type || tpl?.title || defaultExamTitle;
+  const examTypeDisplay =
+    exam?.type ||
+    tpl?.title ||
+    (isServiceIntake ? "Phiếu cận lâm sàng" : "(Chưa chọn loại khám)");
+  const formHeading = isServiceIntake ? "Phiếu CLS" : "Phiếu khám";
 
   return (
     <motion.div {...ANIMATION_CONFIG} className="space-y-3">
@@ -156,9 +151,9 @@ export default function PatientExamMode({
         className="rounded-2xl p-2 mt-2 mb-0 ring-1 ring-emerald-200/50 bg-white shadow-sm"
       >
         <div className="flex items-center justify-between mb-4">
-          <h4 className="font-bold text-slate-900">Phiếu khám</h4>
+          <h4 className="font-bold text-slate-900">{formHeading}</h4>
           <Chip tone="emerald" dot="emerald" className="text-xs">
-            {exam.type || tpl?.title || "Khám lâm sàng"}
+            {examTitle}
           </Chip>
         </div>
 
@@ -170,15 +165,17 @@ export default function PatientExamMode({
             <div className="text-xs text-slate-600">{form?.id}</div>
           </div>
           <div className="rounded-xl p-3.5 bg-cyan-50/60 ring-1 ring-cyan-100">
-            <div className="text-xs text-slate-600 mb-1">Loại khám</div>
+            <div className="text-xs text-slate-600 mb-1">
+              {isServiceIntake ? "Loại phiếu" : "Loại khám"}
+            </div>
             <div className="font-bold text-slate-900">
-              {exam.type || tpl?.title || "(Chưa chọn loại khám)"}
+              {examTypeDisplay}
             </div>
           </div>
           <div className="rounded-xl p-3.5 bg-amber-50/60 ring-1 ring-amber-100">
             <div className="text-xs text-slate-600 mb-1">Mức phí</div>
             <div className="font-bold text-emerald-700">
-              {displayFee.toLocaleString("vi-VN")}đ
+              {displayFee.toLocaleString("vi-VN")}
               {isFreeExam && (
                 <span className="ml-1 text-xs text-slate-500">(Miễn phí)</span>
               )}
@@ -186,42 +183,44 @@ export default function PatientExamMode({
           </div>
         </div>
 
-        {/* Hàng thông tin: Mã lịch hẹn - Hình thức tiếp nhận - Người lập */}
-        <div className="grid md:grid-cols-3 gap-3 mb-4">
-          <div className="rounded-xl p-3.5 bg-slate-50 ring-1 ring-slate-200">
-            <div className="text-xs text-slate-600 mb-1">Mã lịch hẹn</div>
-            <div className="font-semibold text-slate-900">
-              {apptCode || <span className="text-slate-400">(Không có)</span>}
+        {/* Thông tin intake */}
+        {!isServiceIntake && (
+          <div className="grid md:grid-cols-3 gap-3 mb-4">
+            <div className="rounded-xl p-3.5 bg-slate-50 ring-1 ring-slate-200">
+              <div className="text-xs text-slate-600 mb-1">Mã lịch hẹn</div>
+              <div className="font-semibold text-slate-900">
+                {apptCode || <span className="text-slate-400">(Không có)</span>}
+              </div>
+            </div>
+            <div className="rounded-xl p-3.5 bg-slate-50 ring-1 ring-slate-200">
+              <div className="text-xs text-slate-600 mb-1">
+                Hình thức tiếp nhận
+              </div>
+              <div className="font-semibold text-slate-900">
+                {intakeTypeLabel}
+              </div>
+            </div>
+            <div className="rounded-xl p-3.5 bg-slate-50 ring-1 ring-slate-200">
+              <div className="text-xs text-slate-600 mb-1">Người lập phiếu</div>
+              <div className="font-semibold text-slate-900">
+                {createdByLabel || (
+                  <span className="text-slate-400">
+                    (Tài khoản hiện tại - tự động lấy MaNguoiLap)
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="rounded-xl p-3.5 bg-slate-50 ring-1 ring-slate-200">
-            <div className="text-xs text-slate-600 mb-1">
-              Hình thức tiếp nhận
-            </div>
-            <div className="font-semibold text-slate-900">
-              {intakeTypeLabel}
-            </div>
-          </div>
-          <div className="rounded-xl p-3.5 bg-slate-50 ring-1 ring-slate-200">
-            <div className="text-xs text-slate-600 mb-1">Người lập phiếu</div>
-            <div className="font-semibold text-slate-900">
-              {createdByLabel || (
-                <span className="text-slate-400">
-                  (Tài khoản hiện tại – tự động lấy MaNguoiLap)
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+        )}
 
-        {/* Form chọn mẫu khám, khoa, bs, phòng, ngày giờ */}
+        {/* Form chọn mẫu khám, khoa, bác sĩ, phòng, ngày giờ */}
         <div className="grid md:grid-cols-3 gap-3 mb-5">
           {!isServiceIntake && (
             <>
               <label className="text-sm font-semibold text-slate-700">
                 Mẫu khám
                 <select
-                  value={tplId}
+                  value={tplId || ""}
                   onChange={(e) => {
                     const newId = e.target.value;
                     setTplId(newId);
@@ -246,48 +245,24 @@ export default function PatientExamMode({
               </label>
               <label className="text-sm font-semibold text-slate-700">
                 Chuyên khoa
-                <button
-                  type="button"
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent("patient:selectDept", { detail: {} })
-                    )
-                  }
-                  className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-left transition hover:bg-emerald-50 shadow-sm"
-                >
-                  {exam.dept || "Chọn khoa..."}
-                </button>
+                <div className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 bg-white text-left shadow-sm select-none">
+                  {exam.dept || "Chưa chọn chuyên khoa"}
+                </div>
               </label>
               <label className="text-sm font-semibold text-slate-700">
                 Bác sĩ
-                <button
-                  type="button"
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent("patient:selectDoctor", { detail: {} })
-                    )
-                  }
-                  className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-left transition hover:bg-emerald-50 shadow-sm"
-                >
-                  {booking.doctor || "Chọn bác sĩ..."}
-                </button>
+                <div className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 bg-white text-left shadow-sm select-none">
+                  {booking.doctor || "Chưa chọn bác sĩ"}
+                </div>
               </label>
             </>
           )}
           {!isServiceIntake && (
             <label className="text-sm font-semibold text-slate-700">
               Phòng
-              <button
-                type="button"
-                onClick={() =>
-                  window.dispatchEvent(
-                    new CustomEvent("patient:selectRoom", { detail: {} })
-                  )
-                }
-                className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-left transition hover:bg-emerald-50 shadow-sm"
-              >
-                {exam.room || "Chọn phòng..."}
-              </button>
+              <div className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 bg-white text-left shadow-sm select-none">
+                {exam.room || "Chưa chọn phòng"}
+              </div>
             </label>
           )}
           <label className="text-sm font-semibold text-slate-700">
@@ -312,9 +287,21 @@ export default function PatientExamMode({
               className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition shadow-sm"
             />
           </label>
+          {isServiceIntake && (
+            <label className="text-sm font-semibold text-slate-700">
+              Người lập phiếu
+              <div className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 bg-white text-left shadow-sm select-none">
+                {createdByLabel || (
+                  <span className="text-slate-400">
+                    (Tài khoản hiện tại - tự động lấy MaNguoiLap)
+                  </span>
+                )}
+              </div>
+            </label>
+          )}
         </div>
 
-        {/* Triệu chứng / ghi chú – ẩn nếu là lượt 2 có bảng KQ CLS */}
+        {/* Triệu chứng / ghi chú nếu không phải CLS followup */}
         {!isServiceIntake && !showClsResultTable && (
           <label className="text-sm font-semibold text-slate-700 mb-2 block">
             {isFollowupStatus ? "Ghi chú" : "Triệu chứng"}
@@ -334,7 +321,7 @@ export default function PatientExamMode({
           </label>
         )}
 
-        {/* Bảng kết quả CLS (chỉ hiện ở lượt 2 khi có dữ liệu) */}
+        {/* Bảng kết quả CLS (lượt 2) */}
         {showClsResultTable && (
           <div className="mt-0 mb-3 rounded-2xl p-3 ring-1 ring-sky-200 bg-sky-50/40">
             <div className="flex items-center justify-between mb-2">
@@ -366,13 +353,13 @@ export default function PatientExamMode({
                       rs.tenDichVu ||
                       "(Không rõ)";
                     const resultText =
-                      rs.NoiDungKetQua || rs.noiDungKetQua || "—";
+                      rs.NoiDungKetQua || rs.noiDungKetQua || "(Chưa có)";
                     const staffName =
                       rs.TenNhanSuThucHien ||
                       rs.tenNhanSuThucHien ||
-                      "—";
+                      "(Chưa có)";
                     const timeRaw = rs.ThoiGianTao || rs.thoiGianTao || "";
-                    let timeText = "—";
+                    let timeText = "(Chưa có)";
                     if (timeRaw) {
                       const d = new Date(timeRaw);
                       if (!isNaN(d.getTime())) {
@@ -409,9 +396,7 @@ export default function PatientExamMode({
         {isServiceIntake && (
           <div className="mt-0 mb-2 rounded-2xl p-3 ring-1 ring-amber-200 bg-amber-50/50">
             <div className="flex items-center justify-between">
-              <h5 className="font-bold text-slate-900">
-                Dịch vụ đã chỉ định
-              </h5>
+              <h5 className="font-bold text-slate-900">Dịch vụ chỉ định</h5>
               <Chip tone="amber" dot="amber" className="text-xs">
                 {serviceItems.length || 0}
               </Chip>
@@ -431,7 +416,6 @@ export default function PatientExamMode({
                         {serviceItems.length
                           ? priceOfService(sv).toLocaleString("vi-VN")
                           : 0}
-                        đ
                       </div>
                       <div className="col-span-3 md:col-span-3">
                         <select
@@ -447,7 +431,9 @@ export default function PatientExamMode({
                           disabled={!serviceItems.length}
                         >
                           <option value="">
-                            {serviceItems.length ? "Chọn phòng…" : "—"}
+                            {serviceItems.length
+                              ? "Chọn phòng"
+                              : "(Chưa có phòng)"}
                           </option>
                           {SERVICE_ROOMS.map((r) => (
                             <option key={r} value={r}>
@@ -468,7 +454,7 @@ export default function PatientExamMode({
                       className="mt-2 w-full rounded-lg px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
                       placeholder={
                         serviceItems.length
-                          ? "Ghi chú riêng cho dịch vụ này…"
+                          ? "Ghi chú riêng cho dịch vụ này"
                           : "Không có nội dung"
                       }
                       disabled={!serviceItems.length}
@@ -486,13 +472,13 @@ export default function PatientExamMode({
                   setExam((s) => ({ ...s, note: e.target.value }))
                 }
                 className="mt-2 w-full rounded-xl px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
-                placeholder="Ghi chú chung…"
+                placeholder="Ghi chú chung"
               />
             </label>
             <div className="mt-3 flex items-center justify-end gap-3">
               <span className="text-sm text-slate-600">Tổng phí</span>
               <span className="text-base font-extrabold text-emerald-700">
-                {totalServiceFee.toLocaleString("vi-VN")}đ
+                {totalServiceFee.toLocaleString("vi-VN")}
               </span>
             </div>
           </div>
@@ -528,7 +514,7 @@ export default function PatientExamMode({
                   onClick={() => removeExamExtra(i)}
                   className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold"
                 >
-                  ✕
+                  x
                 </motion.button>
               </motion.div>
             ))}
@@ -590,8 +576,8 @@ export default function PatientExamMode({
               className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition"
             >
               {isServiceIntake
-                ? "Lập phiếu khám dịch vụ & Thu phí"
-                : "Lập phiếu khám & Thu phí"}
+                ? "Lập phiếu CLS & thu phí"
+                : "Lập phiếu khám & thu phí"}
             </motion.button>
           )}
         </div>

@@ -458,7 +458,13 @@ export default function Patients() {
       setModal({ open: true, mode: "exam", patient: p });
       setExamActive(p);
 
-      if (pid) {
+      const todayStatus =
+        normStatusCode(p).toLowerCase() || normStatusCode(patientDetail || {}).toLowerCase();
+
+      const isServiceWait =
+        todayStatus === STATUSES.WAIT_INTAKE_SVC;
+
+      if (pid && !isServiceWait) {
         const today = todayStr();
 
         // 1. Search lịch hẹn đã check-in mới nhất hôm nay
@@ -477,8 +483,7 @@ export default function Patients() {
             setExamPrefillAppointment(null);
           }
         } catch (err) {
-          console.error("Không lấy được lịch hẹn đã check-in:", err);
-          toast.warn("Không thể tải thông tin lịch hẹn. Vui lòng thử lại.");
+          console.warn("[Patients] searchAppointmentsRaw check-in error:", err);
         }
 
         // 2. Search phiếu khám LS đang thực hiện (dang_thuc_hien)
@@ -489,15 +494,17 @@ export default function Patients() {
           });
 
           if (Array.isArray(clinicalList) && clinicalList.length > 0) {
-            // lưu nguyên list, tab Phiếu sau này sẽ tự xử lý
             setExamCurrentClinical(clinicalList);
           } else {
             setExamCurrentClinical(null);
           }
         } catch (err) {
-          console.error("Không lấy được phiếu khám đang thực hiện:", err);
-          toast.warn("Không thể tải thông tin phiếu khám. Vui lòng thử lại.");
+          console.warn("[Patients] searchClinicalRaw in-progress error:", err);
         }
+      } else {
+        // Service intake: không cần prefetch appointments/clinical
+        setExamPrefillAppointment(null);
+        setExamCurrentClinical(null);
       }
 
       return;

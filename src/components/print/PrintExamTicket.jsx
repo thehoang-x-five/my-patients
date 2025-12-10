@@ -24,6 +24,8 @@ export default function PrintExamTicket({
   totalServiceFee = 0,
   services = [],
   feePaid,
+  clsSummary = null,
+  creatorName = "",
   onAfterPrint,
 }) {
   useEffect(() => {
@@ -44,6 +46,91 @@ export default function PrintExamTicket({
         note: it?.note || "",
       };
     });
+
+    // Chuẩn hóa kết quả CLS tổng hợp (nếu có, cho phiếu LS)
+    const normalizeClsSummary = () => {
+      if (isServiceIntake) return [];
+      const parseMaybeJson = (val) => {
+        if (typeof val !== "string") return val;
+        try {
+          return JSON.parse(val);
+        } catch {
+          return val;
+        }
+      };
+      const summary = parseMaybeJson(clsSummary);
+      const pickArr = (...candidates) => {
+        for (const cand of candidates) {
+          const parsed = parseMaybeJson(cand);
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed?.Items && Array.isArray(parsed.Items)) return parsed.Items;
+          if (parsed?.items && Array.isArray(parsed.items)) return parsed.items;
+        }
+        return [];
+      };
+      const arr = pickArr(
+        summary,
+        summary?.KetQua,
+        summary?.ketQua,
+        summary?.Items,
+        summary?.items
+      );
+      return arr.map((rs, idx) => {
+        const serviceName =
+          rs.TenDichVu ||
+          rs.tenDichVu ||
+          rs.DichVu ||
+          rs.dichVu ||
+          rs?.ChiTietDichVu?.DichVuYTe?.TenDichVu ||
+          rs.MaDichVu ||
+          rs.maDichVu ||
+          `Dịch vụ #${idx + 1}`;
+        const resultText =
+          rs.NoiDungKetQua ||
+          rs.noiDungKetQua ||
+          rs.KetQua ||
+          rs.ketQua ||
+          rs.Result ||
+          rs.result ||
+          rs.GhiChu ||
+          rs.ghiChu ||
+          "(Chưa có)";
+        const staffName =
+          rs.TenNhanSuThucHien ||
+          rs.tenNhanSuThucHien ||
+          rs.NguoiThucHien ||
+          rs.nguoiThucHien ||
+          rs.NguoiLap ||
+          rs.nguoiLap ||
+          "";
+        const timeRaw =
+          rs.ThoiGianTao ||
+          rs.thoiGianTao ||
+          rs.ThoiGian ||
+          rs.thoiGian ||
+          "";
+        const attachmentsRaw =
+          rs.TepDinhKem ||
+          rs.tepDinhKem ||
+          rs.Attachments ||
+          rs.attachments ||
+          [];
+        const attachments = Array.isArray(attachmentsRaw)
+          ? attachmentsRaw
+          : typeof attachmentsRaw === "string"
+          ? [attachmentsRaw]
+          : [];
+        let timeText = "(Chưa có)";
+        if (timeRaw) {
+          const d = new Date(timeRaw);
+          if (!isNaN(d.getTime())) {
+            timeText = d.toLocaleString("vi-VN");
+          }
+        }
+        return { serviceName, resultText, staffName, timeText, attachments };
+      });
+    };
+    const clsSummaryRows = normalizeClsSummary();
 
     const feeLabel = isServiceIntake ? "Tổng phí dịch vụ" : "Phí khám";
     const feeAmount = isServiceIntake ? totalServiceFee : (booking?.price || 0);
@@ -69,6 +156,7 @@ export default function PrintExamTicket({
       .muted{ color:#6b7280; }
       .signline{ margin-top:28px; font-weight:600; color:#334155; }
       .dots{ display:inline-block; vertical-align:middle; border-bottom:1px dotted #334155; min-width:280px; height:0; margin-left:8px; }
+      .creator{ margin-left:10px; font-weight:700; color:#0f172a; }
       .chk{ display:inline-block; width:14px; height:14px; border:1px solid #000; margin-left:8px; vertical-align:middle; }
       @page { margin: 16mm; }
     </style>
@@ -206,14 +294,45 @@ export default function PrintExamTicket({
                  <td><span class="fee">${fmt(feeAmount)}đ</span></td>
                </tr>
              </tbody></table>
-           </div>`
+          </div>`
         : "" }
+
+      ${
+        clsSummaryRows.length
+          ? `<div class="block">
+               <table>
+                 <thead>
+                   <tr>
+                     <th style="width:28%">D?ch v? CLS</th>
+                     <th style="width:32%">K?t qu?</th>
+                     <th style="width:15%">Người thực hiện</th>
+                     <th style="width:13%">Th?i gian</th>
+                     <th style="width:12%">T?p ??nh k?m</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   ${clsSummaryRows
+                     .map(
+                       (r) => `<tr>
+                         <td>${safe(r.serviceName)}</td>
+                         <td>${safe(r.resultText)}</td>
+                         <td>${safe(r.staffName || "")}</td>
+                         <td>${safe(r.timeText || "")}</td>
+                        <td>${safe((Array.isArray(r.attachments) ? r.attachments : []).join(", "))}</td>
+                       </tr>`
+                     )
+                     .join("")}
+                 </tbody>
+               </table>
+             </div>`
+          : ""
+      }
       `
       }
 
       <!-- Chữ ký -->
       <div class="signline">
-        Người lập phiếu:<span class="dots"></span>
+        Nguoi lap phieu: ${creatorName ? `<span class="creator">${safe(creatorName)}</span>` : ""}
       </div>
     </div>
   </body>

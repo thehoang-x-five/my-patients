@@ -97,10 +97,12 @@ function normalizeServiceOverview(dto = {}) {
 //  - [FromQuery] string? loaiDichVu
 // FE truyền maPhong nếu có, nếu không truyền gì thì BE sẽ dùng loaiDichVu mặc định.
 export async function getServicesOverview(params = {}) {
-  const { maPhong } = params || {};
+  // Mặc định lấy dịch vụ khám lâm sàng nếu không truyền
+  const { maPhong, loaiDichVu = "kham_lam_sang" } = params || {};
 
   const query = {};
   if (maPhong) query.maPhong = maPhong;
+  if (loaiDichVu) query.loaiDichVu = loaiDichVu;
 
   const res = await http.get(`${MASTER_BASE}/services/overview`, {
     params: query,
@@ -377,7 +379,32 @@ export async function createClsOrder(payload = {}) {
   
     const res = await http.post(`${CLS_BASE}/orders`, body);
     return unwrap(res);
+}
+
+// Search CLS orders (GET /api/cls/orders)
+export async function searchClsOrders(params = {}) {
+  const res = await http.get(`${CLS_BASE}/orders`, { params });
+  const data = unwrap(res);
+  if (!data) return { Items: [], TotalItems: 0, Page: 1, PageSize: 0 };
+  if (Array.isArray(data)) {
+    return {
+      Items: data,
+      TotalItems: data.length,
+      Page: 1,
+      PageSize: data.length,
+    };
   }
+  if (Array.isArray(data.items)) {
+    return {
+      Items: data.items,
+      TotalItems: data.totalItems ?? data.items.length ?? 0,
+      Page: data.page ?? 1,
+      PageSize: data.pageSize ?? data.items.length ?? 0,
+    };
+  }
+  if (Array.isArray(data.Items)) return data;
+  return { Items: [], TotalItems: 0, Page: 1, PageSize: 0 };
+}
 
 // Lấy phiếu CLS theo mã
 export async function getClsOrder(maPhieuKhamCls) {

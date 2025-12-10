@@ -1,7 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-
 // Resolve fields that may be PascalCase, camelCase, or nested (supports dotted paths)
 function fld(obj, ...paths) {
   if (!obj) return undefined;
@@ -28,7 +27,6 @@ function fld(obj, ...paths) {
   return undefined;
 }
 
-
 function InitialAvatar({ name = "", id = "" }) {
   const seed = (name || id || "A").charCodeAt(0) % 5;
   const colors = [
@@ -38,9 +36,16 @@ function InitialAvatar({ name = "", id = "" }) {
     "bg-sky-100 text-sky-700",
     "bg-amber-100 text-amber-700",
   ];
-  const initials = (name || id || "BN").trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+  const initials = (name || id || "BN")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join("");
   return (
-    <span className={`w-7 h-7 rounded-full grid place-items-center text-[11px] font-extrabold ring-1 ring-slate-200/70 ${colors[seed]}`}>
+    <span
+      className={`w-7 h-7 rounded-full grid place-items-center text-[11px] font-extrabold ring-1 ring-slate-200/70 ${colors[seed]}`}
+    >
       {initials || "BN"}
     </span>
   );
@@ -102,28 +107,50 @@ function Td({ children, first, last, right }) {
 }
 
 const pillTone = {
-  teal:  { wrap: "bg-teal-50 text-teal-700 ring-teal-200", dot: "bg-teal-500" },
+  teal: { wrap: "bg-teal-50 text-teal-700 ring-teal-200", dot: "bg-teal-500" },
   amber: { wrap: "bg-amber-50 text-amber-700 ring-amber-200", dot: "bg-amber-500" },
-  rose:  { wrap: "bg-rose-50 text-rose-700 ring-rose-200", dot: "bg-rose-500" },
-  sky:   { wrap: "bg-sky-50 text-sky-700 ring-sky-200", dot: "bg-sky-500" },
+  rose: { wrap: "bg-rose-50 text-rose-700 ring-rose-200", dot: "bg-rose-500" },
+  sky: { wrap: "bg-sky-50 text-sky-700 ring-sky-200", dot: "bg-sky-500" },
   slate: { wrap: "bg-slate-50 text-slate-700 ring-slate-200", dot: "bg-slate-400" },
 };
 
-function StatusPills({ item }) {
+function StatusBadge({ item }) {
+  const status = item.TrangThai || item.trangThai || item.status || "";
+  const label =
+    status === "cho_goi"
+      ? "Đang chờ"
+      : status === "dang_thuc_hien" || status === "dang_kham"
+      ? "Đang thực hiện"
+      : status === "da_phuc_vu"
+      ? "Đã phục vụ"
+      : "Không rõ";
+
+  let tone = pillTone.slate;
+  if (status === "cho_goi") tone = pillTone.amber;
+  else if (status === "dang_thuc_hien" || status === "dang_kham") tone = pillTone.teal;
+  else if (status === "da_phuc_vu") tone = pillTone.sky;
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${tone.wrap}`}>
+     
+      {label}
+    </span>
+  );
+}
+
+function SourcePills({ item }) {
+  const queueType = item.LoaiHangDoi || item.loaiHangDoi || item.queueType || item.visitType;
+  const isClsQueue = queueType === "can_lam_sang" || queueType === "cls";
+  const source = isClsQueue ? null : item.Nguon || item.nguon || item.source;
   const pills = [];
 
-  // Sử dụng field names từ API response (PascalCase hoặc camelCase alias)
-  const queueType = item.LoaiHangDoi || item.loaiHangDoi || item.queueType || item.visitType;
-  const source = item.Nguon || item.nguon || item.source; // walkin | appointment | service_return
-
-  // 1) Loại khám: Khám LS / CLS
-  if (queueType === "can_lam_sang" || queueType === "cls") {
+  if (isClsQueue) {
     pills.push(
       <span
         key="type-cls"
         className="inline-flex items-center rounded-full bg-sky-50 text-sky-700 text-[11px] font-semibold px-2 py-0.5"
       >
-        ● CLS
+        CLS
       </span>
     );
   } else {
@@ -132,22 +159,18 @@ function StatusPills({ item }) {
         key="type-ls"
         className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold px-2 py-0.5"
       >
-        ● Khám LS
+        Khám LS
       </span>
     );
   }
 
- 
- // chỉ hiển thị chip nguồn khi là LS
- if (queueType !== "can_lam_sang" && queueType !== "cls") {
-  // 2) Nguồn: Hẹn khám / Walk-in / Trả từ dịch vụ
   if (source === "appointment") {
     pills.push(
       <span
         key="src-appt"
         className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold px-2 py-0.5"
       >
-        Tái khám
+        Hẹn khám
       </span>
     );
   } else if (source === "walkin") {
@@ -165,20 +188,13 @@ function StatusPills({ item }) {
         key="src-return"
         className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold px-2 py-0.5"
       >
-        Trả từ dịch vụ
+        Trở từ dịch vụ
       </span>
     );
   }
 
+  return <div className="flex flex-wrap items-center gap-1.5">{pills}</div>;
 }
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {pills}
-    </div>
-  );
-}
-
-
 function tone(item, active) {
   if (active) return "teal";
   if (item.priority === "emergency") return "rose";
@@ -218,7 +234,6 @@ function getKey(p) {
   );
 }
 
-
 export default function PatientTable({ items = [], onStart, inProgress = new Set(), stretch = false }) {
   return (
     <section
@@ -228,11 +243,19 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
     >
       <div className={`${stretch ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"} p-4 pt-0`}>
         <table className="min-w-full table-fixed">
-          {/* colgroup % — KHÔNG để khoảng trắng bên trong */}
           <colgroup>
-            <col style={{width:"2%"}}/><col style={{width:"4%"}}/><col style={{width:"8%"}}/><col style={{width:"16%"}}/>
-            <col style={{width:"10%"}}/><col style={{width:"10%"}}/><col style={{width:"8%"}}/><col style={{width:"8%"}}/>
-            <col style={{width:"12%"}}/><col style={{width:"10%"}}/><col style={{width:"12%"}}/>
+            <col style={{ width: "2%" }} />
+            <col style={{ width: "5%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "6%" }} />
+            <col style={{ width: "6%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "8%" }} />
           </colgroup>
 
           <Thead>
@@ -241,9 +264,10 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
             <Th>Mã BN</Th>
             <Th>Họ tên</Th>
             <Th>Khoa</Th>
-            <Th>Bác sĩ</Th>
+            <Th>Nhân sự</Th>
             <Th>Giờ hẹn</Th>
             <Th>Đến lúc</Th>
+            <Th>Nguồn</Th>
             <Th>Trạng thái</Th>
             <Th>Ghi chú</Th>
             <Th last right>Thao tác</Th>
@@ -253,21 +277,36 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
             <AnimatePresence initial={false}>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-10 text-center text-slate-500">Không có bệnh nhân chờ.</td>
+                  <td colSpan={12} className="px-3 py-10 text-center text-slate-500">
+                    Không có bệnh nhân chờ.
+                  </td>
                 </tr>
               ) : (
                 items.map((p, i) => {
                   const key = getKey(p);
                   const active = inProgress.has(key);
                   const t = tone(p, active);
-                  const queueType = fld(p, "LoaiHangDoi", "loaiHangDoi", "queueType");
+                  const queueType = p.LoaiHangDoi || p.loaiHangDoi || p.queueType || p.visitType;
+                  const isClsQueue = /can_lam_sang|cls/i.test(queueType || "");
+                  const sourceVal = isClsQueue
+                    ? null
+                    : fld(
+                        p,
+                        "Nguon",
+                        "nguon",
+                        "source",
+                        "HinhThucTiepNhan",
+                        "hinhThucTiepNhan",
+                        "LoaiHen",
+                        "loaiHen"
+                      );
 
                   // Resolve patient display values depending on queue type (LS vs CLS)
                   const patientId = fld(p, "MaBenhNhan", "maBenhNhan", "pid", "id");
                   const patientName =
                     fld(
                       p,
-                      "TenBenhNhan",                     // top-level từ /api/queue/search
+                      "TenBenhNhan",
                       "PhieuKhamLsFull.TenBenhNhan",
                       "PhieuKhamLsFull.HoTen",
                       "PhieuKhamLs.TenBenhNhan",
@@ -278,66 +317,123 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                       "name"
                     ) || "";
 
-                    const deptName = fld(
-                                          p,
-                                          "TenKhoa",                          // top-level từ /api/queue/search
-                                          "PhieuKhamLsFull.TenKhoa",
-                                          "PhieuKhamClsFull.TenKhoa",
-                                          "dept",
-                                          "department"
-                                        );
+                  const deptName = fld(
+                    p,
+                    "TenKhoa",
+                    "PhieuKhamLsFull.TenKhoa",
+                    "PhieuKhamClsFull.TenKhoa",
+                    "dept",
+                    "department"
+                  );
 
-                                        const doctorName = fld(
-                                                              p,
-                                                              "TenBacSiKham",                     // top-level từ /api/queue/search
-                                                              "PhieuKhamLsFull.TenBacSiKham",
-                                                              "PhieuKhamLs.TenBacSiKham",
-                                                              "PhieuKhamLs.TenBacSi",
-                                                              "PhieuKhamClsFull.TenNguoiLap",
-                                                              "TenBacSi",
-                                                              "doctor"
-                                                            );
+                  let doctorName;
+                  if (isClsQueue) {
+                    doctorName =
+                      fld(
+                        p,
+                        "TenYTaThucHien",
+                        "PhieuKhamClsItem.TenYTaThucHien",
+                        "PhieuKhamClsFull.TenYTaThucHien",
+                        "PhieuKhamClsFull.TenNguoiLap",
+                        "PhieuKhamCls.TenNguoiLap"
+                      ) ||
+                      (() => {
+                        const list = p?.PhieuKhamClsFull?.ListItemDV || p?.PhieuKhamCls?.ListItemDV || [];
+                        if (Array.isArray(list) && list.length) {
+                          return (
+                            list[0]?.TenYTaThucHien ||
+                            list[0]?.TenNguoiLap ||
+                            list[0]?.NguoiLap ||
+                            ""
+                          );
+                        }
+                        return "";
+                      })();
+                  } else {
+                    doctorName = fld(
+                      p,
+                      "TenBacSiKham",
+                      "PhieuKhamLsFull.TenBacSiKham",
+                      "PhieuKhamLs.TenBacSiKham",
+                      "PhieuKhamLs.TenBacSi",
+                      "TenBacSi",
+                      "doctor"
+                    );
+                  }
 
                   // Appointment time: prefer explicit timestamp fields, otherwise combine NgayLap+GioLap when present
-                  let apptTimeRaw = fld(p, "ThoiGianLichHen", "thoiGianLichHen", "time");
-                  if (!apptTimeRaw) {
-                    const ngayLap = fld(p, "PhieuKhamLs.NgayLap", "PhieuKhamLsFull.NgayLap", "PhieuKhamCls.NgayGioLap");
-                    const gioLap = fld(p, "PhieuKhamLs.GioLap", "PhieuKhamLsFull.GioLap", "PhieuKhamCls.GioLap");
-                    if (ngayLap && gioLap) {
-                      // gioLap might be a time-only string like "07:15:00"
-                      const datePart = (new Date(ngayLap)).toISOString().slice(0,10);
-                      apptTimeRaw = `${datePart}T${gioLap}`;
-                    } else if (ngayLap) {
-                      apptTimeRaw = ngayLap;
+                  let apptTimeRaw = null;
+                  if (!isClsQueue) {
+                    apptTimeRaw = fld(p, "ThoiGianLichHen", "thoiGianLichHen", "time");
+                    if (!apptTimeRaw) {
+                      const ngayLap = fld(p, "PhieuKhamLs.NgayLap", "PhieuKhamLsFull.NgayLap");
+                      const gioLap = fld(p, "PhieuKhamLs.GioLap", "PhieuKhamLsFull.GioLap");
+                      if (ngayLap && gioLap) {
+                        const datePart = new Date(ngayLap).toISOString().slice(0, 10);
+                        apptTimeRaw = `${datePart}T${gioLap}`;
+                      } else if (ngayLap) {
+                        apptTimeRaw = ngayLap;
+                      }
                     }
                   }
+
                   const checkinRaw = fld(p, "ThoiGianCheckin", "thoiGianCheckin", "checkIn");
                   const noteText = fld(p, "Nhan", "nhan", "GhiChu", "note", "symptoms");
+
                   return (
                     <Row key={key ?? i} i={i}>
-                      <Td first><i className={`inline-block w-2 h-2 rounded-full ${pillTone[t].dot}`} title={t} /></Td>
+                      <Td first>
+                        <i className={`inline-block w-2 h-2 rounded-full ${pillTone[t].dot}`} title={t} />
+                      </Td>
                       <Td>{i + 1}</Td>
-                      <Td><span className="font-mono font-semibold truncate block">{patientId || "—"}</span></Td>
+                      <Td>
+                        <span className="font-mono font-semibold truncate block">{patientId || "--"}</span>
+                      </Td>
                       <Td>
                         <div className="flex items-center gap-2 min-w-0">
                           <InitialAvatar name={patientName || ""} id={patientId || ""} />
                           <div className="min-w-0">
-                            <div className="font-semibold truncate text-slate-900" title={Object.keys(p).join(", ")}>{patientName || "—"}</div>
-                            {(fld(p, "Nguon", "nguon", "source") === "walkin") && <div className="text-[11px] text-slate-500 truncate">Khách đến trực tiếp</div>}
+                            <div className="font-semibold truncate text-slate-900">{patientName || "--"}</div>
+                            {sourceVal === "walkin" && (
+                              <div className="text-[11px] text-slate-500 truncate">Khách đến trực tiếp</div>
+                            )}
                           </div>
                         </div>
                       </Td>
-                      <Td><span className="truncate block">{deptName || "—"}</span></Td>
-                      <Td><span className="truncate block">{doctorName || "—"}</span></Td>
-                      <Td><span className="truncate block">{apptTimeRaw ? new Date(apptTimeRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—"}</span></Td>
-                      <Td title={checkinRaw ? new Date(checkinRaw).toLocaleString() : ""}>
+                      <Td>
+                        <span className="truncate block">{deptName || "--"}</span>
+                      </Td>
+                      <Td>
+                        <span className="truncate block">{doctorName || "--"}</span>
+                      </Td>
+                      <Td>
                         <span className="truncate block">
-                          {checkinRaw ? new Date(checkinRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                          {apptTimeRaw
+                            ? new Date(apptTimeRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+                            : "--"}
                         </span>
                       </Td>
-                      <Td><StatusPills  item={p} /></Td>
-                      <Td><div className="truncate text-slate-700 max-w-[8rem] break-words">{noteText || "—"}</div></Td>
-                      <Td last right ><div className="flex items-center justify-end gap-3"><ActionButton active={active} onClick={() => onStart?.(p)} /></div></Td>
+                      <Td title={checkinRaw ? new Date(checkinRaw).toLocaleString() : ""}>
+                        <span className="truncate block">
+                          {checkinRaw
+                            ? new Date(checkinRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+                            : "--"}
+                        </span>
+                      </Td>
+                      <Td>
+                        <SourcePills item={p} />
+                      </Td>
+                      <Td>
+                        <StatusBadge item={p} />
+                      </Td>
+                      <Td>
+                        <div className="truncate text-slate-700 max-w-[8rem] break-words">{noteText || "--"}</div>
+                      </Td>
+                      <Td last right>
+                        <div className="flex items-center justify-end gap-3">
+                          <ActionButton active={active} onClick={() => onStart?.(p)} />
+                        </div>
+                      </Td>
                     </Row>
                   );
                 })

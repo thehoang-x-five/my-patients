@@ -17,7 +17,7 @@ export const STATUSES = {
   WAIT_PROC: "cho_xu_ly",
   WAIT_PROC_SVC: "cho_xu_ly_dv",
   DONE: "hoan_tat",
-  CANCELLED: "da_huy"||"huy",
+  CANCELLED: "da_huy"??"huy",
 };
 
 export const ACCOUNT_STATUSES = ["hoat_dong", "khong_hoat_dong", "da_xoa"];
@@ -67,6 +67,16 @@ const ACCOUNT_STATUS_LABELS = {
   inactive: "Không hoạt động",
   deleted: "Đã xóa",
 };
+
+// Chuẩn hóa mã trạng thái tài khoản về canonical code
+function mapAccountStatusCode(codeOrLabel) {
+  if (!codeOrLabel) return "";
+  const low = String(codeOrLabel).toLowerCase();
+  if (["hoat_dong", "active", "1"].includes(low)) return "hoat_dong";
+  if (["khong_hoat_dong", "inactive", "0"].includes(low)) return "khong_hoat_dong";
+  if (["da_xoa", "deleted", "xoa"].includes(low)) return "da_xoa";
+  return low;
+}
 
 export function mapAccountStatusLabel(codeOrLabel) {
   if (!codeOrLabel) return "";
@@ -178,12 +188,13 @@ function normalizePatientFields(dto = {}) {
   const statusDate = dto.NgayTrangThai || dto.ngayTrangThai || null;
 
   // Detail DTO có TrangThaiTaiKhoan, summary có thể không → default "hoat_dong"
-  const accountStatus =
+  const accountStatusRaw =
     dto.TrangThaiTaiKhoan ||
     dto.trangThaiTaiKhoan ||
     dto.AccountStatus ||
     dto.accountStatus ||
     "hoat_dong";
+  const accountStatus = mapAccountStatusCode(accountStatusRaw);
 
   // formatted values for UI
   const nameFormatted = capitalizeWords(name || "");
@@ -218,10 +229,11 @@ function normalizePatientFields(dto = {}) {
     diaChi: address,
 
     // Trạng thái tài khoản & trong ngày
-    accountStatus,
+    accountStatus, // canonical code: hoat_dong | khong_hoat_dong | da_xoa
     accountStatusLabel,
-    trang_thai_tai_khoan: accountStatusLabel,
-    trangThaiTaiKhoan: accountStatusLabel,
+    trang_thai_tai_khoan: accountStatus, // keep code for filters
+    trangThaiTaiKhoan: accountStatus, // keep code for filters
+    trangThaiTaiKhoanLabel: accountStatusLabel,
 
     statusCode,
     status: mapTodayStatusLabel(statusCode),

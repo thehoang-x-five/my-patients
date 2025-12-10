@@ -412,29 +412,42 @@ const svcMap = useMemo(() => {
 
   // Hoàn tất CLS
   async function handleFinishCLS() {
-    const pid = patient?.pid || patient?.id;
-    const payload = {
-      dx: {
-        note: dx.note || "",
-        result: clsResult || "",
-      },
-      result: clsResult || "",
-      note: dx.note || "",
-      files: clsFiles,
-      services: patient?.services?.map((s) => s.id) || [],
-    };
-
-    if (onExportDiagnosis) {
-      await onExportDiagnosis(patient, payload);
+    const maChiTietDv =
+      patient?.maChiTietDv ||
+      patient?.MaChiTietDv ||
+      patient?.PhieuKhamClsItem?.MaChiTietDv ||
+      null;
+    if (!maChiTietDv) {
+      toast.error("Thiếu mã chi tiết dịch vụ CLS.");
       return;
     }
+    const staffCode =
+      patient?.maNhanSuThucHien ||
+      patient?.MaNhanSuThucHien ||
+      patient?.maYTaHoTro ||
+      patient?.MaYTaHoTro ||
+      null;
 
-    await dxMut.mutateAsync({
-      pid,
-      dx: payload.dx,
-      rx: [],
-      services: payload.services,
-    });
+    try {
+      await createClsResultMut.mutateAsync({
+        MaChiTietDv: maChiTietDv,
+        TrangThaiChot: "da_co_ket_qua",
+        NoiDungKetQua: clsResult || dx.note || "",
+        MaNhanSuThucHien: staffCode,
+        TepDinhKem: "",
+      });
+      toast.success("Đã gửi kết quả CLS.");
+      onBack?.();
+    } catch (err) {
+      const msg =
+        err?.response?.data?.Message ||
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Không thể gửi kết quả CLS.";
+      toast.error(msg);
+    }
   }
 
   return (

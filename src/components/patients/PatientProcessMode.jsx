@@ -8,6 +8,7 @@ export default function PatientProcessMode({
   rx,
   totalDrugAmount,
   handleFinishDoctor,
+  handleFetchFinalDiagnosis,
 }) {
   // Hỗ trợ cả shape FinalDiagnosisDto & shape cũ (dxPrimary, dxSecondary,...)
   const diagCode =
@@ -211,6 +212,17 @@ export default function PatientProcessMode({
         </motion.div>
 
         <div className="flex items-center justify-end gap-3 mt-2 pt-2 border-t border-slate-200">
+          {typeof handleFetchFinalDiagnosis === "function" && (
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleFetchFinalDiagnosis}
+              className="px-4 py-3 rounded-xl bg-white text-emerald-700 font-semibold ring-1 ring-emerald-200 shadow-sm hover:bg-emerald-50 transition"
+            >
+              Tải chẩn đoán cuối
+            </motion.button>
+          )}
           <motion.button
             type="button"
             whileHover={{ scale: 1.02, y: -1 }}

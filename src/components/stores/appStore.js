@@ -379,6 +379,12 @@ export const useExamStore = create((set, get) => ({
   active: null, // current patient object in ExamDetail
   setActive: (p) => set({ active: p }),
 
+  prefillAppointment: null,
+  setPrefillAppointment: (appt) => set({ prefillAppointment: appt || null }),
+
+  currentClinical: null,
+  setCurrentClinical: (list) => set({ currentClinical: list || null }),
+
   inProgress: new Set(), // keys in queue being examined
   start: (key) => {
     const s = new Set(get().inProgress);

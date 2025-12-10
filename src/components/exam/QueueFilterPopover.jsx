@@ -1,19 +1,26 @@
-// src/components/examination/QueueFilterPopover.jsx
+// src/components/exam/QueueFilterPopover.jsx
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 
 const SOURCE_OPTIONS = [
-  { value: "all", label: "Tất cả nguồn" },
+  { value: "all", label: "Tất cả " },
   { value: "walkin", label: "Walk-in" },
   { value: "appointment", label: "Hẹn khám" },
-  { value: "service_return", label: "Trả từ dịch vụ" },
+  { value: "service_return", label: "Trở từ dịch vụ" },
 ];
 
 const TYPE_OPTIONS = [
-  { value: "all", label: "Tất cả lượt" },
+  { value: "all", label: "Tất cả" },
   { value: "ls", label: "Khám LS" },
   { value: "cls", label: "Cận lâm sàng" },
+];
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "Tất cả" },
+  { value: "cho_goi", label: "Đang chờ" },
+  { value: "dang_thuc_hien", label: "Đang thực hiện" },
+  { value: "da_phuc_vu", label: "Đã phục vụ" },
 ];
 
 export default function QueueFilterPopover({
@@ -28,6 +35,7 @@ export default function QueueFilterPopover({
 
   const source = values?.source ?? "all";
   const kind = values?.kind ?? "all";
+  const status = values?.status ?? "all";
   const search = values?.search ?? "";
 
   const anchorNode =
@@ -39,7 +47,7 @@ export default function QueueFilterPopover({
     if (!el) return;
     const r = el.getBoundingClientRect();
     const vw = window.innerWidth;
-    const width = 375;
+    const width = 370;
     const left = Math.min(Math.max(r.right - width, 12), vw - width - 12);
     const top = r.bottom + 8;
     setPos({ top, left, width });
@@ -82,7 +90,7 @@ export default function QueueFilterPopover({
             <div className="px-3 py-2 bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border-b border-emerald-100">
               <div className="text-[13px] font-extrabold text-emerald-800 flex items-center gap-2">
                 <span className="inline-flex w-5 h-5 rounded-lg bg-emerald-50 text-[11px] text-emerald-700 border border-emerald-100 ring-1 ring-emerald-200 items-center justify-center">
-                  ⚗️
+                  🔎
                 </span>
                 Lọc hàng chờ
               </div>
@@ -99,7 +107,7 @@ export default function QueueFilterPopover({
                       onChange={(e) =>
                         setValues((v) => ({ ...v, search: e.target.value }))
                       }
-                      placeholder="Tìm theo tên / mã BN / SĐT…"
+                      placeholder="Tìm theo tên / mã BN / SĐT"
                       className="w-full rounded-2xl border border-slate-200 bg-white pl-7 pr-7 py-1.5 text-[13px] text-slate-800 placeholder:text-slate-400 focus:border-transparent focus:ring-2 focus:ring-teal-500"
                     />
                     <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
@@ -108,13 +116,11 @@ export default function QueueFilterPopover({
                     {search && (
                       <button
                         type="button"
-                        onClick={() =>
-                          setValues((v) => ({ ...v, search: "" }))
-                        }
+                        onClick={() => setValues((v) => ({ ...v, search: "" }))}
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                         aria-label="Xóa tìm kiếm"
                       >
-                        ✕
+                        ×
                       </button>
                     )}
                   </div>
@@ -130,9 +136,7 @@ export default function QueueFilterPopover({
                       <button
                         key={opt.value}
                         type="button"
-                        onClick={() =>
-                          setValues((v) => ({ ...v, source: opt.value }))
-                        }
+                        onClick={() => setValues((v) => ({ ...v, source: opt.value }))}
                         className={[
                           "px-2.5 py-1 rounded-full border text-[12px] font-semibold",
                           active
@@ -156,13 +160,35 @@ export default function QueueFilterPopover({
                       <button
                         key={opt.value}
                         type="button"
-                        onClick={() =>
-                          setValues((v) => ({ ...v, kind: opt.value }))
-                        }
+                        onClick={() => setValues((v) => ({ ...v, kind: opt.value }))}
                         className={[
                           "px-2.5 py-1 rounded-full border text-[12px] font-semibold",
                           active
                             ? "bg-sky-100 border-sky-400 text-sky-800"
+                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                Trạng thái
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {STATUS_OPTIONS.map((opt) => {
+                    const active = opt.value === status;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setValues((v) => ({ ...v, status: opt.value }))}
+                        className={[
+                          "px-2.5 py-1 rounded-full border text-[12px] font-semibold",
+                          active
+                            ? "bg-amber-100 border-amber-400 text-amber-800"
                             : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50",
                         ].join(" ")}
                       >

@@ -6,12 +6,12 @@ export default function ExamToolbar({
   todayCount = 0,
   waitingCount = 0,
   inProgressCount = 0,
-  onOpenFilter, // mở popover
-  onReset, // reset bộ lọc + search
+  doneCount = 0,
+  onOpenFilter,
+  onReset,
 }) {
   return (
     <div className="mt-0 mb-1 flex flex-wrap items-center gap-2">
-      {/* Chips tổng quan bên trái */}
       <Chip dot="teal">
         Hôm nay <b className="ml-1">{todayCount}</b>
       </Chip>
@@ -21,10 +21,13 @@ export default function ExamToolbar({
       </Chip>
 
       <Chip dot="emerald">
-        Đang khám <b className="ml-1">{inProgressCount}</b>
+        Đang thực hiện <b className="ml-1">{inProgressCount}</b>
       </Chip>
 
-      {/* Phần bên phải: Reset + Lọc (search nằm trong popover) */}
+      <Chip dot="cyan">
+        Đã phục vụ <b className="ml-1">{doneCount}</b>
+      </Chip>
+
       <div className="ml-auto flex items-center gap-2">
         <motion.button
           type="button"
@@ -33,7 +36,8 @@ export default function ExamToolbar({
           whileTap={{ scale: 0.98 }}
           className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-sky-50"
         >
-          <span className="text-slate-500 text-sm">⟲</span>
+          <span className="text-slate-500 text-sm">↺</span>
+     
         </motion.button>
 
         <motion.button
@@ -44,7 +48,7 @@ export default function ExamToolbar({
           whileTap={{ scale: 0.98 }}
           className="inline-flex items-center gap-1 rounded-xl border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-sky-100"
         >
-          <span className="text-sky-500">⚗️</span>
+          <span className="text-sky-500">🔍</span>
           <span>Lọc</span>
         </motion.button>
       </div>

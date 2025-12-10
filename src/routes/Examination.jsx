@@ -5,6 +5,7 @@ import ExamToolbar from "../components/exam/ExamToolbar.jsx";
 import PatientTable from "../components/exam/PatientTable.jsx";
 import ExamDetail from "../components/exam/ExamDetail.jsx";
 import QueueFilterPopover from "../components/exam/QueueFilterPopover.jsx";
+import { toast } from "react-toastify";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -56,8 +57,16 @@ export default function Examination() {
 
   const qc = useQueryClient();
   const { data: queueData } = useQueueToday();
- 
+
   const patients = Array.isArray(queueData?.items) ? queueData.items : [];
+
+  const keyOf = (p) =>
+    p?.MaHangDoi ??
+    p?.maHangDoi ??
+    p?.queueId ??
+    p?.id ??
+    p?.pid ??
+    null;
   
   // Chuẩn hóa chữ cái đầu cho nhãn hiển thị (ví dụ: "nam" -> "Nam")
   function titleCase(val) {
@@ -70,7 +79,7 @@ export default function Examination() {
     return lower.charAt(0).toUpperCase() + lower.slice(1);
   }
   
-    const finishMut = useFinishRemove();
+  const finishMut = useFinishRemove();
     const orderMut = useCreateExamOrder();
     const dxMut = useCreateDiagnosis({ skipInvalidate: true });
   const createVisitMut = useCreateHistoryVisit();
@@ -83,17 +92,29 @@ export default function Examination() {
     source: "all",
     kind: "all",
     search: "",
+    status: "all",
   });
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // Lấy số đang chờ và đang khám từ BE (TrangThai) cho chuẩn
+  // Lấy số theo trạng thái queue
   const waitingCount = useMemo(
-    () => patients.filter((p) => (p.TrangThai || p.trangThai || p.status) === "cho_goi").length,
+    () =>
+      patients.filter((p) => (p.TrangThai || p.trangThai || p.status) === "cho_goi").length,
     [patients]
   );
 
   const inProgressCount = useMemo(
-    () => patients.filter((p) => (p.TrangThai || p.trangThai || p.status) === "dang_thuc_hien" || (p.TrangThai || p.trangThai || p.status) === "dang_kham").length,
+    () =>
+      patients.filter((p) => {
+        const status = p.TrangThai || p.trangThai || p.status;
+        return status === "dang_thuc_hien" || status === "dang_kham";
+      }).length,
+    [patients]
+  );
+
+  const doneCount = useMemo(
+    () =>
+      patients.filter((p) => (p.TrangThai || p.trangThai || p.status) === "da_phuc_vu").length,
     [patients]
   );
 
@@ -109,11 +130,17 @@ export default function Examination() {
 
   const filtered = useMemo(() => {
     let arr = [...patients];
-    const { source, kind, search } = filter;
+    const { source, kind, search, status } = filter;
 
     if (source !== "all") {
       arr = arr.filter(
         (p) => (p.Nguon || p.nguon || p.source || "walkin") === source
+      );
+    }
+
+    if (status !== "all") {
+      arr = arr.filter(
+        (p) => (p.TrangThai || p.trangThai || p.status) === status
       );
     }
 
@@ -135,6 +162,14 @@ export default function Examination() {
         return bag.includes(term);
       });
     }
+
+    // Sắp xếp theo trạng thái: chờ -> đang thực hiện -> đã phục vụ -> khác
+    const order = { cho_goi: 0, dang_thuc_hien: 1, dang_kham: 1, da_phuc_vu: 2 };
+    arr.sort((a, b) => {
+      const sa = order[a.TrangThai || a.trangThai || a.status] ?? 99;
+      const sb = order[b.TrangThai || b.trangThai || b.status] ?? 99;
+      return sa - sb;
+    });
 
     return arr;
   }, [patients, filter]);
@@ -206,39 +241,72 @@ export default function Examination() {
     raw.PhieuKhamClsFull?.MaPhong ??
     null;
 
-  const maBacSi =
+  const queueType = queueItem?.LoaiHangDoi ?? raw.LoaiHangDoi ?? null;
+  const isClsQueue = /can_lam_sang|cls/i.test(queueType || "");
+  const clsStaffCodeFromList = (() => {
+    const list =
+      raw?.PhieuKhamClsFull?.ListItemDV ||
+      raw?.PhieuKhamCls?.ListItemDV ||
+      [];
+    if (Array.isArray(list) && list.length) {
+      const it = list.find(
+        (x) =>
+          x.MaYTaThucHien ||
+          x.maYTaThucHien ||
+          x.MaNguoiLap ||
+          x.NguoiLap
+      );
+      return (
+        it?.MaYTaThucHien ||
+        it?.maYTaThucHien ||
+        it?.MaNguoiLap ||
+        it?.NguoiLap ||
+        null
+      );
+    }
+    return null;
+  })();
+
+  const staffCodeCls =
+    (isClsQueue &&
+      (raw.MaYTaThucHien ||
+        raw.MaNhanSuThucHien ||
+        raw.MaYTaHoTro ||
+        raw.maYTaThucHien ||
+        raw.maNhanSuThucHien ||
+        raw.maYTaHoTro ||
+        raw.PhieuKhamClsItem?.MaYTaThucHien ||
+        raw.PhieuKhamClsFull?.MaYTaThucHien ||
+        raw.PhieuKhamClsFull?.MaNguoiLap ||
+        clsStaffCodeFromList)) ||
+    null;
+
+  const maBacSiLs =
     raw.MaBacSiKham ?? // từ queue DTO LS
     queueItem?.MaBacSi ?? // nếu BE có map sẵn
     raw.MaBacSi ?? // fallback
     null;
 
+  const fallbackStaff = getCurrentUserMaNhanSu();
+  const maNhanSuThucHien = isClsQueue
+    ? staffCodeCls || fallbackStaff
+    : maBacSiLs || fallbackStaff;
+  const maYTaHoTro = isClsQueue ? staffCodeCls || fallbackStaff : null;
+  const maHangDoiForVisit =
+    queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key ?? null;
+  if (!maHangDoiForVisit) {
+    throw new Error("Thiếu MaHangDoi khi tạo lượt khám");
+  }
+
         const visitRes = await createVisitMut.mutateAsync({
-          MaHangDoi: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
-          MaNhanSuThucHien:maBacSi ,
-          MaYTaHoTro: null,
+          MaHangDoi: maHangDoiForVisit,
+          MaNhanSuThucHien: maNhanSuThucHien,
+          MaYTaHoTro: maYTaHoTro,
           ThoiGianBatDau: nowIso,
           ThoiGianKetThuc: null,
           LoaiLuot: queueItem?.LoaiHangDoi ?? raw.LoaiHangDoi ?? null,
           TrangThai: "dang_thuc_hien",
-
-          // thêm các field BE cho phép, lấy trực tiếp từ queue
-          MaBenhNhan:
-            queueItem?.MaBenhNhan ??
-            raw.MaBenhNhan ??
-            p?.MaBenhNhan ??
-            p?.pid ??
-            null,
-          MaPhieuKhamLs:
-            raw.MaPhieuKham ??
-            raw.PhieuKhamLsFull?.MaPhieuKham ??
-            null,
-          MaKhoa:
-            queueItem?.MaKhoa ??
-            raw.MaKhoa ??
-            null,
-            MaPhong: maPhong,
-            MaBacSi: maBacSi,
-          });
+        });
         createdVisitMaLuot =
           visitRes?.MaLuotKham ??
           visitRes?.maLuotKham ??
@@ -248,6 +316,17 @@ export default function Examination() {
           null;
       } catch (err) {
         console.error("[Examination] createHistoryVisit error:", err);
+        const msg =
+          err?.response?.data?.Message ||
+          err?.response?.data?.message ||
+          err?.response?.data?.title ||
+          err?.response?.data?.detail ||
+          (err?.response?.status === 400
+            ? "Dữ liệu tạo lượt không hợp lệ."
+            : null) ||
+          err?.message ||
+          "Không thể tạo lượt khám CLS. Vui lòng thử lại.";
+        toast.error(msg);
       }
 
       // 3) Map data hàng đợi -> model patient cho ExamDetail
@@ -384,6 +463,14 @@ export default function Examination() {
             phieuClsFull.ListItemDV[0]?.TenDichVu) ??
           p?.serviceName ??
           "",
+        maChiTietDv:
+          raw.MaChiTietDv ??
+          phieuClsItem?.MaChiTietDv ??
+          (Array.isArray(phieuClsFull?.ListItemDV) &&
+            phieuClsFull.ListItemDV[0]?.MaChiTietDv) ??
+          null,
+        maNhanSuThucHien: maNhanSuThucHien,
+        maYTaHoTro: maYTaHoTro,
 
         // danh sách DV CLS để ExamDetail dùng nếu cần
         serviceOrder:
@@ -425,16 +512,6 @@ export default function Examination() {
           p?.visitId ??
           createdVisitMaLuot ??
           null,
-        MaLuotKham:
-          raw.MaLuotKham ??
-          raw.MaLuot ??
-          phieuLsFull?.MaLuotKham ??
-          phieuClsFull?.MaLuotKham ??
-          p?.MaLuotKham ??
-          p?.maLuotKham ??
-          p?.visitId ??
-          createdVisitMaLuot ??
-          null,
         visitIdCreated: createdVisitMaLuot ?? p?.visitIdCreated ?? null,
       };
 
@@ -464,19 +541,13 @@ export default function Examination() {
       patient?.phieuKhamCls?.MaPhieuKhamCls ||
       null;
 
-    const maPhieuKhamLs =
-      orderPayload?.MaPhieuKhamLs ||
-      patient?.MaPhieuKhamLs ||
-      patient?.maPhieuKhamLs ||
-      patient?.MaPhieuKham ||
-      patient?.maPhieuKham ||
-      null;
-
-    const createdSet = loadClsCreatedSet();
-    if (maPhieuKhamLs && createdSet.has(String(maPhieuKhamLs))) {
-      setActive(null);
-      return;
-    }
+      const maPhieuKhamLs =
+        orderPayload?.MaPhieuKhamLs ||
+        patient?.MaPhieuKhamLs ||
+        patient?.maPhieuKhamLs ||
+        patient?.MaPhieuKham ||
+        patient?.maPhieuKham ||
+        null;
 
     setInProgress((prev) => {
       const s = new Set(prev);
@@ -495,16 +566,10 @@ export default function Examination() {
       ...orderPayload,
     };
 
-    rememberQueueAwaitingReturn(key);
-
     // Tránh lỗi duplicate khi CLS đã tồn tại cho cùng MaPhieuKhamLs
     if (!existingClsId) {
       try {
         await orderMut.mutateAsync(payload);
-        if (maPhieuKhamLs) {
-          createdSet.add(String(maPhieuKhamLs));
-          persistClsCreatedSet(createdSet);
-        }
       } catch (err) {
         const msg = String(err?.message || err || "");
         const respData =
@@ -520,10 +585,6 @@ export default function Examination() {
           combined.includes("MaPhieuKhamLs");
 
         if (!isDuplicate) throw err;
-        if (maPhieuKhamLs) {
-          createdSet.add(String(maPhieuKhamLs));
-          persistClsCreatedSet(createdSet);
-        }
       }
     }
 
@@ -624,10 +685,10 @@ export default function Examination() {
             todayCount={patients.length}
             waitingCount={waitingCount}
             inProgressCount={inProgressCount}
+            doneCount={doneCount}
             onOpenFilter={() => setFilterOpen(true)}
             onReset={() => {
-              // reset giống Patients: xóa search + đưa filter về mặc định
-              setFilter({ source: "all", kind: "all", search: "" });
+              setFilter({ source: "all", kind: "all", status: "all", search: "" });
             }}
           />
         )}

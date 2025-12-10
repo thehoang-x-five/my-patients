@@ -355,29 +355,22 @@ export async function search(filter = {}) {
     SortBy: filter.SortBy ?? filter.sortBy ?? null,
     SortDirection: filter.SortDirection ?? filter.sortDirection ?? null,
     Page: filter.Page ?? filter.page ?? 1,
-    PageSize: filter.PageSize ?? filter.pageSize ?? 50,
+    PageSize: filter.PageSize ?? filter.pageSize ?? 500,
   });
   const res = await http.post(`/queue/search`, body);
   const data = res?.data ?? res;
   const items = data?.items ?? data?.Items ?? [];
 
-  const normalizedItems = Array.isArray(items)
-    ? items.map((x) => normalizeQueueItem(x))
-    : [];
-
-  // Ẩn các mã hàng đợi đã chuyển đi CLS cho tới khi quay lại (nguồn service_return)
-  const { filtered } = filterReturnQueues(normalizedItems);
-
   return {
-    items: filtered,
+    items: Array.isArray(items) ? items.map((x) => normalizeQueueItem(x)) : [],
     totalItems:
       data?.TotalItems ??
       data?.totalItems ??
       data?.total ??
-      filtered.length ??
+      (Array.isArray(items) ? items.length : 0) ??
       null,
     page: data?.Page ?? data?.page ?? body.Page ?? 1,
-    pageSize: data?.PageSize ?? data?.pageSize ?? body.PageSize ?? 50,
+    pageSize: data?.PageSize ?? data?.pageSize ?? body.PageSize ?? 500,
   };
 }
 
@@ -426,7 +419,7 @@ export function useQueueSearch(params = {}, options = {}) {
       SortBy: params.SortBy ?? params.sortBy ?? null,
       SortDirection: params.SortDirection ?? params.sortDirection ?? null,
       Page: params.Page ?? params.page ?? 1,
-      PageSize: params.PageSize ?? params.pageSize ?? 50,
+      PageSize: params.PageSize ?? params.pageSize ?? 500,
     };
   }, [
     params.MaPhong,
