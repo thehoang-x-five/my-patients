@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+﻿import React, { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import ExamToolbar from "../components/exam/ExamToolbar.jsx";
@@ -215,315 +215,276 @@ export default function Examination() {
     const key = getKey(p);
     if (!key) return;
 
-    // đánh dấu đang khám
-    setInProgress((prev) => {
-      const s = new Set(prev);
-      s.add(key);
-      return s;
-    });
+    const markInProgress = () => {
+      setInProgress((prev) => {
+        const s = new Set(prev);
+        s.add(key);
+        return s;
+      });
+    };
 
     let mappedPatient = null;
     let createdVisitMaLuot = null;
+
+    // 1) Lay chi tiet hang doi
+    let queueItem;
     try {
-      // 1) Lấy chi tiết hàng đợi
-      const queueItem = await getQueueById(key);
-      const raw = queueItem?._raw ?? queueItem ?? {};
+      queueItem = await getQueueById(key);
+    } catch (err) {
+      console.error("[Examination] getQueueById error:", err);
+      const msg =
+        err?.response?.data?.Message ||
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Khong the lay thong tin hang doi.";
+      toast.error(msg);
+      return;
+    }
+
+    const raw = queueItem?._raw ?? queueItem ?? {};
 
       // 2) Tạo lượt khám (HistoryVisit)
-      const nowIso = new Date().toISOString();
-      try {
-            // >>>>>>>>>>>>> BỔ SUNG CHỖ NÀY <<<<<<<<<<<<<<
-    // Lấy mã phòng và mã bác sĩ từ hàng chờ
-    const maPhong =
-    queueItem?.MaPhong ??
-    raw.MaPhong ??
-    raw.PhieuKhamLsFull?.MaPhong ??
-    raw.PhieuKhamClsFull?.MaPhong ??
-    null;
-
-  const queueType = queueItem?.LoaiHangDoi ?? raw.LoaiHangDoi ?? null;
-  const isClsQueue = /can_lam_sang|cls/i.test(queueType || "");
-  const clsStaffCodeFromList = (() => {
-    const list =
-      raw?.PhieuKhamClsFull?.ListItemDV ||
-      raw?.PhieuKhamCls?.ListItemDV ||
-      [];
-    if (Array.isArray(list) && list.length) {
-      const it = list.find(
-        (x) =>
-          x.MaYTaThucHien ||
-          x.maYTaThucHien ||
-          x.MaNguoiLap ||
-          x.NguoiLap
-      );
-      return (
-        it?.MaYTaThucHien ||
-        it?.maYTaThucHien ||
-        it?.MaNguoiLap ||
-        it?.NguoiLap ||
-        null
-      );
-    }
-    return null;
-  })();
-
-  const staffCodeCls =
-    (isClsQueue &&
-      (raw.MaYTaThucHien ||
-        raw.MaNhanSuThucHien ||
-        raw.MaYTaHoTro ||
-        raw.maYTaThucHien ||
-        raw.maNhanSuThucHien ||
-        raw.maYTaHoTro ||
-        raw.PhieuKhamClsItem?.MaYTaThucHien ||
-        raw.PhieuKhamClsFull?.MaYTaThucHien ||
-        raw.PhieuKhamClsFull?.MaNguoiLap ||
-        clsStaffCodeFromList)) ||
-    null;
-
-  const maBacSiLs =
-    raw.MaBacSiKham ?? // từ queue DTO LS
-    queueItem?.MaBacSi ?? // nếu BE có map sẵn
-    raw.MaBacSi ?? // fallback
-    null;
-
-  const fallbackStaff = getCurrentUserMaNhanSu();
-  const maNhanSuThucHien = isClsQueue
-    ? staffCodeCls || fallbackStaff
-    : maBacSiLs || fallbackStaff;
-  const maYTaHoTro = isClsQueue ? staffCodeCls || fallbackStaff : null;
-  const maHangDoiForVisit =
-    queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key ?? null;
-  if (!maHangDoiForVisit) {
-    throw new Error("Thiếu MaHangDoi khi tạo lượt khám");
-  }
-
-        const visitRes = await createVisitMut.mutateAsync({
-          MaHangDoi: maHangDoiForVisit,
-          MaNhanSuThucHien: maNhanSuThucHien,
-          MaYTaHoTro: maYTaHoTro,
-          ThoiGianBatDau: nowIso,
-          ThoiGianKetThuc: null,
-          LoaiLuot: queueItem?.LoaiHangDoi ?? raw.LoaiHangDoi ?? null,
-          TrangThai: "dang_thuc_hien",
-        });
-        createdVisitMaLuot =
-          visitRes?.MaLuotKham ??
-          visitRes?.maLuotKham ??
-          visitRes?.MaLuot ??
-          visitRes?.maLuot ??
-          visitRes?.id ??
-          null;
-      } catch (err) {
-        console.error("[Examination] createHistoryVisit error:", err);
-        const msg =
-          err?.response?.data?.Message ||
-          err?.response?.data?.message ||
-          err?.response?.data?.title ||
-          err?.response?.data?.detail ||
-          (err?.response?.status === 400
-            ? "Dữ liệu tạo lượt không hợp lệ."
-            : null) ||
-          err?.message ||
-          "Không thể tạo lượt khám CLS. Vui lòng thử lại.";
-        toast.error(msg);
-      }
-
-      // 3) Map data hàng đợi -> model patient cho ExamDetail
-      const phieuLsFull = raw.PhieuKhamLsFull || null;
-      const phieuClsFull = raw.PhieuKhamClsFull || null;
-      const phieuClsItem = raw.PhieuKhamClsItem || null;
-
-      // tuổi (nếu có NgaySinh)
-      let age = null;
-      const dob =
-        phieuLsFull?.NgaySinh ??
-        phieuClsFull?.NgaySinh ??
-        null;
-      if (dob) {
-        const d = new Date(dob);
-        if (!Number.isNaN(d.getTime())) {
-          const today = new Date();
-          age =
-            today.getFullYear() -
-            d.getFullYear() -
-            (today.getMonth() < d.getMonth() ||
-              (today.getMonth() === d.getMonth() &&
-                today.getDate() < d.getDate())
-              ? 1
-              : 0);
+    const nowIso = new Date().toISOString();
+    try {
+      const queueType = queueItem?.LoaiHangDoi ?? raw.LoaiHangDoi ?? null;
+      const isClsQueue = /can_lam_sang|cls/i.test(queueType || "");
+      const clsStaffCodeFromList = (() => {
+        const list =
+          raw?.PhieuKhamClsFull?.ListItemDV ||
+          raw?.PhieuKhamCls?.ListItemDV ||
+          [];
+        if (Array.isArray(list) && list.length) {
+          const it = list.find(
+            (x) =>
+              x.MaYTaThucHien ||
+              x.maYTaThucHien ||
+              x.MaNguoiLap ||
+              x.NguoiLap
+          );
+          return (
+            it?.MaYTaThucHien ||
+            it?.maYTaThucHien ||
+            it?.MaNguoiLap ||
+            it?.NguoiLap ||
+            null
+          );
         }
+        return null;
+      })();
+
+      const staffCodeCls =
+        (isClsQueue &&
+          (raw.MaYTaThucHien ||
+            raw.MaNhanSuThucHien ||
+            raw.MaYTaHoTro ||
+            raw.maYTaThucHien ||
+            raw.maNhanSuThucHien ||
+            raw.maYTaHoTro ||
+            raw.PhieuKhamClsItem?.MaYTaThucHien ||
+            raw.PhieuKhamClsFull?.MaYTaThucHien ||
+            raw.PhieuKhamClsFull?.MaNguoiLap ||
+            clsStaffCodeFromList)) ||
+        null;
+
+      const maBacSiLs =
+        raw.MaBacSiKham ||
+        queueItem?.MaBacSi ||
+        raw.MaBacSi ||
+        null;
+
+      const fallbackStaff = getCurrentUserMaNhanSu();
+      const maNhanSuThucHien = isClsQueue
+        ? staffCodeCls || fallbackStaff
+        : maBacSiLs || fallbackStaff;
+      const maYTaHoTro = isClsQueue ? staffCodeCls || fallbackStaff : null;
+      const maHangDoiForVisit =
+        queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key ?? null;
+      if (!maHangDoiForVisit) {
+    throw new Error("Thiếu MaHangDoi khi tạo lượt khám");
       }
 
-        mappedPatient = {
-          ...p,
-        // id / queueId dùng chung MaHangDoi
-        queueId: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
-        id: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
-
-        // mã + tên + giới tính
-        pid:
-          queueItem?.MaBenhNhan ??
-          raw.MaBenhNhan ??
-          p?.pid ??
-          null,
-        name:
-          phieuLsFull?.HoTen ??
-          phieuClsFull?.HoTen ??
-          raw.TenBenhNhan ??
-          p?.name ??
-          "",
-        gender: titleCase(
-          phieuLsFull?.GioiTinh ??
-            phieuClsFull?.GioiTinh ??
-            p?.gender ??
-            ""
-        ),
-        age,
-
-        // khoa / phòng / bác sĩ
-        dept:
-          raw.TenKhoa ??
-          phieuLsFull?.TenKhoa ??
-          phieuClsFull?.TenKhoa ??
-          p?.dept ??
-          "",
-        department:
-          raw.TenKhoa ??
-          phieuLsFull?.TenKhoa ??
-          phieuClsFull?.TenKhoa ??
-          p?.department ??
-          "",
-        deptId:
-          raw.MaKhoa ??
-          phieuLsFull?.MaKhoa ??
-          phieuClsFull?.MaKhoa ??
-          null,
-        room:
-          raw.TenPhong ??
-          phieuClsItem?.TenPhong ??
-          phieuClsFull?.TenPhong ??
-          p?.room ??
-          "",
-        roomId:
-          raw.MaPhong ??
-          phieuClsItem?.MaPhong ??
-          phieuClsFull?.MaPhong ??
-          null,
-        doctor:
-          raw.TenBacSiKham ??
-          phieuClsFull?.TenNguoiLap ??
-          p?.doctor ??
-          "",
-
-        // loại hàng đợi / loại lượt / nguồn
-        loai_hang_doi:
-          raw.LoaiHangDoi ??
-          p?.loai_hang_doi ??
-          null,
-        queueType:
-          raw.LoaiHangDoi ??
-          p?.queueType ??
-          null,
-        visitType:
-          raw.LoaiHangDoi ??
-          p?.visitType ??
-          null,
-        nguon:
-          raw.Nguon ??
-          p?.nguon ??
-          null,
-        source:
-          raw.Nguon ??
-          p?.source ??
-          null,
-
-        // cấp cứu
-        capCuu:
-          raw.CapCuu ??
-          p?.capCuu ??
-          false,
-        cap_cuu:
-          raw.CapCuu ??
-          p?.cap_cuu ??
-          false,
-
-        // ghi chú / triệu chứng
-        note:
-          phieuLsFull?.TrieuChung ??
-          phieuLsFull?.ThongTinChiTiet ??
-          phieuClsFull?.GhiChu ??
-          p?.note ??
-          "",
-
-        // tên dịch vụ CLS (nếu là hàng CLS)
-        serviceName:
-          phieuClsItem?.TenDichVu ??
-          (Array.isArray(phieuClsFull?.ListItemDV) &&
-            phieuClsFull.ListItemDV[0]?.TenDichVu) ??
-          p?.serviceName ??
-          "",
-        maChiTietDv:
-          raw.MaChiTietDv ??
-          phieuClsItem?.MaChiTietDv ??
-          (Array.isArray(phieuClsFull?.ListItemDV) &&
-            phieuClsFull.ListItemDV[0]?.MaChiTietDv) ??
-          null,
-        maNhanSuThucHien: maNhanSuThucHien,
-        maYTaHoTro: maYTaHoTro,
-
-        // danh sách DV CLS để ExamDetail dùng nếu cần
-        serviceOrder:
-          Array.isArray(phieuClsFull?.ListItemDV) &&
-          phieuClsFull.ListItemDV.length
-            ? {
-                items: phieuClsFull.ListItemDV.map(
-                  (dv) => dv.MaDichVu || dv.MaChiTietDv
-                ),
-              }
-            : p?.serviceOrder,
-
-        // Mã phiếu khám LS (bắt buộc cho tạo CLS)
-        MaPhieuKham:
-          raw.MaPhieuKham ??
-          phieuLsFull?.MaPhieuKham ??
-          p?.MaPhieuKham ??
-          p?.maPhieuKham ??
-          null,
-        maPhieuKham:
-          raw.MaPhieuKham ??
-          phieuLsFull?.MaPhieuKham ??
-          p?.maPhieuKham ??
-          p?.MaPhieuKham ??
-          null,
-        MaPhieuKhamLs:
-          raw.MaPhieuKham ??
-          phieuLsFull?.MaPhieuKham ??
-          p?.MaPhieuKhamLs ??
-          p?.maPhieuKhamLs ??
-          null,
-        MaLuotKham:
-          raw.MaLuotKham ??
-          raw.MaLuot ??
-          phieuLsFull?.MaLuotKham ??
-          phieuClsFull?.MaLuotKham ??
-          p?.MaLuotKham ??
-          p?.maLuotKham ??
-          p?.visitId ??
-          createdVisitMaLuot ??
-          null,
-        visitIdCreated: createdVisitMaLuot ?? p?.visitIdCreated ?? null,
-      };
-
-      // đẩy vào ExamDetail
-      setActive(mappedPatient);
+      const visitRes = await createVisitMut.mutateAsync({
+        MaHangDoi: maHangDoiForVisit,
+        MaNhanSuThucHien: maNhanSuThucHien,
+        MaYTaHoTro: maYTaHoTro,
+        ThoiGianBatDau: nowIso,
+        ThoiGianKetThuc: null,
+        LoaiLuot: queueItem?.LoaiHangDoi ?? raw.LoaiHangDoi ?? null,
+        TrangThai: "dang_thuc_hien",
+      });
+      markInProgress();
+      createdVisitMaLuot =
+        visitRes?.MaLuotKham ??
+        visitRes?.maLuotKham ??
+        visitRes?.MaLuot ??
+        visitRes?.maLuot ??
+        visitRes?.id ??
+        null;
     } catch (err) {
-      console.error("[Examination] handleStart error:", err);
-      // giữ lại data đã map được; fallback tối thiểu là p
-      setActive(mappedPatient || p);
+      console.error("[Examination] createHistoryVisit error:", err);
+      const msg =
+        err?.response?.data?.Message ||
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        err?.response?.data?.detail ||
+        (err?.response?.status === 400
+            ? "Dữ liệu tạo lượt không hợp lệ."
+          : null) ||
+        err?.message ||
+          "Không thể tạo lượt khám CLS. Vui lòng thử lại.";
+      toast.error(msg);
+      return;
     }
-  }
 
+    // 3) Map data hang doi -> model patient cho ExamDetail
+    const phieuLsFull = raw.PhieuKhamLsFull || null;
+    const phieuClsFull = raw.PhieuKhamClsFull || null;
+    const phieuClsItem = raw.PhieuKhamClsItem || null;
+
+    let age = null;
+    const dob = phieuLsFull?.NgaySinh ?? phieuClsFull?.NgaySinh ?? null;
+    if (dob) {
+      const d = new Date(dob);
+      if (!Number.isNaN(d.getTime())) {
+        const today = new Date();
+        age =
+          today.getFullYear() -
+          d.getFullYear() -
+          (today.getMonth() < d.getMonth() ||
+            (today.getMonth() === d.getMonth() &&
+              today.getDate() < d.getDate())
+            ? 1
+            : 0);
+      }
+    }
+
+    mappedPatient = {
+      ...p,
+      queueId: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
+      id: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
+      pid: queueItem?.MaBenhNhan ?? raw.MaBenhNhan ?? p?.pid ?? null,
+      name:
+        phieuLsFull?.HoTen ??
+        phieuClsFull?.HoTen ??
+        raw.TenBenhNhan ??
+        p?.name ??
+        "",
+      gender: titleCase(
+        phieuLsFull?.GioiTinh ??
+          phieuClsFull?.GioiTinh ??
+          p?.gender ??
+          ""
+      ),
+      age,
+      dept:
+        raw.TenKhoa ??
+        phieuLsFull?.TenKhoa ??
+        phieuClsFull?.TenKhoa ??
+        p?.dept ??
+        "",
+      department:
+        raw.TenKhoa ??
+        phieuLsFull?.TenKhoa ??
+        phieuClsFull?.TenKhoa ??
+        p?.department ??
+        "",
+      deptId:
+        raw.MaKhoa ??
+        phieuLsFull?.MaKhoa ??
+        phieuClsFull?.MaKhoa ??
+        null,
+      room:
+        raw.TenPhong ??
+        phieuClsItem?.TenPhong ??
+        phieuClsFull?.TenPhong ??
+        p?.room ??
+        "",
+      roomId:
+        raw.MaPhong ??
+        phieuClsItem?.MaPhong ??
+        phieuClsFull?.MaPhong ??
+        null,
+      doctor:
+        raw.TenBacSiKham ??
+        phieuClsFull?.TenNguoiLap ??
+        p?.doctor ??
+        "",
+      loai_hang_doi:
+        raw.LoaiHangDoi ??
+        p?.loai_hang_doi ??
+        null,
+      queueType: raw.LoaiHangDoi ?? p?.queueType ?? null,
+      visitType: raw.LoaiHangDoi ?? p?.visitType ?? null,
+      nguon: raw.Nguon ?? p?.nguon ?? null,
+      source: raw.Nguon ?? p?.source ?? null,
+      capCuu: raw.CapCuu ?? p?.capCuu ?? false,
+      cap_cuu: raw.CapCuu ?? p?.cap_cuu ?? false,
+      note:
+        phieuLsFull?.TrieuChung ??
+        phieuLsFull?.ThongTinChiTiet ??
+        phieuClsFull?.GhiChu ??
+        p?.note ??
+        "",
+      serviceName:
+        phieuClsItem?.TenDichVu ??
+        (Array.isArray(phieuClsFull?.ListItemDV) &&
+          phieuClsFull.ListItemDV[0]?.TenDichVu) ??
+        p?.serviceName ??
+        "",
+      maChiTietDv:
+        raw.MaChiTietDv ??
+        phieuClsItem?.MaChiTietDv ??
+        (Array.isArray(phieuClsFull?.ListItemDV) &&
+          phieuClsFull.ListItemDV[0]?.MaChiTietDv) ??
+        null,
+      maNhanSuThucHien: maNhanSuThucHien,
+      maYTaHoTro: maYTaHoTro,
+      serviceOrder:
+        Array.isArray(phieuClsFull?.ListItemDV) &&
+        phieuClsFull.ListItemDV.length
+          ? {
+              items: phieuClsFull.ListItemDV.map(
+                (dv) => dv.MaDichVu || dv.MaChiTietDv
+              ),
+            }
+          : p?.serviceOrder,
+      MaPhieuKham:
+        raw.MaPhieuKham ??
+        phieuLsFull?.MaPhieuKham ??
+        p?.MaPhieuKham ??
+        p?.maPhieuKham ??
+        null,
+      maPhieuKham:
+        raw.MaPhieuKham ??
+        phieuLsFull?.MaPhieuKham ??
+        p?.maPhieuKham ??
+        p?.MaPhieuKham ??
+        null,
+      MaPhieuKhamLs:
+        raw.MaPhieuKham ??
+        phieuLsFull?.MaPhieuKham ??
+        p?.MaPhieuKhamLs ??
+        p?.maPhieuKhamLs ??
+        null,
+      MaLuotKham:
+        raw.MaLuotKham ??
+        raw.MaLuot ??
+        phieuLsFull?.MaLuotKham ??
+        phieuClsFull?.MaLuotKham ??
+        p?.MaLuotKham ??
+        p?.maLuotKham ??
+        p?.MaLuot ??
+        p?.maLuot ??
+        p?.visitId ??
+        createdVisitMaLuot ??
+        null,
+      visitIdCreated: createdVisitMaLuot ?? p?.visitIdCreated ?? null,
+    };
+
+    setActive(mappedPatient);
+  }
 
   function handleBack() {
     setActive(null);

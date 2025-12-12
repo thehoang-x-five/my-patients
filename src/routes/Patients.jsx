@@ -174,6 +174,8 @@ export default function Patients() {
     (s) => s.setCurrentClinical
   );
 
+  const [processPrefill, setProcessPrefill] = useState(null);
+
 
   // === Tải danh sách từ API (server đã lọc theo keyword nếu backend hỗ trợ)
   const { data: items = [] } = usePatientsList({
@@ -435,6 +437,7 @@ export default function Patients() {
   async function handleAction(type, p) {
     // Không clear prefill ở đây, chỉ clear khi đóng modal Add
     if (!p) return;
+    setProcessPrefill(null);
 
     const pid =
       p.id ||
