@@ -355,22 +355,22 @@ export async function search(filter = {}) {
     SortBy: filter.SortBy ?? filter.sortBy ?? null,
     SortDirection: filter.SortDirection ?? filter.sortDirection ?? null,
     Page: filter.Page ?? filter.page ?? 1,
-    PageSize: filter.PageSize ?? filter.pageSize ?? 500,
+    PageSize: filter.PageSize ?? filter.pageSize ?? 50, // ✅ Chuẩn hóa: 50 items mặc định
   });
   const res = await http.post(`/queue/search`, body);
   const data = res?.data ?? res;
   const items = data?.items ?? data?.Items ?? [];
 
+  // ✅ Trả về PagedResult chuẩn
   return {
-    items: Array.isArray(items) ? items.map((x) => normalizeQueueItem(x)) : [],
-    totalItems:
-      data?.TotalItems ??
-      data?.totalItems ??
-      data?.total ??
-      (Array.isArray(items) ? items.length : 0) ??
-      null,
-    page: data?.Page ?? data?.page ?? body.Page ?? 1,
-    pageSize: data?.PageSize ?? data?.pageSize ?? body.PageSize ?? 500,
+    Items: Array.isArray(items) ? items.map((x) => normalizeQueueItem(x)) : [],
+    items: Array.isArray(items) ? items.map((x) => normalizeQueueItem(x)) : [], // Giữ alias cho tương thích
+    TotalItems: data?.TotalItems ?? data?.totalItems ?? data?.total ?? (Array.isArray(items) ? items.length : 0) ?? 0,
+    totalItems: data?.TotalItems ?? data?.totalItems ?? data?.total ?? (Array.isArray(items) ? items.length : 0) ?? 0, // Giữ alias
+    Page: data?.Page ?? data?.page ?? body.Page ?? 1,
+    page: data?.Page ?? data?.page ?? body.Page ?? 1, // Giữ alias
+    PageSize: data?.PageSize ?? data?.pageSize ?? body.PageSize ?? 50,
+    pageSize: data?.PageSize ?? data?.pageSize ?? body.PageSize ?? 50, // Giữ alias
   };
 }
 
@@ -419,7 +419,7 @@ export function useQueueSearch(params = {}, options = {}) {
       SortBy: params.SortBy ?? params.sortBy ?? null,
       SortDirection: params.SortDirection ?? params.sortDirection ?? null,
       Page: params.Page ?? params.page ?? 1,
-      PageSize: params.PageSize ?? params.pageSize ?? 500,
+      PageSize: params.PageSize ?? params.pageSize ?? 50, // ✅ Chuẩn hóa: 50 items mặc định
     };
   }, [
     params.MaPhong,
@@ -454,6 +454,25 @@ export function useQueueSearch(params = {}, options = {}) {
   return useQuery({ 
     queryKey, 
     queryFn: () => search(normalizedParams), 
+    select: (res) => {
+      // ✅ Chuẩn hóa về format PagedResult chung
+      if (res && typeof res === "object") {
+        return {
+          Items: res.items || res.Items || [],
+          TotalItems: res.TotalItems ?? res.totalItems ?? (res.items?.length ?? 0),
+          Page: res.Page ?? res.page ?? (normalizedParams?.Page ?? 1),
+          PageSize: res.PageSize ?? res.pageSize ?? (normalizedParams?.PageSize ?? 50),
+        };
+      }
+      // Fallback
+      const items = Array.isArray(res) ? res : [];
+      return {
+        Items: items,
+        TotalItems: items.length,
+        Page: normalizedParams?.Page ?? 1,
+        PageSize: normalizedParams?.PageSize ?? 50,
+      };
+    },
     keepPreviousData: true, 
     staleTime: 60000, // Tăng staleTime lên 60s
     gcTime: 300000, // Cache 5 phút
@@ -499,7 +518,7 @@ export function useQueueToday(options = {}) {
       FromTime: from.toISOString(), 
       ToTime: to.toISOString(), 
       Page: 1, 
-      PageSize: 500 
+      PageSize: 50 // ✅ Chuẩn hóa: 50 items mặc định 
     };
   }, []); // Empty deps - chỉ tính toán một lần khi mount
   

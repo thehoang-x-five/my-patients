@@ -159,7 +159,7 @@ function buildPatientSearchFilter(params = {}) {
     TrangThaiTaiKhoan: accountStatus,
     OnlyToday: todayOnly,
     Page: page ?? 1,
-    PageSize: pageSize ?? 50,
+    PageSize: pageSize ?? 50, // ✅ Chuẩn hóa: 50 items mặc định
     SortBy: sortBy,
     SortDirection: sortDirection,
   };
@@ -468,9 +468,15 @@ export function usePatientsList(params = {}, options) {
     queryKey: ["patients", filter],
     queryFn: () => listPatients(params),
     select: (res) => {
-      const itemsRaw = res?.items ?? res?.Items ?? res ?? [];
+      // ✅ Trả về PagedResult đầy đủ
+      const itemsRaw = res?.Items ?? res?.items ?? [];
       const arr = Array.isArray(itemsRaw) ? itemsRaw : [];
-      return arr.map((x) => normalizePatientFields(x));
+      return {
+        Items: arr.map((x) => normalizePatientFields(x)),
+        TotalItems: res?.TotalItems ?? res?.totalItems ?? arr.length,
+        Page: res?.Page ?? res?.page ?? (params.page ?? 1),
+        PageSize: res?.PageSize ?? res?.pageSize ?? (params.pageSize ?? 50),
+      };
     },
     keepPreviousData: true,
     staleTime: 10_000,

@@ -6,6 +6,7 @@ import PatientsToolbar from "../components/patients/PatientsToolbar.jsx";
 import PatientsTable from "../components/patients/PatientsTable.jsx";
 import PatientsFilterPopover from "../components/patients/PatientsFilterPopover.jsx";
 import PatientModal from "../components/patients/PatientModal.jsx";
+import Pagination from "../components/ui/Pagination.jsx";
 
 import {
   usePatientsList,
@@ -177,8 +178,11 @@ export default function Patients() {
   const [processPrefill, setProcessPrefill] = useState(null);
 
 
+  // ✅ Phân trang
+  const [page, setPage] = useState(1);
+
   // === Tải danh sách từ API (server đã lọc theo keyword nếu backend hỗ trợ)
-  const { data: items = [] } = usePatientsList({
+  const { data: result = { Items: [], TotalItems: 0, Page: 1, PageSize: 50 } } = usePatientsList({
         keyword: filter.keyword || undefined,
         // mã TrangThaiHomNay theo API (cho_kham, cho_tiep_nhan, ...)
         status: filter.todayStatus === "all" ? undefined : filter.todayStatus,
@@ -187,9 +191,18 @@ export default function Patients() {
           filter.accountStatus === "all" ? undefined : filter.accountStatus,
         // map sang OnlyToday trong PatientSearchFilter
         todayOnly: viewMode === "today",
-        // Khi todayOnly=true, tăng PageSize lên 500 để lấy đủ dữ liệu
-        pageSize: viewMode === "today" ? 500 : 500,
+        page,
+        pageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
       });
+
+  const items = result.Items || [];
+  const totalItems = result.TotalItems || 0;
+  const totalPages = Math.ceil(totalItems / 50);
+
+  // ✅ Reset page khi filter hoặc viewMode thay đổi
+  useEffect(() => {
+    if (page > 1) setPage(1);
+  }, [filter.keyword, filter.todayStatus, filter.accountStatus, viewMode]);
 
   const { mutateAsync: createPatient } = useCreatePatient();
   const { mutateAsync: updatePatient } = useUpdatePatient();
@@ -312,54 +325,18 @@ export default function Patients() {
     };
   }, [clearPatientPrefill]);
 
-  // === Lọc FE theo ERD
+  // ✅ Với phân trang, filter đã được làm ở BE (status, accountStatus, keyword, todayOnly)
+  // Chỉ cần sort ở FE
   const filtered = useMemo(() => {
     let arr = Array.isArray(items) ? items.slice() : [];
 
-    // lọc theo trạng thái tài khoản
-    if (filter.accountStatus && filter.accountStatus !== "all") {
-      const tgt = String(filter.accountStatus).toLowerCase();
-      arr = arr.filter((p) => {
-        const code = String(
-          p.trang_thai_tai_khoan || p.accountStatus || "hoat_dong"
-        ).toLowerCase();
-        return code === tgt;
-      });
-    }
+    // ✅ Bỏ filter ở FE vì đã được filter ở BE:
+    // - accountStatus: đã filter ở BE (line 189-190)
+    // - todayStatus: đã filter ở BE (line 187)
+    // - keyword: đã filter ở BE (line 185)
+    // - todayOnly: đã filter ở BE (line 192)
 
-    // lọc theo trạng thái hôm nay (TrangThaiHomNay)
-    if (filter.todayStatus && filter.todayStatus !== "all") {
-      arr = arr.filter(
-        (p) =>
-          normStatusCode(p).toLowerCase() ===
-          filter.todayStatus.toLowerCase()
-      );
-    }
-    // viewMode: nếu đã gửi todayOnly=true lên server, server đã filter rồi
-    // Không cần filter lại ở FE vì server đã xử lý đúng
-    // Bỏ filter ở FE để hiển thị tất cả dữ liệu server trả về
-    // if (viewMode === "today") {
-    //   // Server đã filter, không cần filter lại
-    // }
-
-    // keyword (fallback ở FE nếu BE chưa lọc)
-    const kw = (filter.keyword || "").trim().toLowerCase();
-    if (kw) {
-      arr = arr.filter((p) => {
-        const bag = [
-          p?.id,
-          p?.pid,
-          p?.name,
-          p?.ho_ten,
-          p?.phone,
-          p?.dien_thoai,
-          p?.email,
-        ].map((x) => String(x || "").toLowerCase());
-        return bag.some((s) => s.includes(kw));
-      });
-    }
-
-    // sort
+    // Sort
     const normName = (p) =>
       (p.name || p.ho_ten || "").toString().toLowerCase().trim();
 
@@ -399,7 +376,7 @@ export default function Patients() {
     }
 
     return arr;
-  }, [items, filter, viewMode, sort]);
+  }, [items, sort]); // ✅ Chỉ phụ thuộc vào items và sort (filter đã làm ở BE)
 
   // === Đếm số lượng theo trạng thái hôm nay
   const counts = useMemo(() => {
@@ -648,13 +625,27 @@ export default function Patients() {
           filterBtnRef={filterBtnRef}
         />
 
-        <div className="mt-0 flex-1 min-h-0">
-          <PatientsTable
-            items={filtered}
-            onAction={handleAction}
-            stretch
-            highlightPid={highlightPid}
-          />
+        <div className="card mt-0 flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <PatientsTable
+              items={filtered}
+              onAction={handleAction}
+              stretch
+              highlightPid={highlightPid}
+            />
+          </div>
+          {totalPages > 1 && (
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                pageSize={50}
+                onPageChange={setPage}
+                className="px-4 py-3"
+              />
+            </div>
+          )}
         </div>
       </div>
 

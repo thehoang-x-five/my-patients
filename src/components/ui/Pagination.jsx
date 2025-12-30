@@ -1,6 +1,5 @@
 // src/components/ui/Pagination.jsx
 import React from "react";
-import Button from "./Button.jsx";
 
 /**
  * Component phân trang chung
@@ -68,25 +67,25 @@ export default function Pagination({
   const endItem = Math.min(currentPage * pageSize, totalItems);
 
   return (
-    <div className={`flex items-center justify-between gap-4 ${className}`}>
+    <div className={`flex items-center justify-between gap-3 ${className}`}>
       {/* Thông tin số lượng */}
-      <div className="text-sm text-slate-600">
-        Hiển thị <span className="font-semibold text-slate-900">{startItem}</span> -{" "}
-        <span className="font-semibold text-slate-900">{endItem}</span> trong tổng số{" "}
-        <span className="font-semibold text-slate-900">{totalItems}</span> kết quả
+      <div className="text-xs text-slate-500">
+        Hiển thị <span className="font-medium text-slate-700">{startItem}</span> -{" "}
+        <span className="font-medium text-slate-700">{endItem}</span> trong tổng số{" "}
+        <span className="font-medium text-slate-700">{totalItems}</span> kết quả
       </div>
 
       {/* Nút phân trang */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         {/* Nút Previous */}
-        <Button
+        <button
           onClick={() => handlePageClick(currentPage - 1)}
           disabled={currentPage === 1}
           aria-label="Trang trước"
-          className="!px-3 !py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-2 py-1 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors"
         >
           ← Trước
-        </Button>
+        </button>
 
         {/* Số trang */}
         {pageNumbers.map((page, idx) => {
@@ -94,7 +93,7 @@ export default function Pagination({
             return (
               <span
                 key={`ellipsis-${idx}`}
-                className="px-2 py-1 text-slate-400 select-none"
+                className="px-1.5 py-1 text-xs text-slate-400 select-none"
               >
                 ...
               </span>
@@ -103,32 +102,32 @@ export default function Pagination({
 
           const isActive = page === currentPage;
           return (
-            <Button
+            <button
               key={page}
               onClick={() => handlePageClick(page)}
               aria-label={`Trang ${page}`}
               aria-current={isActive ? "page" : undefined}
               className={[
-                "!px-3 !py-1.5 text-sm min-w-[2.5rem]",
+                "px-2.5 py-1 text-xs font-medium rounded-md border min-w-[2rem] transition-colors",
                 isActive
-                  ? "bg-teal-600 text-white border-teal-600 hover:bg-teal-700"
-                  : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50",
+                  ? "bg-teal-600 text-white border-teal-600 hover:bg-teal-700 shadow-sm"
+                  : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50 hover:border-slate-400",
               ].join(" ")}
             >
               {page}
-            </Button>
+            </button>
           );
         })}
 
         {/* Nút Next */}
-        <Button
+        <button
           onClick={() => handlePageClick(currentPage + 1)}
           disabled={currentPage === totalPages}
           aria-label="Trang sau"
-          className="!px-3 !py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-2 py-1 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors"
         >
           Sau →
-        </Button>
+        </button>
       </div>
     </div>
   );

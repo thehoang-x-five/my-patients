@@ -341,7 +341,7 @@ export async function getHistoryVisits() {
     keyword: null,
     onlyToday: null,
     page: 1,
-    pageSize: 500,
+    pageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
   };
 
   const res = await http.post("/history/visits/search", filter);
@@ -350,23 +350,31 @@ export async function getHistoryVisits() {
   return list.map(normalizeVisit);
 }
 
-// Lấy lịch sử giao dịch
-export async function getHistoryTransactions() {
+// ✅ Lấy lịch sử giao dịch với phân trang
+export async function getHistoryTransactions(params = {}) {
   const filter = {
-    maBenhNhan: null,
-    fromTime: null,
-    toTime: null,
-    loaiDotThu: null,
-    trangThai: null,
-    phuongThucThanhToan: null,
-    keyword: null,
-    page: 1,
-    pageSize: 500,
+    maBenhNhan: params.maBenhNhan || null,
+    fromTime: params.fromTime || null,
+    toTime: params.toTime || null,
+    loaiDotThu: params.loaiDotThu || null,
+    trangThai: params.trangThai || null,
+    phuongThucThanhToan: params.phuongThucThanhToan || null,
+    keyword: params.keyword || null,
+    page: params.page ?? 1,
+    pageSize: params.pageSize ?? 50, // ✅ Chuẩn hóa: 50 items mặc định
   };
 
   const res = await http.post("/billing/invoices/search", filter);
-  const list = ensureArray(res?.data);
-  return list.map(normalizeTransaction);
+  const data = res?.data || {};
+  
+  // ✅ Trả về PagedResult đầy đủ
+  const items = ensureArray(data);
+  return {
+    Items: items.map(normalizeTransaction),
+    TotalItems: data.TotalItems ?? data.totalItems ?? items.length,
+    Page: data.Page ?? data.page ?? filter.page,
+    PageSize: data.PageSize ?? data.pageSize ?? filter.pageSize,
+  };
 }
 
 // Lấy chi tiết 1 lượt khám – khớp HistoryController.GetVisitDetail
@@ -388,10 +396,30 @@ export async function getHistoryVisitDetail(maLuotKham) {
 /* ===================== HOOKS (TanStack Query) ===================== */
 
 
-export function useHistoryVisits(options = {}) {
+export function useHistoryVisits(params = {}, options = {}) {
   return useQuery({
-    queryKey: ["history", "visits"],
-    queryFn: getHistoryVisits,
+    queryKey: ["history", "visits", params],
+    queryFn: () => getHistoryVisits(params),
+    select: (res) => {
+      // ✅ Trả về PagedResult đầy đủ
+      if (res && typeof res === "object" && ("TotalItems" in res || "totalItems" in res)) {
+        return {
+          Items: res.Items || res.items || [],
+          TotalItems: res.TotalItems ?? res.totalItems ?? 0,
+          Page: res.Page ?? res.page ?? (params?.page ?? 1),
+          PageSize: res.PageSize ?? res.pageSize ?? (params?.pageSize ?? 50),
+        };
+      }
+      // Fallback
+      const items = Array.isArray(res) ? res : [];
+      return {
+        Items: items,
+        TotalItems: items.length,
+        Page: params?.page ?? 1,
+        PageSize: params?.pageSize ?? 50,
+      };
+    },
+    keepPreviousData: true,
     staleTime: 60_000,
     ...options,
   });
@@ -406,10 +434,30 @@ export function useHistoryVisitDetail(maLuotKham, options = {}) {
     ...rest,
   });
 }
-export function useHistoryTransactions(options = {}) {
+export function useHistoryTransactions(params = {}, options = {}) {
   return useQuery({
-    queryKey: ["history", "transactions"],
-    queryFn: getHistoryTransactions,
+    queryKey: ["history", "transactions", params],
+    queryFn: () => getHistoryTransactions(params),
+    select: (res) => {
+      // ✅ Trả về PagedResult đầy đủ
+      if (res && typeof res === "object" && ("TotalItems" in res || "totalItems" in res)) {
+        return {
+          Items: res.Items || res.items || [],
+          TotalItems: res.TotalItems ?? res.totalItems ?? 0,
+          Page: res.Page ?? res.page ?? (params?.page ?? 1),
+          PageSize: res.PageSize ?? res.pageSize ?? (params?.pageSize ?? 50),
+        };
+      }
+      // Fallback
+      const items = Array.isArray(res) ? res : [];
+      return {
+        Items: items,
+        TotalItems: items.length,
+        Page: params?.page ?? 1,
+        PageSize: params?.pageSize ?? 50,
+      };
+    },
+    keepPreviousData: true,
     staleTime: 60_000,
     ...options,
   });

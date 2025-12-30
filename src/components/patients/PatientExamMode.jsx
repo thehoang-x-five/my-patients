@@ -418,29 +418,9 @@ export default function PatientExamMode({
                           : 0}
                       </div>
                       <div className="col-span-3 md:col-span-3">
-                        <select
-                          value={serviceRooms[idx] || ""}
-                          onChange={(e) =>
-                            setServiceRooms((arr) =>
-                              arr.map((x, i) =>
-                                i === idx ? e.target.value : x
-                              )
-                            )
-                          }
-                          className="w-full rounded-lg px-2 py-1.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 bg-white text-sm"
-                          disabled={!serviceItems.length}
-                        >
-                          <option value="">
-                            {serviceItems.length
-                              ? "Chọn phòng"
-                              : "(Chưa có phòng)"}
-                          </option>
-                          {SERVICE_ROOMS.map((r) => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="w-full rounded-lg px-2 py-1.5 ring-1 ring-slate-200 bg-slate-50 text-sm text-slate-700 min-h-[34px] flex items-center">
+                          {serviceRooms[idx] || "—"}
+                        </div>
                       </div>
                     </div>
                     <input

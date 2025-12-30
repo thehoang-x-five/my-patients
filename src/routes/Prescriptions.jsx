@@ -445,14 +445,16 @@ const stockNearOutCount = filteredStock.filter((r) => {
                         stretch
                       />
                       {stockTotalPages > 1 && (
-                        <Pagination
-                          currentPage={stockPage}
-                          totalPages={stockTotalPages}
-                          totalItems={stockTotalItems}
-                          pageSize={50}
-                          onPageChange={setStockPage}
-                          className="px-4 py-3 border-t border-slate-200 bg-white"
-                        />
+                        <div className="border-t border-slate-200 bg-white rounded-b-2xl">
+                          <Pagination
+                            currentPage={stockPage}
+                            totalPages={stockTotalPages}
+                            totalItems={stockTotalItems}
+                            pageSize={50}
+                            onPageChange={setStockPage}
+                            className="px-4 py-3"
+                          />
+                        </div>
                       )}
                     </div>
                     <StockModal

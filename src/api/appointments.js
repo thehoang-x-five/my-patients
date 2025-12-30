@@ -182,7 +182,7 @@ const api = {
       FromDate: date,
       ToDate: date,
       Page: 1,
-      PageSize: 500,
+      PageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
     };
 
     const res = await http.post("/appointments/search", filter);
@@ -255,7 +255,7 @@ const api = {
     const filter = {
       MaBenhNhan: code || null,
       Page: 1,
-      PageSize: 500,
+      PageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
     };
 
     const res = await http.post("/appointments/search", filter);
@@ -308,7 +308,7 @@ const api = {
       FromDate: fromDate,
       ToDate: toDate,
       Page: 1,
-      PageSize: 500,
+      PageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
     };
 
     const res = await http.post("/appointments/search", filter);

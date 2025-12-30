@@ -113,14 +113,19 @@ export default function History() {
   const [openFilter, setOpenFilter] = useState(false);
   const filterBtnRef = useRef(null);
 
+  // ✅ useHistoryVisits và useHistoryTransactions giờ trả về PagedResult { Items, TotalItems, Page, PageSize }
   const {
-        data: visitRows = [],
+        data: visitResult = { Items: [], TotalItems: 0, Page: 1, PageSize: 50 },
         refetch: refetchVisits,
       } = useHistoryVisits();
       const {
-        data: txnRows = [],
+        data: txnResult = { Items: [], TotalItems: 0, Page: 1, PageSize: 50 },
         refetch: refetchTxns,
       } = useHistoryTransactions();
+
+      // ✅ Lấy Items từ PagedResult
+      const visitRows = visitResult.Items || [];
+      const txnRows = txnResult.Items || [];
       // realtime: lắng nghe "history.updated" từ SignalR và refetch
       useEffect(() => {
      

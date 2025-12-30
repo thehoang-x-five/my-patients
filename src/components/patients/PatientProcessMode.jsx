@@ -5,6 +5,7 @@ import { ANIMATION_CONFIG, R } from "./Shared.jsx";
 // COMPONENT – Phiếu chẩn đoán cuối  đơn thuốc (dùng để in cho bệnh nhân)
 export default function PatientProcessMode({
   diagnosisData,
+  setDiagnosisData,
   rx,
   totalDrugAmount,
   handleFinishDoctor,
@@ -40,9 +41,45 @@ export default function PatientProcessMode({
   const advice =
     diagnosisData?.LoiKhuyen ?? diagnosisData?.advice ?? "";
 
-  const followupText =
-    diagnosisData?.HuongXuTri ?? diagnosisData?.followup ?? "";
-  const isRevisit = /tái\s*khám/i.test(followupText || "");
+  // Get followup flags
+  const followupFlags = diagnosisData?.followupFlags || {
+    choVe: false,
+    choThuocVe: false,
+    taiKham: false,
+  };
+
+  // Build followup text from flags
+  const followupParts = [];
+  if (followupFlags.choVe) followupParts.push("Cho về");
+  if (followupFlags.choThuocVe) followupParts.push("Cho thuốc về");
+  if (followupFlags.taiKham) followupParts.push("Tái khám");
+  const followupText = followupParts.length > 0 ? followupParts.join(", ") : "Không có nội dung";
+  
+  const isRevisit = followupFlags.taiKham;
+
+  // Toggle flag handler
+  const toggleFlag = (flagName) => {
+    if (!setDiagnosisData) return;
+    
+    setDiagnosisData((prev) => {
+      const prevFlags = prev.followupFlags || {
+        choVe: false,
+        choThuocVe: false,
+        taiKham: false,
+      };
+      const nextFlags = { ...prevFlags, [flagName]: !prevFlags[flagName] };
+
+      // Không cho tick cùng lúc "Cho về" + "Tái khám"
+      if (flagName === "choVe" && nextFlags.choVe && nextFlags.taiKham) {
+        nextFlags.taiKham = false;
+      }
+      if (flagName === "taiKham" && nextFlags.taiKham && nextFlags.choVe) {
+        nextFlags.choVe = false;
+      }
+
+      return { ...prev, followupFlags: nextFlags };
+    });
+  };
 
   return (
     <motion.div {...ANIMATION_CONFIG} className="space-y-3">
@@ -96,21 +133,49 @@ export default function PatientProcessMode({
             </div>
           )}
 
-          {/* Hướng xử trí  ô nhỏ "Tái khám sau 7 ngày" nếu có chỉ định tái khám */}
-          <div className="md:col-span-2 flex flex-col md:flex-row gap-2">
-            <div className="flex-1">
-              <R
-                label="Hướng xử trí"
-                value={followupText || "Không có nội dung"}
-                classname={"ring-orange-200 bg-yellow-50/40"}
-              />
+          {/* Hướng xử trí - Checkboxes */}
+          <div className="md:col-span-2">
+            <div className="text-sm font-semibold text-slate-700 mb-2">
+              Hướng xử trí
             </div>
-            {isRevisit && (
-              <div className="md:w-44 rounded-xl px-3 py-2 ring-1 ring-emerald-200 bg-emerald-50/70 text-[11px] text-emerald-800 flex flex-col justify-center">
-                <div className="font-semibold mb-0.5">Tái khám dự kiến</div>
-                <div className="font-bold tabular-nums">Sau 7 ngày</div>
+            <div className="rounded-xl px-4 py-3 ring-1 ring-orange-200 bg-yellow-50/40">
+              <div className="flex flex-wrap gap-4 text-sm text-slate-700">
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 focus:ring-emerald-500"
+                    checked={!!followupFlags.choVe}
+                    onChange={() => toggleFlag("choVe")}
+                  />
+                  <span>Cho về</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 focus:ring-emerald-500"
+                    checked={!!followupFlags.choThuocVe}
+                    onChange={() => toggleFlag("choThuocVe")}
+                  />
+                  <span>Cho thuốc về</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 focus:ring-emerald-500"
+                    checked={!!followupFlags.taiKham}
+                    onChange={() => toggleFlag("taiKham")}
+                  />
+                  <span>Tái khám</span>
+                </label>
               </div>
-            )}
+              {isRevisit && (
+                <div className="mt-3 pt-3 border-t border-orange-200">
+                  <div className="text-xs text-emerald-700 font-semibold">
+                    💡 Tái khám dự kiến: Sau 7 ngày
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

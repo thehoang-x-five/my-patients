@@ -58,7 +58,12 @@ export default function Examination() {
   const qc = useQueryClient();
   const { data: queueData } = useQueueToday();
 
-  const patients = Array.isArray(queueData?.items) ? queueData.items : [];
+  // ✅ Fix: API trả về Items (chữ I hoa), không phải items (chữ i thường)
+  const patients = Array.isArray(queueData?.Items) 
+    ? queueData.Items 
+    : Array.isArray(queueData?.items) 
+    ? queueData.items 
+    : [];
 
   const keyOf = (p) =>
     p?.MaHangDoi ??
@@ -247,6 +252,11 @@ export default function Examination() {
 
       // 2) Tạo lượt khám (HistoryVisit)
     const nowIso = new Date().toISOString();
+    
+    // ✅ Khai báo các biến bên ngoài try-catch để có thể sử dụng sau này
+    let maNhanSuThucHien = null;
+    let maYTaHoTro = null;
+    
     try {
       const queueType = queueItem?.LoaiHangDoi ?? raw.LoaiHangDoi ?? null;
       const isClsQueue = /can_lam_sang|cls/i.test(queueType || "");
@@ -295,10 +305,11 @@ export default function Examination() {
         null;
 
       const fallbackStaff = getCurrentUserMaNhanSu();
-      const maNhanSuThucHien = isClsQueue
+      // ✅ Gán giá trị cho các biến đã khai báo bên ngoài
+      maNhanSuThucHien = isClsQueue
         ? staffCodeCls || fallbackStaff
         : maBacSiLs || fallbackStaff;
-      const maYTaHoTro = isClsQueue ? staffCodeCls || fallbackStaff : null;
+      maYTaHoTro = isClsQueue ? staffCodeCls || fallbackStaff : null;
       const maHangDoiForVisit =
         queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key ?? null;
       if (!maHangDoiForVisit) {

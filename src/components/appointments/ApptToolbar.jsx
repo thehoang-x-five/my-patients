@@ -9,7 +9,8 @@ export default function ApptToolbar({
   counts,
   withinReception,          // boolean
   timeLabel,                // string hh:mm
-  receptionHours            // { start, end }
+  receptionHours,           // { start, end }
+  flashApptCreateAt = 0,    // ✅ timestamp for flash animation
 }) {
   return (
     <div className="flex items-center gap-3 w-full">
@@ -82,14 +83,16 @@ export default function ApptToolbar({
         </button>
       </div>
 
-      {/* CTA tạo lịch */}
+      {/* CTA tạo lịch - ✅ Flash animation when flashApptCreateAt > 0 */}
       <motion.button
         type="button"
         id="appt-create-btn"
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         onClick={onOpenCreate}
-        className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 text-white font-semibold shadow-md hover:shadow-lg transition"
+        className={`px-3 py-1.5 rounded-xl font-semibold shadow-md hover:shadow-lg transition bg-gradient-to-r from-violet-500 to-purple-500 text-white ${
+          flashApptCreateAt > 0 ? 'flash-once' : ''
+        }`}
       >
         + Tạo lịch hẹn
       </motion.button>

@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { toast } from "react-toastify";
 import Button from "../ui/Button.jsx";
 import RxPickerModal from "./RxPickerModal.jsx";
 import {
   useExamServices,
   useCreateExamOrder,
   useCreateDiagnosis,
+  useCreateClsResult,
 } from "../../api/examination.js";
 
 const MAX_NOTE_LEN = 200;
@@ -57,7 +59,10 @@ export default function ExamDetail({
  "";
 
 // /api/master-data/services/overview?MaPhong=...
-const { data: rawExamServices = [] } = useExamServices();
+const { data: rawExamServices = [] } = useExamServices(  { loaiDichVu: "can_lam_sang" });
+
+// CLS result mutation
+const createClsResultMut = useCreateClsResult();
 
 // Chuẩn hóa dữ liệu dịch vụ về { id, name, type, _raw }
 const examServices = useMemo(
@@ -288,7 +293,12 @@ const svcMap = useMemo(() => {
       MaNguoiLap: maNguoiLap,
       AutoPublishEnabled: true,
       GhiChu: listItemDV.map((i) => i.GhiChu).filter(Boolean).join("; "),
-      TrangThai: "cho_thuc_hien",
+      // ✅ Trạng thái phiếu CLS:
+      // - da_lap: Đã lập (phiếu CLS vừa được tạo bởi bác sĩ) ← Dùng khi xuất phiếu khám
+      // - dang_thuc_hien: Đang thực hiện (y tá đã tiếp nhận và đang làm)
+      // - da_hoan_tat: Đã hoàn tất (đã có kết quả)
+      // - da_huy: Đã hủy
+      TrangThai: "da_lap",
       ListItemDV: listItemDV,
     };
   }

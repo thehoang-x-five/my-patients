@@ -26,12 +26,13 @@ import {
   useServiceInfo,
   useCreateClinicalExam,
   searchClsOrders,
+  updateClsOrderStatus,
 } from "../../api/examination";
 import { getStoredAccessToken } from "../../api/http.js";
 // History (lượt khám)
 import { useCreateHistoryVisit } from "../../api/history";
 import { getClinicalExam, getFinalDiagnosis, useCompleteExam } from "../../api/examination";
-import { useExamStore } from "../stores/appStore.js";
+import { useExamStore, useUIStore } from "../stores/appStore.js";
 import { useNavigate } from "react-router-dom";
 
 // Hàng đợi (enqueue khám LS, CLS, quay lại khám)
@@ -45,6 +46,9 @@ import {
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments";
 
 import PrintExamTicket from "../print/PrintExamTicket.jsx";
+
+// Follow-up context utilities
+import { saveFollowupContext } from "../../utils/followupContext.js";
 
 // (giả sử các helper addVisit, addTransaction, listAppointmentHolds, getLastVisit,
 //  createFollowupHold, markAppointmentDoneForPid, markServiceDispatched,
@@ -80,25 +84,38 @@ export default function PatientModal({
     patient?.id ||
     form?.id ||
     "";
-  const maPhieuKhamCurrent =
-    patient?.MaPhieuKham ||
-    patient?.maPhieuKham ||
-    patient?.MaPhieuKhamLs ||
-    patient?.maPhieuKhamLs ||
-    form?.MaPhieuKham ||
-    form?.maPhieuKham ||
-    (() => {
-      try {
-        return localStorage.getItem("last-clinical-exam-id") || null;
-      } catch {
-        return null;
-      }
-    })();
+  
+  // ✅ useMemo để tính lại maPhieuKham khi patient hoặc form thay đổi
+  // ⚠️ KHÔNG lấy từ localStorage để tránh lấy nhầm mã phiếu khám cũ
+  const maPhieuKhamCurrent = useMemo(() => {
+    const fromPatient = 
+      patient?.MaPhieuKham ||
+      patient?.maPhieuKham ||
+      patient?.MaPhieuKhamLs ||
+      patient?.maPhieuKhamLs ||
+      null;
+    
+    const fromForm = 
+      form?.MaPhieuKham ||
+      form?.maPhieuKham ||
+      null;
+    
+    // ✅ CHỈ lấy từ patient prop và form state, KHÔNG lấy từ localStorage
+    const result = fromPatient || fromForm;
+    
+    console.log(
+      `[maPhieuKhamCurrent] Computed for patient ${patientId}: ` +
+      `fromPatient=${fromPatient}, fromForm=${fromForm}, result=${result}`
+    );
+    
+    return result;
+  }, [patient, form, patientId]);
 
     const {
       data: patientDetail,
       isFetching: loadingPatientDetail,
       isError: errorPatientDetail,
+      refetch: refetchPatientDetail,
     }  = usePatientDetail(patientId, {
     enabled: open && !!patientId && mode !== "add",
   });
@@ -273,6 +290,10 @@ export default function PatientModal({
   const [clsOrderId, setClsOrderId] = useState("");
   const [clsStaffCode, setClsStaffCode] = useState("");
   const [loadingFinalDx, setLoadingFinalDx] = useState(false);
+  
+  // ✅ Flag để prevent duplicate fetch
+  const fetchedDiagnosisRef = useRef(false);
+  const lastFetchedPatientRef = useRef(null);
 
   const isServiceFlow = useMemo(() => {
     const svcItems = (patientForView || patient)?.serviceOrder?.items || [];
@@ -337,7 +358,11 @@ export default function PatientModal({
     summary: "",
     orders: "",
     advice: "",
-    followup: "Cho thuốc về",
+    followupFlags: {
+      choVe: false,
+      choThuocVe: false,
+      taiKham: false,
+    },
     followupDate: "",
     followupTime: "",
   };
@@ -432,9 +457,29 @@ export default function PatientModal({
 
   useEffect(() => {
     if (!open) {
-      // reset dirty flag when modal closes
+      // ✅ Reset ALL state when modal closes to prevent stale data
       setIsDirty(false);
+      setDiagnosisData(DIAG_INIT); // Clear diagnosis data
+      setRx([]); // Clear prescriptions
+      setSvcResults([]); // Clear service results
+      
+      // ✅ Reset fetch flags
+      fetchedDiagnosisRef.current = false;
+      lastFetchedPatientRef.current = null;
+      
       return;
+    }
+    
+    // ✅ CRITICAL: Clear localStorage NGAY KHI MỞ MODAL để tránh lấy nhầm mã phiếu khám cũ
+    // Phải clear trước khi useMemo maPhieuKhamCurrent chạy
+    try {
+      const oldMaPhieuKham = localStorage.getItem("last-clinical-exam-id");
+      if (oldMaPhieuKham) {
+        console.log(`[PatientModal] Clearing stale maPhieuKham from localStorage on modal open: ${oldMaPhieuKham}`);
+        localStorage.removeItem("last-clinical-exam-id");
+      }
+    } catch (err) {
+      console.warn("[PatientModal] Failed to clear localStorage on open:", err);
     }
     // If the user already started editing, don't overwrite their changes
     if (isDirty) return;
@@ -568,7 +613,9 @@ export default function PatientModal({
     setRx([]);
 
     if (patient && mode === "process") {
-      setDiagnosisData((prev) => prev ?? DIAG_INIT);
+      // ✅ RESET diagnosis data về DIAG_INIT khi mở modal mới (tránh cache cũ)
+      setDiagnosisData(DIAG_INIT);
+      
       const svcItems = Array.isArray(patient?.serviceOrder?.items)
         ? patient.serviceOrder.items
         : [];
@@ -581,7 +628,16 @@ export default function PatientModal({
         }))
       );
 
-      // ✅ TỰ ĐỘNG FETCH chẩn đoán nếu có maPhieuKham
+      // ✅ Lấy mã bệnh nhân hiện tại
+      const currentPid = patient?.id || patient?.pid || patient?.MaBenhNhan || patient?.maBenhNhan;
+      
+      // ✅ Check nếu đã fetch cho bệnh nhân này rồi thì skip
+      if (fetchedDiagnosisRef.current && lastFetchedPatientRef.current === currentPid) {
+        console.log(`[PatientModal] Already fetched diagnosis for patient ${currentPid}, skipping...`);
+        return;
+      }
+      
+      // ✅ Lấy maPhieuKham từ patient prop (KHÔNG lấy từ localStorage để tránh lấy nhầm)
       const maPhieuKham = 
         patient?.MaPhieuKham ||
         patient?.maPhieuKham ||
@@ -590,38 +646,96 @@ export default function PatientModal({
         form?.MaPhieuKham ||
         form?.maPhieuKham ||
         null;
+      
+      console.log(
+        `[PatientModal] Process mode - currentPid: ${currentPid}, maPhieuKham: ${maPhieuKham}`
+      );
 
-      if (isWaitingProcess && maPhieuKham) {
-        // Gọi ngay khi mở modal
-        fetchFinalDiagnosis();
-      } else if (isWaitingProcess && !maPhieuKham) {
+      if (maPhieuKham && currentPid) {
+        // ✅ Check nếu đã fetch cho bệnh nhân này rồi thì skip
+        if (fetchedDiagnosisRef.current && lastFetchedPatientRef.current === currentPid) {
+          console.log(`[PatientModal] Already validated/fetched for patient ${currentPid}, skipping...`);
+          return;
+        }
+        
+        // ✅ Mark as fetched IMMEDIATELY to prevent duplicate validation
+        fetchedDiagnosisRef.current = true;
+        lastFetchedPatientRef.current = currentPid;
+        
+        // ✅ CRITICAL: Validate phiếu khám có thuộc về bệnh nhân này không
+        // Gọi API để lấy thông tin phiếu khám và kiểm tra MaBenhNhan
+        (async () => {
+          try {
+            const { getClinicalExam } = await import("../../api/examination");
+            const clinicalExam = await getClinicalExam(maPhieuKham);
+            
+            if (!clinicalExam) {
+              console.warn(`[PatientModal] Phiếu khám ${maPhieuKham} không tồn tại`);
+              toast.warn("Phiếu khám không tồn tại.");
+              return;
+            }
+            
+            const examPatientId = clinicalExam.MaBenhNhan || clinicalExam.maBenhNhan;
+            
+            if (examPatientId !== currentPid) {
+              console.error(
+                `[PatientModal] ❌ PHIẾU KHÁM KHÔNG KHỚP: ` +
+                `Phiếu khám ${maPhieuKham} thuộc về bệnh nhân ${examPatientId}, ` +
+                `KHÔNG phải ${currentPid}. Bỏ qua để tránh hiển thị sai dữ liệu.`
+              );
+              toast.error(
+                `Lỗi dữ liệu: Phiếu khám ${maPhieuKham} không thuộc về bệnh nhân này. ` +
+                `Vui lòng kiểm tra lại dữ liệu.`
+              );
+              return;
+            }
+            
+            console.log(
+              `[PatientModal] ✅ Phiếu khám ${maPhieuKham} thuộc về bệnh nhân ${currentPid}. ` +
+              `Tiếp tục lấy chẩn đoán...`
+            );
+            
+            // Gọi ngay khi mở modal với explicit patient ID
+            setTimeout(() => {
+              fetchFinalDiagnosis(currentPid);
+            }, 100);
+          } catch (err) {
+            console.error("[PatientModal] Lỗi khi validate phiếu khám:", err);
+            toast.error("Không thể kiểm tra phiếu khám. Vui lòng thử lại.");
+          }
+        })();
+      } else if (currentPid) {
         // Nếu không có maPhieuKham, thử tìm lại từ pid
-        const pid = patient?.id || patient?.pid || patient?.MaBenhNhan || patient?.maBenhNhan;
-        if (pid) {
-          (async () => {
-            try {
-              const { searchClinicalRaw } = await import("../../api/examination");
-              const clinicalList = await searchClinicalRaw({
-                MaBenhNhan: pid,
-                // Không filter trạng thái
-              });
+        (async () => {
+          try {
+            const { searchClinicalRaw } = await import("../../api/examination");
+            const clinicalList = await searchClinicalRaw({
+              MaBenhNhan: currentPid, // ✅ Filter theo đúng mã bệnh nhân
+            });
 
-              if (Array.isArray(clinicalList) && clinicalList.length > 0) {
-                // ✅ Lọc lấy phiếu đang hoạt động (không phải da_hoan_tat hoặc da_huy)
-                const activeClinical = clinicalList.find(
-                  (c) => {
-                    const status = c.TrangThai || c.trangThai || "";
-                    return (
-                      status !== "da_hoan_tat" &&
-                      status !== "da_huy" &&
-                      status !== "" &&
-                      (status === "da_lap" ||
-                        status === "dang_kham" ||
-                        status === "da_lap_chan_doan")
-                    );
+            if (Array.isArray(clinicalList) && clinicalList.length > 0) {
+              // ✅ Lọc lấy phiếu đang hoạt động + kiểm tra mã bệnh nhân
+              const activeClinical = clinicalList.find(
+                (c) => {
+                  // Kiểm tra mã bệnh nhân
+                  const clinicalPid = c.MaBenhNhan || c.maBenhNhan;
+                  if (clinicalPid && clinicalPid !== currentPid) {
+                    return false; // Bỏ qua nếu không khớp mã BN
                   }
-                ) || clinicalList[0]; // Fallback: lấy đầu tiên nếu không tìm thấy
+                  
+                  const status = c.TrangThai || c.trangThai || "";
+                  return (
+                    status !== "da_hoan_tat" &&
+                    status !== "da_huy" &&
+                    status !== "" &&
+                    (status === "da_lap" ||
+                      status === "dang_kham" ||
+                      status === "da_lap_chan_doan")
+                  );
+                }
+              );
 
+              if (activeClinical) {
                 const foundMaPhieuKham = 
                   activeClinical?.MaPhieuKham ||
                   activeClinical?.maPhieuKham ||
@@ -635,17 +749,30 @@ export default function PatientModal({
                     maPhieuKham: foundMaPhieuKham,
                   }));
 
+                  // ✅ Mark as fetched BEFORE calling API
+                  fetchedDiagnosisRef.current = true;
+                  lastFetchedPatientRef.current = currentPid;
+
                   // Trigger fetch sau một chút để state update
                   setTimeout(() => {
-                    fetchFinalDiagnosis();
+                    fetchFinalDiagnosis(currentPid);
                   }, 100);
+                } else {
+                  // Không tìm thấy mã phiếu khám
+                  console.log("[PatientModal] Không tìm thấy mã phiếu khám cho bệnh nhân:", currentPid);
                 }
+              } else {
+                // Không tìm thấy phiếu khám đang hoạt động
+                console.log("[PatientModal] Chưa có phiếu khám đang hoạt động cho bệnh nhân:", currentPid);
               }
-            } catch (err) {
-              console.error("Lỗi khi tìm phiếu khám tự động:", err);
+            } else {
+              // Không có phiếu khám nào
+              console.log("[PatientModal] Chưa có phiếu khám cho bệnh nhân:", currentPid);
             }
-          })();
-        }
+          } catch (err) {
+            console.error("Lỗi khi tìm phiếu khám tự động:", err);
+          }
+        })();
       }
     }
 
@@ -660,7 +787,37 @@ export default function PatientModal({
 
     const t = setTimeout(() => firstRef.current?.focus(), 60);
     return () => clearTimeout(t);
-  }, [open, patient, patientForView, mode, today, isDirty]);
+  }, [open, patient, patientForView, mode, today, isDirty, patientId]); // ✅ Thêm patientId để reset khi đổi bệnh nhân
+
+  // ✅ Reset fetch flag khi đổi bệnh nhân
+  useEffect(() => {
+    if (!open) return;
+    
+    const currentPid = 
+      patient?.id || 
+      patient?.pid || 
+      patient?.MaBenhNhan || 
+      patient?.maBenhNhan ||
+      patientId;
+    
+    // Nếu đổi bệnh nhân khác, reset flag
+    if (currentPid && lastFetchedPatientRef.current !== currentPid) {
+      console.log(`[PatientModal] Patient changed from ${lastFetchedPatientRef.current} to ${currentPid}, resetting fetch flag`);
+      fetchedDiagnosisRef.current = false;
+      lastFetchedPatientRef.current = null;
+      
+      // ✅ Clear localStorage để tránh lấy nhầm mã phiếu khám cũ
+      try {
+        const oldMaPhieuKham = localStorage.getItem("last-clinical-exam-id");
+        if (oldMaPhieuKham) {
+          console.log(`[PatientModal] Clearing old maPhieuKham from localStorage: ${oldMaPhieuKham}`);
+          localStorage.removeItem("last-clinical-exam-id");
+        }
+      } catch (err) {
+        console.warn("[PatientModal] Failed to clear localStorage:", err);
+      }
+    }
+  }, [open, patient, patientId]);
 
 
 
@@ -1327,19 +1484,99 @@ const transactions = useMemo(() => {
   const [loadingFinalDiagnosis, setLoadingFinalDiagnosis] = useState(false);
 
   // ----------------- FETCH FINAL DIAGNOSIS FOR PROCESS MODE -----------------
-  const fetchFinalDiagnosis = async () => {
-    if (loadingFinalDiagnosis) return;
-    if (!maPhieuKhamCurrent) {
-      toast.error("Thiếu mã phiếu khám.");
+  const fetchFinalDiagnosis = async (explicitPatientId = null) => {
+    // ✅ Check loading state
+    if (loadingFinalDiagnosis) {
+      console.log("[fetchFinalDiagnosis] Already loading, skipping duplicate call");
       return;
     }
+    
+    // ✅ Lấy mã bệnh nhân hiện tại (MUST HAVE)
+    const currentPatientId = 
+      explicitPatientId ||
+      form?.id ||
+      form?.MaBenhNhan ||
+      form?.maBenhNhan ||
+      patient?.id ||
+      patient?.MaBenhNhan ||
+      patient?.maBenhNhan ||
+      patientId;
+    
+    if (!currentPatientId) {
+      toast.error("Thiếu mã bệnh nhân.");
+      return;
+    }
+    
+    // ✅ Lấy maPhieuKham DYNAMICALLY (tránh stale closure)
+    // KHÔNG dùng maPhieuKhamCurrent từ closure vì nó có thể đã thay đổi
+    const currentMaPhieuKham = 
+      patient?.MaPhieuKham ||
+      patient?.maPhieuKham ||
+      patient?.MaPhieuKhamLs ||
+      patient?.maPhieuKhamLs ||
+      form?.MaPhieuKham ||
+      form?.maPhieuKham ||
+      null;
+    
+    if (!currentMaPhieuKham) {
+      console.warn(
+        `[fetchFinalDiagnosis] Không tìm thấy mã phiếu khám cho bệnh nhân ${currentPatientId}`
+      );
+      toast.warn("Chưa có phiếu khám để tải chẩn đoán.");
+      return;
+    }
+    
+    console.log(
+      `[fetchFinalDiagnosis] Fetching diagnosis for patient: ${currentPatientId}, ` +
+      `maPhieuKham: ${currentMaPhieuKham}`
+    );
+    
     try {
       setLoadingFinalDiagnosis(true);
-      const dxRes = await getFinalDiagnosis(maPhieuKhamCurrent);
+      
+      // ✅ Gọi API với mã phiếu khám đã lấy động
+      const dxRes = await getFinalDiagnosis(currentMaPhieuKham);
+      
       if (!dxRes) {
-        toast.error("Không tìm thấy chẩn đoán cuối.");
+        console.log("[fetchFinalDiagnosis] API returned null/undefined");
+        toast.warn("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
+      
+      // ✅ CRITICAL: Kiểm tra mã bệnh nhân có khớp không
+      const diagnosisPatientId = 
+        dxRes.MaBenhNhan ||
+        dxRes.maBenhNhan ||
+        dxRes.patientId;
+      
+      if (!diagnosisPatientId) {
+        console.warn("[fetchFinalDiagnosis] Phiếu chẩn đoán không có mã bệnh nhân");
+        toast.warn("Chưa có chẩn đoán cuối cho bệnh nhân này.");
+        return;
+      }
+      
+      if (diagnosisPatientId !== currentPatientId) {
+        console.warn(
+          `[fetchFinalDiagnosis] ❌ Mã bệnh nhân KHÔNG KHỚP: ` +
+          `current=${currentPatientId}, diagnosis=${diagnosisPatientId}. ` +
+          `Bỏ qua kết quả này để tránh hiển thị sai dữ liệu.`
+        );
+        toast.warn("Chưa có chẩn đoán cuối cho bệnh nhân này.");
+        return;
+      }
+      
+      console.log(
+        `[fetchFinalDiagnosis] ✅ Mã bệnh nhân khớp: ${currentPatientId}. Loading diagnosis...`
+      );
+      
+      // Parse HuongXuTri field to populate checkbox flags
+      const huongXuTri = dxRes.HuongXuTri || dxRes.followup || "";
+      const flags = {
+        choVe: huongXuTri.includes("cho_ve") || huongXuTri.includes("Cho về"),
+        choThuocVe: huongXuTri.includes("cho_thuoc_ve") || huongXuTri.includes("Cho thuốc về"),
+        taiKham: huongXuTri.includes("tai_kham") || huongXuTri.includes("Tái khám"),
+      };
+      
       setDiagnosisData((prev) => ({
         ...prev,
         MaPhieuChanDoan: dxRes.MaPhieuChanDoan || dxRes.maPhieuChanDoan,
@@ -1350,7 +1587,7 @@ const transactions = useMemo(() => {
         summary: dxRes.NoiDungKham || dxRes.summary || "",
         orders: dxRes.PhatDoDieuTri || dxRes.orders || "",
         advice: dxRes.LoiKhuyen || dxRes.advice || "",
-        followup: dxRes.HuongXuTri || dxRes.followup || "",
+        followupFlags: flags,
         prescriptionCode: dxRes.MaDonThuoc || dxRes.maDonThuoc || "",
       }));
       toast.success("Đã tải chẩn đoán cuối.");
@@ -1361,8 +1598,22 @@ const transactions = useMemo(() => {
         err?.response?.data?.title ||
         err?.response?.data?.detail ||
         err?.message ||
-        "Không thể tải chẩn đoán cuối.";
-      toast.error(msg);
+        "";
+      
+      console.error("[fetchFinalDiagnosis] Error:", err);
+      
+      // Nếu là lỗi 404 hoặc không tìm thấy
+      if (err?.response?.status === 404 || msg.includes("not found") || msg.includes("không tìm thấy")) {
+        // ✅ 404 là trường hợp bình thường khi chưa có chẩn đoán
+        // Chỉ log, KHÔNG hiển thị toast để tránh làm phiền user
+        console.log(
+          `[fetchFinalDiagnosis] Chưa có chẩn đoán cuối cho phiếu khám ${currentMaPhieuKham}. ` +
+          `Đây là trường hợp bình thường khi bác sĩ chưa lập chẩn đoán.`
+        );
+      } else {
+        // ❌ Lỗi thật sự (không phải 404) → Hiển thị toast error
+        toast.error(msg || "Không thể tải chẩn đoán cuối.");
+      }
     } finally {
       setLoadingFinalDiagnosis(false);
     }
@@ -1391,7 +1642,13 @@ const transactions = useMemo(() => {
 
       try {
         await updateClsOrderStatus(clsOrderId, "dang_thuc_hien");
-        toast.success("Cập nhật phiếu CLS thành công.");
+        toast.success("Lập phiếu CLS thành công.");
+        
+        // Refetch patient detail to get updated status
+        if (refetchPatientDetail) {
+          await refetchPatientDetail();
+        }
+        
         setClsSummaryPrint(null);
         openPrint({
           type: "service",
@@ -1748,6 +2005,15 @@ const transactions = useMemo(() => {
       return;
     }
 
+    // ✅ Validation: Check at least one treatment direction is selected
+    const flags = diagnosisData.followupFlags || {};
+    const hasSelection = flags.choVe || flags.choThuocVe || flags.taiKham;
+    
+    if (!hasSelection) {
+      toast.error("Vui lòng chọn ít nhất một hướng xử trí");
+      return;
+    }
+
     // ✅ 1. Lấy maPhieuKham
     const maPhieuKham = 
       diagnosisData?.MaPhieuKham ||
@@ -1775,35 +2041,87 @@ const transactions = useMemo(() => {
 
       toast.success("Đã hoàn tất phiếu khám.");
 
-      // ✅ 3. Nếu có tái khám, tạo lịch hẹn
+      // ✅ 3. Nếu có tái khám, xử lý flow tái khám
       const d = diagnosisData || {};
-      if (/tái khám/i.test(d.followup || "")) {
-        const date = (d.followupDate || "").slice(0, 10);
-        const time = d.followupTime || "";
-        if (date) {
-          // Note: createFollowupHold should be imported or defined elsewhere
-          // For now, we'll use the same pattern as the original code
-          try {
-            if (typeof createFollowupHold === "function") {
-              createFollowupHold({
-                pid,
-                patient: form?.name || pid,
-                date,
-                time,
-                dept: booking.dept || exam.dept || "",
-                doctor: booking.doctor || "",
-                note: d.advice || "Hẹn tái khám",
-              });
-            }
-          } catch (err) {
-            console.warn("Could not create followup hold:", err);
-          }
-          await onMutatePatient?.(pid, { status: STATUSES.SCHEDULED_FUP });
-        } else {
-          await onMutatePatient?.(pid, { status: STATUSES.DONE });
+      if (flags.taiKham) {
+        // ✅ 3.1 Save context to localStorage
+        try {
+          saveFollowupContext({
+            patientId: pid,
+            patientName: form?.name || patient?.name || "",
+            doctorCode: currentUserInfo.code || "",
+            doctorName: currentUserInfo.name || currentUser || "",
+            examDate: new Date().toISOString(),
+          });
+          console.log("[Follow-up] Context saved to localStorage");
+        } catch (err) {
+          console.error("[Follow-up] Failed to save context:", err);
+          toast.warn("Không thể lưu thông tin tái khám");
         }
+
+        // ✅ 3.2 Process medication payment if needed
+        if (rx.length > 0 && totalDrugAmount > 0) {
+          try {
+            // TODO: Implement medication payment API call
+            // await processMedicationPayment();
+            toast.success(`Đã thu phí thuốc: ${totalDrugAmount.toLocaleString("vi-VN")}đ`);
+          } catch (err) {
+            console.error("[Follow-up] Medication payment failed:", err);
+            toast.error("Lỗi thu phí thuốc");
+            // Don't return - continue with flow
+          }
+        }
+
+        // ✅ 3.3 Update patient status
+        await onMutatePatient?.(pid, { status: STATUSES.DONE });
+
+        // ✅ 3.4 Mark appointment done
+        try {
+          if (typeof markAppointmentDoneForPid === "function") {
+            markAppointmentDoneForPid(pid);
+          }
+        } catch (err) {
+          console.warn("Could not mark appointment done:", err);
+        }
+
+        // ✅ 3.5 Navigate to Appointments page with flash animation
+        toast.info("Vui lòng tạo lịch hẹn tái khám cho bệnh nhân");
+        onClose?.();
+        
+        // ✅ Sử dụng UIStore để flash nút "Tạo lịch hẹn" giống flow check-in
+        const uiStore = useUIStore.getState();
+        uiStore.flashApptCreate();
+        
+        // Navigate after a short delay to ensure modal closes first
+        setTimeout(() => {
+          navigate("/appointments");
+        }, 300);
+
+        return;
+      }
+
+      // ✅ 4. Normal flow (không tái khám)
+      const date = (d.followupDate || "").slice(0, 10);
+      const time = d.followupTime || "";
+      if (date) {
+        // Create followup hold if date is specified
+        try {
+          if (typeof createFollowupHold === "function") {
+            createFollowupHold({
+              pid,
+              patient: form?.name || pid,
+              date,
+              time,
+              dept: booking.dept || exam.dept || "",
+              doctor: booking.doctor || "",
+              note: d.advice || "Hẹn tái khám",
+            });
+          }
+        } catch (err) {
+          console.warn("Could not create followup hold:", err);
+        }
+        await onMutatePatient?.(pid, { status: STATUSES.SCHEDULED_FUP });
       } else {
-        // ✅ 4. Cập nhật trạng thái bệnh nhân → DONE
         await onMutatePatient?.(pid, { status: STATUSES.DONE });
       }
 

@@ -408,6 +408,25 @@ export function useStaff(filters, options) {
   return useQuery({
     queryKey: ["staff-cards", filters],
     queryFn: () => listStaff(filters),
+    select: (res) => {
+      // ✅ listStaff đã trả về PagedResult, chuẩn hóa về format chung
+      if (res && typeof res === "object") {
+        return {
+          Items: res.items || res.Items || [],
+          TotalItems: res.TotalItems ?? res.totalItems ?? (res.items?.length ?? 0),
+          Page: res.Page ?? res.page ?? (filters?.page ?? 1),
+          PageSize: res.PageSize ?? res.pageSize ?? (filters?.pageSize ?? 50),
+        };
+      }
+      // Fallback
+      const items = Array.isArray(res) ? res : [];
+      return {
+        Items: items,
+        TotalItems: items.length,
+        Page: filters?.page ?? 1,
+        PageSize: filters?.pageSize ?? 50,
+      };
+    },
     keepPreviousData: true,
     ...options,
   });

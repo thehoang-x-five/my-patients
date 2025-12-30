@@ -347,7 +347,7 @@ async function listNotifications(params = {}) {
         }
       : {}),
     Page: page || 1,
-    PageSize: take || rest.PageSize || rest.pageSize || 500,
+    PageSize: take || rest.PageSize || rest.pageSize || 50, // ✅ Chuẩn hóa: 50 items mặc định
     ...rest,
   };
 
@@ -440,6 +440,26 @@ export function useNotifications({ params } = {}) {
   return useQuery({
     queryKey: ["notifications", params],
     queryFn: () => listNotifications(params),
+    select: (res) => {
+      // ✅ Trả về PagedResult đầy đủ
+      if (res && typeof res === "object" && ("totalItems" in res || "TotalItems" in res)) {
+        return {
+          Items: res.items || res.Items || [],
+          TotalItems: res.TotalItems ?? res.totalItems ?? 0,
+          Page: res.Page ?? res.page ?? (params?.page ?? 1),
+          PageSize: res.PageSize ?? res.pageSize ?? (params?.pageSize ?? 50),
+        };
+      }
+      // Fallback: nếu là array
+      const items = Array.isArray(res) ? res : [];
+      return {
+        Items: items,
+        TotalItems: items.length,
+        Page: params?.page ?? 1,
+        PageSize: params?.pageSize ?? 50,
+      };
+    },
+    keepPreviousData: true,
     staleTime: 15_000,
   });
 }

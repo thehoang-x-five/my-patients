@@ -24,6 +24,7 @@ import { useUIStore } from "../components/stores/appStore";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
+import { getFollowupContext, clearFollowupContext } from "../utils/followupContext.js";
 
 const RECEPTION_HOURS = { start: 0, end: 24 };
 const isWithinReceptionHours = () => {
@@ -73,6 +74,27 @@ export default function Appointments() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailAppt, setDetailAppt] = useState(null);
   const [newId, setNewId] = useState(null);
+
+  // ✅ Follow-up context detection
+  const [hasFollowupContext, setHasFollowupContext] = useState(false);
+  const [followupContextData, setFollowupContextData] = useState(null);
+
+  // Check for follow-up context on mount
+  useEffect(() => {
+    const context = getFollowupContext();
+    if (context) {
+      setHasFollowupContext(true);
+      setFollowupContextData(context);
+      console.log("[Appointments] Follow-up context detected:", context);
+      
+      // Show info toast
+      toast.info(`Vui lòng tạo lịch hẹn tái khám cho bệnh nhân: ${context.patientName}`);
+      
+      // ✅ Trigger flash animation cho nút "Tạo lịch hẹn"
+      const uiStore = useUIStore.getState();
+      uiStore.flashApptCreate();
+    }
+  }, []);
 
   // today list
   const { data: todayItems = [], isLoading } = useAppointmentsByDate(TODAY);
@@ -374,6 +396,14 @@ export default function Appointments() {
     setDrawerOpen(false);
     setCreateDate("");
     clearApptPrefill(); // ✅ dọn sau khi lưu
+    
+    // ✅ Clear follow-up context after successful appointment creation
+    if (hasFollowupContext) {
+      clearFollowupContext();
+      setHasFollowupContext(false);
+      setFollowupContextData(null);
+      console.log("[Appointments] Follow-up context cleared after appointment creation");
+    }
   }
   
 
@@ -488,11 +518,33 @@ export default function Appointments() {
             }
             setCreateDate(panelDate || TODAY);
             setDrawerOpen(true);
+            
+            // ✅ Acknowledge flash animation
+            if (flashApptCreateAt) {
+              ackFlashApptCreate();
+            }
+            
+            // ✅ Lưu thông tin follow-up vào localStorage để CreateDrawer đọc
+            if (hasFollowupContext && followupContextData) {
+              try {
+                localStorage.setItem("appt-prefill", JSON.stringify({
+                  patient: followupContextData.patientName,
+                  code: followupContextData.patientId,
+                  type: "follow_up",
+                  doctor: followupContextData.doctorName,
+                  date: panelDate || TODAY,
+                }));
+                console.log("[Appointments] Saved prefill to localStorage");
+              } catch (err) {
+                console.error("[Appointments] Failed to save prefill:", err);
+              }
+            }
           }}
           counts={counts}
           withinReception={isWithinReceptionHours()}
           timeLabel={formatTime(currentTime)}
           receptionHours={RECEPTION_HOURS}
+          flashApptCreateAt={flashApptCreateAt}
         />
 
         <div className="mt-3 flex-1 min-h-0">
@@ -574,10 +626,16 @@ export default function Appointments() {
         onClose={() => {
           setDrawerOpen(false);
           clearApptPrefill(); // ✅ dọn prefill khi tự đóng
+          
+          // ✅ Clear follow-up context after closing drawer
+          if (hasFollowupContext) {
+            clearFollowupContext();
+            setHasFollowupContext(false);
+            setFollowupContextData(null);
+          }
         }}
         onSubmit={addApptFromForm}
         defaultDate={createDate || TODAY}
-        defaultValues={apptPrefill || undefined}
       />
 
       <ApptDetailModal

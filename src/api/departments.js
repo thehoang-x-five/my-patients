@@ -781,7 +781,27 @@ export function useDepartmentRooms(params = {}, options = {}) {
   return useQuery({
     queryKey: ["department-rooms", params],
     queryFn: () => listDepartments(params),
+    select: (res) => {
+      // ✅ listDepartments đã trả về PagedResult, chuẩn hóa về format chung
+      if (res && typeof res === "object") {
+        return {
+          Items: res.items || res.Items || [],
+          TotalItems: res.TotalItems ?? res.totalItems ?? (res.items?.length ?? 0),
+          Page: res.Page ?? res.page ?? (params?.page ?? 1),
+          PageSize: res.PageSize ?? res.pageSize ?? (params?.pageSize ?? 50),
+        };
+      }
+      // Fallback
+      const items = Array.isArray(res) ? res : [];
+      return {
+        Items: items,
+        TotalItems: items.length,
+        Page: params?.page ?? 1,
+        PageSize: params?.pageSize ?? 50,
+      };
+    },
     enabled,
+    keepPreviousData: true,
     staleTime: 30_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
