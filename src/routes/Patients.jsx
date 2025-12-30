@@ -514,44 +514,65 @@ export default function Patients() {
     }
     // ===== XỬ LÝ & CHẨN ĐOÁN =====
     if (type === "process") {
-      // Mở modal xử lý & chẩn đoán
-      setModal({ open: true, mode: "process", patient: p });
+      // Tìm phiếu khám đang hoạt động và lưu maPhieuKham vào patient object
+      let patientWithExam = { ...p };
 
       if (pid) {
-        // Tìm phiếu khám từ MaBenhNhan để lấy maPhieuKham và gọi getFinalDiagnosis
-        // Modal sẽ tự fetch dữ liệu khi cần
         try {
-          // Tìm phiếu khám đang thực hiện hoặc mới nhất
+          // ✅ Tìm phiếu khám đang hoạt động theo mã bệnh nhân
+          // Theo rule: 1 bệnh nhân chỉ có 1 phiếu LS đang hoạt động
+          // Filter các trạng thái đang hoạt động: da_lap, dang_kham, da_lap_chan_doan
+          // Loại trừ: da_hoan_tat, da_huy
           const clinicalList = await searchClinicalRaw({
             MaBenhNhan: pid,
-            TrangThai: "dang_thuc_hien",
+            // Không truyền TrangThai - lấy tất cả để tìm phiếu đang hoạt động
           });
 
           if (Array.isArray(clinicalList) && clinicalList.length > 0) {
-            // Lấy phiếu khám đầu tiên (đang thực hiện)
-            const latestClinical = clinicalList[0];
+            // ✅ Lọc lấy phiếu đang hoạt động (không phải da_hoan_tat hoặc da_huy)
+            // Các trạng thái đang hoạt động: da_lap, dang_kham, da_lap_chan_doan
+            const activeClinical = clinicalList.find(
+              (c) => {
+                const status = c.TrangThai || c.trangThai || "";
+                return (
+                  status !== "da_hoan_tat" &&
+                  status !== "da_huy" &&
+                  status !== "" &&
+                  (status === "da_lap" ||
+                    status === "dang_kham" ||
+                    status === "da_lap_chan_doan")
+                );
+              }
+            );
+
+            // Nếu không tìm thấy phiếu đang hoạt động, lấy phiếu mới nhất (fallback)
+            const targetClinical = activeClinical || clinicalList[0];
+
             const maPhieuKham = 
-              latestClinical?.MaPhieuKham ||
-              latestClinical?.maPhieuKham ||
-              latestClinical?.id ||
+              targetClinical?.MaPhieuKham ||
+              targetClinical?.maPhieuKham ||
+              targetClinical?.id ||
               null;
 
             if (maPhieuKham) {
-              // Call GET /api/clinical/{maPhieuKham}/final-diagnosis
-              // Modal sẽ tự xử lý khi cần
-              try {
-                await getFinalDiagnosis(maPhieuKham);
-              } catch (err) {
-                console.error("Không lấy được chẩn đoán cuối:", err);
-                toast.warn("Không thể tải chẩn đoán cuối. Vui lòng thử lại.");
-              }
+              // ✅ LƯU maPhieuKham vào patient object
+              patientWithExam = {
+                ...patientWithExam,
+                MaPhieuKham: maPhieuKham,
+                maPhieuKham: maPhieuKham,
+                MaPhieuKhamLs: maPhieuKham,
+                maPhieuKhamLs: maPhieuKham,
+              };
             }
           }
         } catch (err) {
-          console.error("Lỗi khi tìm phiếu khám để lấy chẩn đoán:", err);
-          toast.error("Không thể tải thông tin phiếu khám. Vui lòng thử lại.");
+          console.error("Lỗi khi tìm phiếu khám:", err);
+          toast.warn("Không thể tải thông tin phiếu khám. Modal vẫn sẽ mở, bạn có thể tải lại sau.");
         }
       }
+
+      // ✅ Mở modal với patient đã có maPhieuKham
+      setModal({ open: true, mode: "process", patient: patientWithExam });
 
       return;
     }

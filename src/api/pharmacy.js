@@ -326,7 +326,8 @@ export async function getStock() {
   const list = extractItems(data);
   return list.map(normalizeDrug);
 }
-export async function searchStock({ keyword, status, expFrom, expTo, tonMin, tonMax, page = 1, pageSize = 500 } = {}) {
+// ✅ Trả về PagedResult đầy đủ
+export async function searchStock({ keyword, status, expFrom, expTo, tonMin, tonMax, page = 1, pageSize = 50 } = {}) {
   const payload = {
     Keyword: keyword || null,
     TrangThai: status === "all" ? null : status || null,
@@ -341,8 +342,25 @@ export async function searchStock({ keyword, status, expFrom, expTo, tonMin, ton
   };
 
   const data = await post("/pharmacy/stock/search", payload);
-  const list = extractItems(data); // dùng helper extractItems ở trên
-  return list.map(normalizeDrug);
+  
+  // ✅ Trả về PagedResult đầy đủ
+  if (data && typeof data === "object" && ("TotalItems" in data || "totalItems" in data)) {
+    return {
+      Items: extractItems(data).map(normalizeDrug),
+      TotalItems: data.TotalItems ?? data.totalItems ?? 0,
+      Page: data.Page ?? data.page ?? page,
+      PageSize: data.PageSize ?? data.pageSize ?? pageSize,
+    };
+  }
+  
+  // Fallback: nếu không phải PagedResult
+  const list = extractItems(data);
+  return {
+    Items: list.map(normalizeDrug),
+    TotalItems: list.length,
+    Page: page,
+    PageSize: pageSize,
+  };
 }
 
 
@@ -389,6 +407,28 @@ export function useRxOrders(options = {}) {
     queryKey: ["pharmacy", "rxOrders"],
     queryFn: getRxOrders,
     staleTime: 30_000,
+    ...options,
+  });
+}
+
+// ✅ Hook cho search stock với phân trang
+export function useSearchStock(filters = {}, options = {}) {
+  const {
+    keyword = "",
+    status = "all",
+    expFrom = null,
+    expTo = null,
+    tonMin = null,
+    tonMax = null,
+    page = 1,
+    pageSize = 50,
+  } = filters;
+
+  return useQuery({
+    queryKey: ["pharmacy", "stock", "search", { keyword, status, expFrom, expTo, tonMin, tonMax, page, pageSize }],
+    queryFn: () => searchStock({ keyword, status, expFrom, expTo, tonMin, tonMax, page, pageSize }),
+    staleTime: 10_000,
+    keepPreviousData: true, // Giữ data cũ khi chuyển trang
     ...options,
   });
 }

@@ -21,10 +21,12 @@ import {
   getStock,
   upsertStockItem,
   subscribePharmacy,
-  searchStock
+  searchStock,
+  useSearchStock
 } from "../api/pharmacy.js";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Pagination from "../components/ui/Pagination.jsx";
 import { usePrescStore } from "../components/stores/appStore.js";
 
 import useViewportVH from "../hooks/useViewportVH";
@@ -125,10 +127,13 @@ export default function Prescriptions() {
     staleTime: 30_000,
   });
 
-  const stockQuery = useQuery({
-    queryKey: ["rxStock"],
-    queryFn: getStock,
-    staleTime: 30_000,
+  // ✅ Dùng searchStock với phân trang
+  const [stockPage, setStockPage] = useState(1);
+  const stockQuery = useSearchStock({
+    keyword: qStockDef || "",
+    status: stockStatus === "all" ? null : stockStatus,
+    page: stockPage,
+    pageSize: 50,
   });
 
   
@@ -138,7 +143,12 @@ export default function Prescriptions() {
   const loadingBoth = loadingOrders && loadingStock;
 
   const orders = ordersQuery.data || [];
-  const stock = stockQuery.data || [];
+  
+  // ✅ Lấy data từ PagedResult
+  const stockResult = stockQuery.data || { Items: [], TotalItems: 0, Page: 1, PageSize: 50 };
+  const stock = stockResult.Items || [];
+  const stockTotalItems = stockResult.TotalItems || 0;
+  const stockTotalPages = Math.ceil(stockTotalItems / 50);
 
 
   
@@ -152,7 +162,8 @@ export default function Prescriptions() {
           break;
         case "stock_upserted":
         case "stock_deleted":
-          qc.invalidateQueries({ queryKey: ["rxStock"] });
+          qc.invalidateQueries({ queryKey: ["pharmacy", "stock"] });
+          qc.invalidateQueries({ queryKey: ["pharmacy", "stock", "search"] });
           break;
         default:
           break;
@@ -229,20 +240,12 @@ export default function Prescriptions() {
     });
   }, [orders, qOrdersDef, orderStatus, orderRange]);
 
-  // ===== Filter kho thuốc =====
+  // ✅ Filter kho thuốc - chỉ filter unit ở FE (vì BE chưa hỗ trợ filter unit)
+  // Keyword và status đã được filter ở BE
   const filteredStock = useMemo(() => {
     if (!stock || !stock.length) return [];
-    const kw = (qStockDef || "").trim().toLowerCase();
   
     return stock.filter((r) => {
-      const textOk =
-        !kw ||
-        [r.code, r.name, r.usage]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(kw);
-  
       const unitOk = unit
         ? (r.unit || r.donViTinh || "")
             .toLowerCase()
@@ -250,35 +253,23 @@ export default function Prescriptions() {
         : true;
   
       const statusCode = getDrugStatusCode(r);
-      
-      const qty = getQty(r);
   
       // 🔒 Không hiển thị thuốc tạm dừng
       if (statusCode === "tam_dung") return false;
   
-      let statusOk = true;
-      switch (stockStatus) {
-        case "hoat_dong":
-          statusOk = statusCode === "hoat_dong";
-          break;
-        case "het_han":
-          statusOk = statusCode === "het_han";
-          break;
-        case "sap_het_han":
-          statusOk = statusCode === "sap_het_han";
-          break;
-        case "sap_het_ton":
-          statusOk = statusCode === "sap_het_ton" || qty <= LOW_STOCK_QTY;
-          break;
-        default:
-          statusOk = true; // all
-      }
+      // Status đã được filter ở BE, nhưng vẫn check để đảm bảo
+      // (BE filter theo TrangThai, FE có thể cần check thêm logic statusCode)
   
-      return textOk && unitOk && statusOk;
+      return unitOk;
     });
-  }, [stock, qStockDef, unit, stockStatus]);
+  }, [stock, unit]);
+  
+  // ✅ Reset page khi filter thay đổi
+  useEffect(() => {
+    if (stockPage > 1) setStockPage(1);
+  }, [qStockDef, stockStatus]);
 
-  // ===== Stats đơn thuốc + kho thuốc (theo danh sách đã lọc) =====
+  // ===== Stats đơn thuốc + kho thuốc =====
 const ordersCount = filteredOrders.length;
 
 const ordersCreatedCount = useMemo(
@@ -318,74 +309,36 @@ const ordersDoneCount = useMemo(
   [filteredOrders]
 );
 
-const stockCount = useMemo(
-  () =>
-    filteredStock.filter((r) => {
-      const st = getDrugStatusCode(r);
-      if (st === "tam_dung") return false;
-      return true;
-    }).length,
-  [filteredStock]
-);
+// ✅ Stats kho thuốc - tính từ filteredStock (sau khi filter unit)
+// Lưu ý: TotalItems từ BE chỉ đúng khi không có filter unit
+const stockCount = filteredStock.length;
+const stockActiveCount = filteredStock.filter((r) => {
+  const st = getDrugStatusCode(r);
+  return st === "hoat_dong";
+}).length;
 
-const stockActiveCount = useMemo(
-  () =>
-    filteredStock.filter((r) => {
-      const st = getDrugStatusCode(r);
-      if (st === "tam_dung") return false;
-      return st === "hoat_dong";
-    }).length,
-  [filteredStock]
-);
+const stockExpiredCount = filteredStock.filter((r) => {
+  const st = getDrugStatusCode(r);
+  return st === "het_han";
+}).length;
 
-const stockExpiredCount = useMemo(
-  () =>
-    filteredStock.filter((r) => {
-      const st = getDrugStatusCode(r);
-      if (st === "tam_dung") return false;
-      return st === "het_han";
-    }).length,
-  [filteredStock]
-);
+const stockNearExpiryCount = filteredStock.filter((r) => {
+  const st = getDrugStatusCode(r);
+  return st === "sap_het_han";
+}).length;
 
-const stockNearExpiryCount = useMemo(
-  () =>
-    filteredStock.filter((r) => {
-      const st = getDrugStatusCode(r);
-      if (st === "tam_dung") return false;
-      return st === "sap_het_han";
-    }).length,
-  [filteredStock]
-);
-
-const stockNearOutCount = useMemo(
-  () =>
-    filteredStock.filter((r) => {
-      const st = getDrugStatusCode(r);
-      if (st === "tam_dung") return false;
-      return st === "sap_het_ton";
-    }).length,
-  [filteredStock]
-);
+const stockNearOutCount = filteredStock.filter((r) => {
+  const st = getDrugStatusCode(r);
+  return st === "sap_het_ton";
+}).length;
   // ===== Mutations (upsert kho) =====
   const mUpsert = useMutation({
     mutationFn: upsertStockItem,
-    onMutate: async (form) => {
-      await qc.cancelQueries({ queryKey: ["rxStock"] });
-      const prev = qc.getQueryData(["rxStock"]) || [];
-      const idx = prev.findIndex((x) => x.code === form.code);
-      const optimistic =
-        idx >= 0
-          ? prev.map((x, i) => (i === idx ? { ...x, ...form } : x))
-          : [form, ...prev];
-      qc.setQueryData(["rxStock"], optimistic);
-      return { prev };
+    onSuccess: () => {
+      // ✅ Invalidate queries để refresh data
+      qc.invalidateQueries({ queryKey: ["pharmacy", "stock"] });
+      qc.invalidateQueries({ queryKey: ["pharmacy", "stock", "search"] });
     },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["rxStock"], ctx.prev);
-    },
-    onSettled: () =>
-      qc.invalidateQueries({ queryKey: ["rxStock"] }),
   });
 
   const saveDrug = (form) => {
@@ -481,15 +434,27 @@ const stockNearOutCount = useMemo(
                     exit={{ opacity: 0, y: -8 }}
                     className="card flex-1 min-h-0 overflow-auto"
                   >
-                    <StockTable
-                      items={filteredStock}
-                      loading={loadingStock}
-                      onEdit={(row) =>
-                        setEdit({ open: true, item: row })
-                      }
-                      nearExpiryDays={NEAR_EXPIRY_DAYS}
-                      stretch
-                    />
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      <StockTable
+                        items={filteredStock}
+                        loading={loadingStock}
+                        onEdit={(row) =>
+                          setEdit({ open: true, item: row })
+                        }
+                        nearExpiryDays={NEAR_EXPIRY_DAYS}
+                        stretch
+                      />
+                      {stockTotalPages > 1 && (
+                        <Pagination
+                          currentPage={stockPage}
+                          totalPages={stockTotalPages}
+                          totalItems={stockTotalItems}
+                          pageSize={50}
+                          onPageChange={setStockPage}
+                          className="px-4 py-3 border-t border-slate-200 bg-white"
+                        />
+                      )}
+                    </div>
                     <StockModal
                       open={edit.open}
                       item={edit.item}

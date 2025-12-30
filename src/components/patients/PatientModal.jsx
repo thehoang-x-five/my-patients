@@ -30,7 +30,7 @@ import {
 import { getStoredAccessToken } from "../../api/http.js";
 // History (lượt khám)
 import { useCreateHistoryVisit } from "../../api/history";
-import { getClinicalExam, getFinalDiagnosis } from "../../api/examination";
+import { getClinicalExam, getFinalDiagnosis, useCompleteExam } from "../../api/examination";
 import { useExamStore } from "../stores/appStore.js";
 import { useNavigate } from "react-router-dom";
 
@@ -581,8 +581,71 @@ export default function PatientModal({
         }))
       );
 
-      if (isWaitingProcess && maPhieuKhamCurrent) {
+      // ✅ TỰ ĐỘNG FETCH chẩn đoán nếu có maPhieuKham
+      const maPhieuKham = 
+        patient?.MaPhieuKham ||
+        patient?.maPhieuKham ||
+        patient?.MaPhieuKhamLs ||
+        patient?.maPhieuKhamLs ||
+        form?.MaPhieuKham ||
+        form?.maPhieuKham ||
+        null;
+
+      if (isWaitingProcess && maPhieuKham) {
+        // Gọi ngay khi mở modal
         fetchFinalDiagnosis();
+      } else if (isWaitingProcess && !maPhieuKham) {
+        // Nếu không có maPhieuKham, thử tìm lại từ pid
+        const pid = patient?.id || patient?.pid || patient?.MaBenhNhan || patient?.maBenhNhan;
+        if (pid) {
+          (async () => {
+            try {
+              const { searchClinicalRaw } = await import("../../api/examination");
+              const clinicalList = await searchClinicalRaw({
+                MaBenhNhan: pid,
+                // Không filter trạng thái
+              });
+
+              if (Array.isArray(clinicalList) && clinicalList.length > 0) {
+                // ✅ Lọc lấy phiếu đang hoạt động (không phải da_hoan_tat hoặc da_huy)
+                const activeClinical = clinicalList.find(
+                  (c) => {
+                    const status = c.TrangThai || c.trangThai || "";
+                    return (
+                      status !== "da_hoan_tat" &&
+                      status !== "da_huy" &&
+                      status !== "" &&
+                      (status === "da_lap" ||
+                        status === "dang_kham" ||
+                        status === "da_lap_chan_doan")
+                    );
+                  }
+                ) || clinicalList[0]; // Fallback: lấy đầu tiên nếu không tìm thấy
+
+                const foundMaPhieuKham = 
+                  activeClinical?.MaPhieuKham ||
+                  activeClinical?.maPhieuKham ||
+                  null;
+
+                if (foundMaPhieuKham) {
+                  // Lưu vào form để fetchFinalDiagnosis dùng
+                  setForm(prev => ({
+                    ...prev,
+                    MaPhieuKham: foundMaPhieuKham,
+                    maPhieuKham: foundMaPhieuKham,
+                  }));
+
+                  // Trigger fetch sau một chút để state update
+                  setTimeout(() => {
+                    fetchFinalDiagnosis();
+                  }, 100);
+                }
+              }
+            } catch (err) {
+              console.error("Lỗi khi tìm phiếu khám tự động:", err);
+            }
+          })();
+        }
       }
     }
 
@@ -1074,6 +1137,7 @@ const transactions = useMemo(() => {
   // Hook để tạo phiếu khám lâm sàng
   const createClinicalExamMut = useCreateClinicalExam();
   const createHistoryVisitMut = useCreateHistoryVisit();
+  const completeExamMut = useCompleteExam();
   const setExamActive = useExamStore((s) => s.setActive);
 
   /* ==================== PRINT OVERLAY STATE ==================== */
@@ -1498,24 +1562,8 @@ const transactions = useMemo(() => {
 
     // Hóa đơn sẽ được tạo tự động bởi BE khi tạo phiếu khám
     // Hàng đợi sẽ được tạo tự động bởi BE khi tạo phiếu khám
-    // Không cần gọi enqueueWalkin nữa
-
-    // Tạo lịch sử lượt khám (history.visit) để hiện trong History và thống kê
-    try {
-      await createHistoryVisitMut.mutateAsync({
-        MaBenhNhan: pid,
-        MaPhieuKhamLs: maPhieuKham,
-        MaKhoa: maKhoa,
-        MaPhong: maPhong,
-        MaBacSi: maBacSi,
-        MaNhanSuThucHien: (isServiceIntake ? (clsStaffCode || maNguoiLap) : maBacSi),
-        MaYTaHoTro: isServiceIntake ? (clsStaffCode || maNguoiLap) : undefined,
-        LoaiLuot: isServiceIntake ? "service" : "clinic",
-        GhiChu: examNote,
-      });
-    } catch (err) {
-      console.warn("Không thể tạo lịch sử lượt khám:", err);
-    }
+    // Lượt khám sẽ được tạo tự động bởi Examination.jsx khi gọi vào khám (cần MaHangDoi)
+    // Không cần tạo lượt khám ở đây vì chưa có MaHangDoi
 
     onMutatePatient?.(pid, { status: STATUSES.WAIT_EXAM });
 
@@ -1695,49 +1743,91 @@ const transactions = useMemo(() => {
   // ----------------- HOÀN TẤT & THU PHÍ (THƯỜNG) -----------------
   async function handleFinishDoctor() {
     const pid = form?.id;
-    if (!pid) return;
-    const now = new Date().toISOString().slice(0, 10);
-
-    const d = diagnosisData || {};
-    const noteLines = [
-      `Chẩn đoán: ${d.dxPrimary || "—"}${
-        d.icd10 ? ` (ICD-10: ${d.icd10})` : ""
-      }`,
-      d.dxSecondary ? `Chẩn đoán phụ: ${d.dxSecondary}` : "",
-      d.summary ? `Tóm tắt: ${d.summary}` : "",
-      d.orders ? `Chỉ định: ${d.orders}` : "",
-      d.advice ? `Dặn dò: ${d.advice}` : "",
-      d.followup ? `Hướng xử lý: ${d.followup}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    // Lịch sử khám sẽ được cập nhật khi hoàn tất chẩn đoán qua API examination
-    // Hóa đơn sẽ được tạo tự động bởi BE khi cần
-
-    if (/tái khám/i.test(d.followup || "")) {
-      const date = (d.followupDate || "").slice(0, 10);
-      const time = d.followupTime || "";
-      if (date) {
-        createFollowupHold({
-          pid,
-          patient: form?.name || pid,
-          date,
-          time,
-          dept: booking.dept || exam.dept || "",
-          doctor: booking.doctor || "",
-          note: d.advice || "Hẹn tái khám (bác sĩ tự xử lý)",
-        });
-        onMutatePatient?.(pid, { status: STATUSES.SCHEDULED_FUP });
-      } else {
-        onMutatePatient?.(pid, { status: STATUSES.DONE });
-      }
-    } else {
-      onMutatePatient?.(pid, { status: STATUSES.DONE });
+    if (!pid) {
+      toast.error("Thiếu mã bệnh nhân.");
+      return;
     }
 
-    markAppointmentDoneForPid(pid);
-    onClose?.();
+    // ✅ 1. Lấy maPhieuKham
+    const maPhieuKham = 
+      diagnosisData?.MaPhieuKham ||
+      diagnosisData?.maPhieuKham ||
+      form?.MaPhieuKham ||
+      form?.maPhieuKham ||
+      patient?.MaPhieuKham ||
+      patient?.maPhieuKham ||
+      patient?.MaPhieuKhamLs ||
+      patient?.maPhieuKhamLs ||
+      null;
+
+    if (!maPhieuKham) {
+      toast.error("Thiếu mã phiếu khám. Không thể hoàn tất.");
+      return;
+    }
+
+    try {
+      // ✅ 2. Gọi API hoàn tất phiếu khám
+      await completeExamMut.mutateAsync({
+        maPhieuKham,
+        ForceComplete: false, // Không force, kiểm tra đầy đủ các bước
+        GhiChu: "Hoàn tất từ tab xử lý chẩn đoán",
+      });
+
+      toast.success("Đã hoàn tất phiếu khám.");
+
+      // ✅ 3. Nếu có tái khám, tạo lịch hẹn
+      const d = diagnosisData || {};
+      if (/tái khám/i.test(d.followup || "")) {
+        const date = (d.followupDate || "").slice(0, 10);
+        const time = d.followupTime || "";
+        if (date) {
+          // Note: createFollowupHold should be imported or defined elsewhere
+          // For now, we'll use the same pattern as the original code
+          try {
+            if (typeof createFollowupHold === "function") {
+              createFollowupHold({
+                pid,
+                patient: form?.name || pid,
+                date,
+                time,
+                dept: booking.dept || exam.dept || "",
+                doctor: booking.doctor || "",
+                note: d.advice || "Hẹn tái khám",
+              });
+            }
+          } catch (err) {
+            console.warn("Could not create followup hold:", err);
+          }
+          await onMutatePatient?.(pid, { status: STATUSES.SCHEDULED_FUP });
+        } else {
+          await onMutatePatient?.(pid, { status: STATUSES.DONE });
+        }
+      } else {
+        // ✅ 4. Cập nhật trạng thái bệnh nhân → DONE
+        await onMutatePatient?.(pid, { status: STATUSES.DONE });
+      }
+
+      // ✅ 5. Mark appointment done (if function exists)
+      try {
+        if (typeof markAppointmentDoneForPid === "function") {
+          markAppointmentDoneForPid(pid);
+        }
+      } catch (err) {
+        console.warn("Could not mark appointment done:", err);
+      }
+
+      // ✅ 6. Đóng modal
+      onClose?.();
+
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.Message ||
+        err?.message ||
+        "Không thể hoàn tất phiếu khám. Vui lòng thử lại.";
+      toast.error(msg);
+      console.error("Lỗi khi hoàn tất phiếu khám:", err);
+    }
   }
 
   // ----------------- DỊCH VỤ: TRẢ VỀ BÁC SĨ -----------------

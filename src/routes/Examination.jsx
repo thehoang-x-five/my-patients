@@ -585,24 +585,13 @@ export default function Examination() {
     const huongXuTri =
       huongXuTriArr.join("; ") || payload?.dx?.plan || payload?.dx?.advice || "";
 
+    // ✅ Flow mới: Chỉ lưu chẩn đoán, không đóng lượt khám ở đây
+    // Lượt khám sẽ được đóng khi hoàn tất (CompleteExamAsync)
     const finalPayload = {
       MaPhieuKham: maPhieuKham,
-      MaLuotKham:
-        patient?.MaLuotKham ||
-        patient?.maLuotKham ||
-        patient?.MaLuot ||
-        patient?.maLuot ||
-        patient?.visitId ||
-        patient?.visitIdCreated ||
-        null,
-      MaHangDoi:
-        patient?.MaHangDoi ||
-        patient?.maHangDoi ||
-        patient?.queueId ||
-        patient?.id ||
-        null,
-      TrangThaiLuot: "hoan_tat",
-      ThoiGianKetThuc: nowIso,
+      // KHÔNG truyền MaLuotKham, MaHangDoi, TrangThaiLuot, ThoiGianKetThuc
+      // Backend sẽ chỉ lưu chẩn đoán, chuyển phiếu khám → "da_lap_chan_doan"
+      // Lượt khám vẫn "dang_kham", hàng đợi vẫn "dang_thuc_hien"
       MaDonThuoc: null,
       MaBacSiKeDon:
         patient?.MaNguoiLap ||

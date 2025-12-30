@@ -258,6 +258,16 @@ export async function getFinalDiagnosis(maPhieuKham) {
   return unwrap(res);
 }
 
+// Hoàn tất phiếu khám
+export async function completeExam(maPhieuKham, payload = {}) {
+  if (!maPhieuKham) throw new Error("MaPhieuKham là bắt buộc");
+  const res = await http.post(
+    `${CLINICAL_BASE}/${maPhieuKham}/complete`,
+    payload
+  );
+  return unwrap(res);
+}
+
 // Search phiếu khám theo bộ lọc
 export async function searchClinicalExams(filters = {}) {
   // Map filter camelCase -> query theo API Doc nếu cần
@@ -639,6 +649,27 @@ export function useCreateDiagnosis(options = {}) {
         qc.invalidateQueries({ queryKey: ["queue"] });
         qc.invalidateQueries({ queryKey: ["visits"] });
         qc.invalidateQueries({ queryKey: ["patients"] });
+      }
+      if (typeof options.onSuccess === "function") {
+        options.onSuccess(data, vars, ctx);
+      }
+    },
+    ...options,
+  });
+}
+
+// Hoàn tất phiếu khám
+export function useCompleteExam(options = {}) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ maPhieuKham, ...payload }) => 
+      completeExam(maPhieuKham, payload),
+    onSuccess: (data, vars, ctx) => {
+      if (!options.skipInvalidate) {
+        qc.invalidateQueries({ queryKey: ["clinical"] });
+        qc.invalidateQueries({ queryKey: ["queue"] });
+        qc.invalidateQueries({ queryKey: ["patients"] });
+        qc.invalidateQueries({ queryKey: ["visits"] });
       }
       if (typeof options.onSuccess === "function") {
         options.onSuccess(data, vars, ctx);

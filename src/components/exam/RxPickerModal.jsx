@@ -2,31 +2,44 @@
 import { AnimatePresence, motion } from "framer-motion";
 import React, { useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import Button from "../ui/Button.jsx";
-import { useStock } from "../../api/pharmacy.js";
+import { useSearchStock } from "../../api/pharmacy.js";
 
 export default function RxPickerModal({ open, onClose, onPickMany }) {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState([]); // [{code,name,unit,price,dose,qty,usage}]
+  const [stockPage, setStockPage] = useState(1);
   const inputRef = useRef(null);
 
-  // Chỉ gọi /api/pharmacy/stock khi modal mở
-  const { data: stock = [], isFetching } = useStock({ enabled: !!open });
+  // ✅ Dùng searchStock với phân trang (pageSize nhỏ hơn vì là modal)
+  const qDef = useDeferredValue(q);
+  const stockQuery = useSearchStock({
+    keyword: qDef || "",
+    page: stockPage,
+    pageSize: 20,
+  }, { enabled: !!open });
+
+  const stockResult = stockQuery.data || { Items: [], TotalItems: 0, Page: 1, PageSize: 20 };
+  const stock = stockResult.Items || [];
+  const stockTotalItems = stockResult.TotalItems || 0;
+  const stockTotalPages = Math.ceil(stockTotalItems / 20);
+  const isFetching = stockQuery.isFetching;
 
   useEffect(() => {
     if (open) {
       setRows([]);
       setQ("");
+      setStockPage(1); // Reset về trang 1
       const t = setTimeout(() => inputRef.current?.focus(), 80);
       return () => clearTimeout(t);
     }
   }, [open]);
 
-  const qDef = useDeferredValue(q);
-  const filtered = useMemo(() => {
-    const kw = qDef.trim().toLowerCase();
-    if (!kw) return stock;
-    return stock.filter((r) => [r.code, r.name, r.usage].join(" ").toLowerCase().includes(kw));
-  }, [stock, qDef]);
+  // ✅ Reset page khi search thay đổi
+  useEffect(() => {
+    if (stockPage > 1) setStockPage(1);
+  }, [qDef]);
+
+  const filtered = stock; // Đã được filter ở BE
 
   const alreadyPicked = (code) => rows.some((r) => r.code === code);
   function addDrug(d) {
@@ -73,7 +86,7 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
                   <p className="text-sm text-slate-600">Chọn từ kho • Nhập liều dùng / số lượng</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="tag bg-sky-50 text-sky-700 border-sky-200">Kết quả: <b className="ml-1">{filtered.length}</b></span>
+                  <span className="tag bg-sky-50 text-sky-700 border-sky-200">Kết quả: <b className="ml-1">{stockTotalItems}</b></span>
                   <span className="tag bg-teal-50 text-teal-700 border-teal-200">Đã chọn: <b className="ml-1">{rows.length}</b></span>
                   <Button onClick={onClose} aria-label="Đóng" className="!px-2">✕</Button>
                 </div>
@@ -129,8 +142,32 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
                       </motion.button>
                     );
                   })}
-                  {!filtered.length && <div className="p-3 text-sm text-slate-500">Không có thuốc phù hợp.</div>}
                 </div>
+                
+                {/* ✅ Pagination cho modal (nếu có nhiều trang) */}
+                {stockTotalPages > 1 && (
+                  <div className="px-3 py-2 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-600">
+                      Trang {stockPage}/{stockTotalPages} ({stockTotalItems} kết quả)
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setStockPage(p => Math.max(1, p - 1))}
+                        disabled={stockPage === 1}
+                        className="px-2 py-1 text-xs rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        ←
+                      </button>
+                      <button
+                        onClick={() => setStockPage(p => Math.min(stockTotalPages, p + 1))}
+                        disabled={stockPage === stockTotalPages}
+                        className="px-2 py-1 text-xs rounded border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
 
               {/* PICKED */}

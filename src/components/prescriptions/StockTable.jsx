@@ -146,7 +146,7 @@ export default function StockTable({
   items = [],
   onEdit,
   loading = false,
-  nearExpiryDays= 30,
+  nearExpiryDays = 30,
   stretch = false,
 }) {
   const NEAR = nearExpiryDays ;
