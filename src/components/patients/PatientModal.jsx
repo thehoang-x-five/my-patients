@@ -289,11 +289,22 @@ export default function PatientModal({
   const [servicePricePrefill, setServicePricePrefill] = useState([]);
   const [clsOrderId, setClsOrderId] = useState("");
   const [clsStaffCode, setClsStaffCode] = useState("");
-  const [loadingFinalDx, setLoadingFinalDx] = useState(false);
+  const [loadingFinalDiagnosis, setLoadingFinalDiagnosis] = useState(false);
   
-  // ✅ Flag để prevent duplicate fetch
-  const fetchedDiagnosisRef = useRef(false);
-  const lastFetchedPatientRef = useRef(null);
+  // ✅ Cache key để track bệnh nhân nào đang có data cached
+  const cachedDiagnosisPatientRef = useRef(null);
+  
+  // ✅ Cache maPhieuKham để tránh mất khi switch tab
+  const cachedMaPhieuKhamRef = useRef(null);
+  
+  // ✅ Track if fetchFinalDiagnosis is currently running
+  const isFetchingDiagnosisRef = useRef(null);
+  
+  // ✅ Track if validation is currently running to prevent duplicate getClinicalExam calls
+  const isValidatingPhieuKhamRef = useRef(null);
+  
+  // ✅ Track if search is currently running to prevent duplicate searchClinicalRaw calls
+  const isSearchingPhieuKhamRef = useRef(null);
 
   const isServiceFlow = useMemo(() => {
     const svcItems = (patientForView || patient)?.serviceOrder?.items || [];
@@ -463,9 +474,12 @@ export default function PatientModal({
       setRx([]); // Clear prescriptions
       setSvcResults([]); // Clear service results
       
-      // ✅ Reset fetch flags
-      fetchedDiagnosisRef.current = false;
-      lastFetchedPatientRef.current = null;
+      // ✅ Reset cache
+      cachedDiagnosisPatientRef.current = null; // ✅ Clear cache
+      cachedMaPhieuKhamRef.current = null; // ✅ Clear maPhieuKham cache
+      isFetchingDiagnosisRef.current = false; // ✅ Clear fetching flag
+      isValidatingPhieuKhamRef.current = null; // ✅ Clear validation flag
+      isSearchingPhieuKhamRef.current = null; // ✅ Clear search flag
       
       return;
     }
@@ -631,12 +645,6 @@ export default function PatientModal({
       // ✅ Lấy mã bệnh nhân hiện tại
       const currentPid = patient?.id || patient?.pid || patient?.MaBenhNhan || patient?.maBenhNhan;
       
-      // ✅ Check nếu đã fetch cho bệnh nhân này rồi thì skip
-      if (fetchedDiagnosisRef.current && lastFetchedPatientRef.current === currentPid) {
-        console.log(`[PatientModal] Already fetched diagnosis for patient ${currentPid}, skipping...`);
-        return;
-      }
-      
       // ✅ Lấy maPhieuKham từ patient prop (KHÔNG lấy từ localStorage để tránh lấy nhầm)
       const maPhieuKham = 
         patient?.MaPhieuKham ||
@@ -652,15 +660,21 @@ export default function PatientModal({
       );
 
       if (maPhieuKham && currentPid) {
-        // ✅ Check nếu đã fetch cho bệnh nhân này rồi thì skip
-        if (fetchedDiagnosisRef.current && lastFetchedPatientRef.current === currentPid) {
-          console.log(`[PatientModal] Already validated/fetched for patient ${currentPid}, skipping...`);
-          return;
+        // ✅ Check if already validating to prevent duplicate getClinicalExam calls
+        if (isValidatingPhieuKhamRef.current === maPhieuKham) {
+          console.log(`[PatientModal] Already validating phiếu khám ${maPhieuKham}, skipping duplicate`);
+          return; // Skip duplicate validation
         }
         
-        // ✅ Mark as fetched IMMEDIATELY to prevent duplicate validation
-        fetchedDiagnosisRef.current = true;
-        lastFetchedPatientRef.current = currentPid;
+        // ✅ Lưu maPhieuKham vào ref để dùng cho lần sau (khi switch tab)
+        cachedMaPhieuKhamRef.current = maPhieuKham;
+        console.log(`[PatientModal] Saved maPhieuKham to ref: ${maPhieuKham}`);
+        
+        // ✅ Mark as validating
+        isValidatingPhieuKhamRef.current = maPhieuKham;
+        
+        // ✅ REMOVED: Don't check fetchedDiagnosisRef here
+        // Let fetchFinalDiagnosis handle cache logic internally
         
         // ✅ CRITICAL: Validate phiếu khám có thuộc về bệnh nhân này không
         // Gọi API để lấy thông tin phiếu khám và kiểm tra MaBenhNhan
@@ -672,6 +686,7 @@ export default function PatientModal({
             if (!clinicalExam) {
               console.warn(`[PatientModal] Phiếu khám ${maPhieuKham} không tồn tại`);
               toast.warn("Phiếu khám không tồn tại.");
+              isValidatingPhieuKhamRef.current = null; // ✅ Clear validation flag
               return;
             }
             
@@ -687,6 +702,7 @@ export default function PatientModal({
                 `Lỗi dữ liệu: Phiếu khám ${maPhieuKham} không thuộc về bệnh nhân này. ` +
                 `Vui lòng kiểm tra lại dữ liệu.`
               );
+              isValidatingPhieuKhamRef.current = null; // ✅ Clear validation flag
               return;
             }
             
@@ -695,16 +711,27 @@ export default function PatientModal({
               `Tiếp tục lấy chẩn đoán...`
             );
             
-            // Gọi ngay khi mở modal với explicit patient ID
-            setTimeout(() => {
-              fetchFinalDiagnosis(currentPid);
-            }, 100);
+            // ✅ Always call fetchFinalDiagnosis - it will handle cache and duplicate prevention internally
+            fetchFinalDiagnosis(currentPid);
+            
+            // ✅ Clear validation flag after successful validation
+            isValidatingPhieuKhamRef.current = null;
           } catch (err) {
             console.error("[PatientModal] Lỗi khi validate phiếu khám:", err);
             toast.error("Không thể kiểm tra phiếu khám. Vui lòng thử lại.");
+            isValidatingPhieuKhamRef.current = null; // ✅ Clear validation flag on error
           }
         })();
       } else if (currentPid) {
+        // ✅ Check if already searching to prevent duplicate searchClinicalRaw calls
+        if (isSearchingPhieuKhamRef.current === currentPid) {
+          console.log(`[PatientModal] Already searching for phiếu khám of patient ${currentPid}, skipping duplicate`);
+          return; // Skip duplicate search
+        }
+        
+        // ✅ Mark as searching
+        isSearchingPhieuKhamRef.current = currentPid;
+        
         // Nếu không có maPhieuKham, thử tìm lại từ pid
         (async () => {
           try {
@@ -742,6 +769,10 @@ export default function PatientModal({
                   null;
 
                 if (foundMaPhieuKham) {
+                  // ✅ Lưu maPhieuKham vào ref để dùng cho lần sau
+                  cachedMaPhieuKhamRef.current = foundMaPhieuKham;
+                  console.log(`[PatientModal] Saved found maPhieuKham to ref: ${foundMaPhieuKham}`);
+                  
                   // Lưu vào form để fetchFinalDiagnosis dùng
                   setForm(prev => ({
                     ...prev,
@@ -749,28 +780,30 @@ export default function PatientModal({
                     maPhieuKham: foundMaPhieuKham,
                   }));
 
-                  // ✅ Mark as fetched BEFORE calling API
-                  fetchedDiagnosisRef.current = true;
-                  lastFetchedPatientRef.current = currentPid;
-
-                  // Trigger fetch sau một chút để state update
+                  // ✅ Always call fetchFinalDiagnosis - it will handle cache and duplicate prevention internally
                   setTimeout(() => {
                     fetchFinalDiagnosis(currentPid);
+                    // ✅ Clear search flag after calling fetchFinalDiagnosis
+                    isSearchingPhieuKhamRef.current = null;
                   }, 100);
                 } else {
                   // Không tìm thấy mã phiếu khám
                   console.log("[PatientModal] Không tìm thấy mã phiếu khám cho bệnh nhân:", currentPid);
+                  isSearchingPhieuKhamRef.current = null; // ✅ Clear search flag
                 }
               } else {
                 // Không tìm thấy phiếu khám đang hoạt động
                 console.log("[PatientModal] Chưa có phiếu khám đang hoạt động cho bệnh nhân:", currentPid);
+                isSearchingPhieuKhamRef.current = null; // ✅ Clear search flag
               }
             } else {
               // Không có phiếu khám nào
               console.log("[PatientModal] Chưa có phiếu khám cho bệnh nhân:", currentPid);
+              isSearchingPhieuKhamRef.current = null; // ✅ Clear search flag
             }
           } catch (err) {
             console.error("Lỗi khi tìm phiếu khám tự động:", err);
+            isSearchingPhieuKhamRef.current = null; // ✅ Clear search flag on error
           }
         })();
       }
@@ -789,7 +822,7 @@ export default function PatientModal({
     return () => clearTimeout(t);
   }, [open, patient, patientForView, mode, today, isDirty, patientId]); // ✅ Thêm patientId để reset khi đổi bệnh nhân
 
-  // ✅ Reset fetch flag khi đổi bệnh nhân
+  // ✅ Reset cache khi đổi bệnh nhân
   useEffect(() => {
     if (!open) return;
     
@@ -800,11 +833,12 @@ export default function PatientModal({
       patient?.maBenhNhan ||
       patientId;
     
-    // Nếu đổi bệnh nhân khác, reset flag
-    if (currentPid && lastFetchedPatientRef.current !== currentPid) {
-      console.log(`[PatientModal] Patient changed from ${lastFetchedPatientRef.current} to ${currentPid}, resetting fetch flag`);
-      fetchedDiagnosisRef.current = false;
-      lastFetchedPatientRef.current = null;
+    // Nếu đổi bệnh nhân khác, reset cache và clear diagnosis state
+    if (currentPid && cachedDiagnosisPatientRef.current !== null && cachedDiagnosisPatientRef.current !== currentPid) {
+      console.log(`[PatientModal] Patient changed from ${cachedDiagnosisPatientRef.current} to ${currentPid}, clearing cache`);
+      cachedDiagnosisPatientRef.current = null; // ✅ Clear cache
+      cachedMaPhieuKhamRef.current = null; // ✅ Clear maPhieuKham cache
+      setDiagnosisData(DIAG_INIT); // ✅ Clear diagnosis state
       
       // ✅ Clear localStorage để tránh lấy nhầm mã phiếu khám cũ
       try {
@@ -818,6 +852,10 @@ export default function PatientModal({
       }
     }
   }, [open, patient, patientId]);
+
+  // ❌ REMOVED: Don't reset cache when switching tabs
+  // Cache logic is now handled entirely by cachedDiagnosisPatientRef in fetchFinalDiagnosis
+  // Only clear cache when patient changes (above useEffect) or modal closes
 
 
 
@@ -1481,13 +1519,12 @@ const transactions = useMemo(() => {
 
   // Tránh double submit phiếu khám
   const [creatingExam, setCreatingExam] = useState(false);
-  const [loadingFinalDiagnosis, setLoadingFinalDiagnosis] = useState(false);
 
   // ----------------- FETCH FINAL DIAGNOSIS FOR PROCESS MODE -----------------
   const fetchFinalDiagnosis = async (explicitPatientId = null) => {
-    // ✅ Check loading state
-    if (loadingFinalDiagnosis) {
-      console.log("[fetchFinalDiagnosis] Already loading, skipping duplicate call");
+    // ✅ Check if already fetching to prevent duplicate calls
+    if (isFetchingDiagnosisRef.current) {
+      console.log("[fetchFinalDiagnosis] Already fetching, skipping duplicate call");
       return;
     }
     
@@ -1507,9 +1544,17 @@ const transactions = useMemo(() => {
       return;
     }
     
+    // ✅ Check loading state
+    if (loadingFinalDiagnosis) {
+      console.log("[fetchFinalDiagnosis] Already loading, skipping duplicate call");
+      return;
+    }
+    
     // ✅ Lấy maPhieuKham DYNAMICALLY (tránh stale closure)
     // KHÔNG dùng maPhieuKhamCurrent từ closure vì nó có thể đã thay đổi
+    // Ưu tiên lấy từ cache ref nếu có, nếu không thì lấy từ patient/form
     const currentMaPhieuKham = 
+      cachedMaPhieuKhamRef.current ||
       patient?.MaPhieuKham ||
       patient?.maPhieuKham ||
       patient?.MaPhieuKhamLs ||
@@ -1522,8 +1567,32 @@ const transactions = useMemo(() => {
       console.warn(
         `[fetchFinalDiagnosis] Không tìm thấy mã phiếu khám cho bệnh nhân ${currentPatientId}`
       );
+      console.warn(
+        `[fetchFinalDiagnosis] Debug: ` +
+        `cachedMaPhieuKhamRef=${cachedMaPhieuKhamRef.current}, ` +
+        `patient.MaPhieuKham=${patient?.MaPhieuKham}, ` +
+        `form.MaPhieuKham=${form?.MaPhieuKham}`
+      );
       toast.warn("Chưa có phiếu khám để tải chẩn đoán.");
       return;
+    }
+    
+    // ✅ Lưu maPhieuKham vào ref để dùng cho lần sau
+    if (currentMaPhieuKham && !cachedMaPhieuKhamRef.current) {
+      cachedMaPhieuKhamRef.current = currentMaPhieuKham;
+      console.log(`[fetchFinalDiagnosis] Cached maPhieuKham: ${currentMaPhieuKham}`);
+    }
+    
+    // ✅ CHECK CACHE: Nếu đã có data cached cho bệnh nhân này, show toast và skip fetch
+    // Di chuyển cache check xuống đây SAU KHI đã kiểm tra maPhieuKham
+    if (cachedDiagnosisPatientRef.current === currentPatientId) {
+      console.log(
+        `[fetchFinalDiagnosis] ✅ Using cached diagnosis for patient ${currentPatientId}. ` +
+        `Skipping API call.`
+      );
+      // ✅ Show success toast để user biết data đã sẵn sàng (từ cache)
+      toast.success("Đã tải chẩn đoán cuối.");
+      return; // Data already in diagnosisData state
     }
     
     console.log(
@@ -1531,11 +1600,17 @@ const transactions = useMemo(() => {
       `maPhieuKham: ${currentMaPhieuKham}`
     );
     
+    // ✅ Mark as fetching to prevent duplicate calls
+    isFetchingDiagnosisRef.current = true;
+    
     try {
       setLoadingFinalDiagnosis(true);
       
       // ✅ Gọi API với mã phiếu khám đã lấy động
       const dxRes = await getFinalDiagnosis(currentMaPhieuKham);
+      
+      // ✅ Log toàn bộ response để debug
+      console.log("[fetchFinalDiagnosis] API Response:", dxRes);
       
       if (!dxRes) {
         console.log("[fetchFinalDiagnosis] API returned null/undefined");
@@ -1549,8 +1624,17 @@ const transactions = useMemo(() => {
         dxRes.maBenhNhan ||
         dxRes.patientId;
       
+      console.log(
+        `[fetchFinalDiagnosis] Checking patient ID: ` +
+        `MaBenhNhan=${dxRes.MaBenhNhan}, ` +
+        `maBenhNhan=${dxRes.maBenhNhan}, ` +
+        `patientId=${dxRes.patientId}, ` +
+        `result=${diagnosisPatientId}`
+      );
+      
       if (!diagnosisPatientId) {
         console.warn("[fetchFinalDiagnosis] Phiếu chẩn đoán không có mã bệnh nhân");
+        console.warn("[fetchFinalDiagnosis] Response keys:", Object.keys(dxRes));
         toast.warn("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
@@ -1590,6 +1674,11 @@ const transactions = useMemo(() => {
         followupFlags: flags,
         prescriptionCode: dxRes.MaDonThuoc || dxRes.maDonThuoc || "",
       }));
+      
+      // ✅ CACHE: Mark this patient's diagnosis as cached
+      cachedDiagnosisPatientRef.current = currentPatientId;
+      console.log(`[fetchFinalDiagnosis] ✅ Cached diagnosis for patient ${currentPatientId}`);
+      
       toast.success("Đã tải chẩn đoán cuối.");
     } catch (err) {
       const msg =
@@ -1616,6 +1705,8 @@ const transactions = useMemo(() => {
       }
     } finally {
       setLoadingFinalDiagnosis(false);
+      // ✅ Clear fetching flag
+      isFetchingDiagnosisRef.current = false;
     }
   };
 
@@ -2387,7 +2478,6 @@ const transactions = useMemo(() => {
                     delRx={delRx}
                     totalDrugAmount={totalDrugAmount}
                     handleFinishDoctor={handleFinishDoctor}
-                    handleFetchFinalDiagnosis={fetchFinalDiagnosis}
                     svcResults={svcResults}
                     setSvcResults={setSvcResults}
                     handleServiceReturnToDoctor={handleServiceReturnToDoctor}

@@ -112,6 +112,38 @@ const svcMap = useMemo(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient?.serviceOrder?.items]);
 
+  // ✅ AUTO-FILL "Nội dung khám" từ loại dịch vụ + triệu chứng
+  useEffect(() => {
+    // Chỉ auto-fill khi dx.note đang trống
+    if (dx.note && dx.note.trim()) return;
+    
+    const serviceType = clinicalExamData?.LoaiDichVu || 
+                       clinicalExamData?.loaiDichVu || 
+                       clinicalExamData?.loai_dich_vu || 
+                       patient?.serviceType ||
+                       "";
+    
+    const symptoms = clinicalExamData?.TrieuChung || 
+                    clinicalExamData?.trieuChung || 
+                    clinicalExamData?.trieu_chung ||
+                    patient?.symptoms ||
+                    "";
+    
+    // Tạo nội dung khám từ loại dịch vụ + triệu chứng
+    const parts = [];
+    if (serviceType) {
+      parts.push(`Loại dịch vụ: ${serviceType}`);
+    }
+    if (symptoms) {
+      parts.push(`Triệu chứng: ${symptoms}`);
+    }
+    
+    if (parts.length > 0) {
+      const autoFilledNote = parts.join("\n");
+      setDx((s) => ({ ...s, note: autoFilledNote }));
+    }
+  }, [clinicalExamData, patient, dx.note]);
+
   const hasOrder = useMemo(
     () => rows.some((r) => (r.svcId || "").trim()),
     [rows]
@@ -322,6 +354,42 @@ const svcMap = useMemo(() => {
 
   async function handleExportDiagnosisLS() {
     if (!hasDx) return;
+
+    // ✅ VALIDATION: Kiểm tra các trường bắt buộc trước khi xuất chẩn đoán
+    const errors = [];
+    
+    // Kiểm tra chẩn đoán sơ bộ
+    if (!dx.pre || !dx.pre.trim()) {
+      errors.push("Chẩn đoán sơ bộ");
+    }
+    
+    // Kiểm tra chẩn đoán xác định
+    if (!dx.final || !dx.final.trim()) {
+      errors.push("Chẩn đoán xác định");
+    }
+    
+    // Kiểm tra phác đồ điều trị
+    if (!dx.plan || !dx.plan.trim()) {
+      errors.push("Phác đồ điều trị");
+    }
+    
+    // Kiểm tra tư vấn & dặn dò
+    if (!dx.advice || !dx.advice.trim()) {
+      errors.push("Tư vấn & Dặn dò");
+    }
+    
+    // Kiểm tra hướng xử trí (phải tích ít nhất 1 ô)
+    if (!dxFlags.choVe && !dxFlags.choThuocVe && !dxFlags.taiKham) {
+      errors.push("Hướng xử trí (phải chọn ít nhất 1 mục)");
+    }
+    
+    // Nếu có lỗi, hiển thị thông báo và dừng lại
+    if (errors.length > 0) {
+      const errorMsg = `Vui lòng điền đầy đủ các trường sau:\n• ${errors.join("\n• ")}`;
+      toast.warn(errorMsg, { autoClose: 5000 });
+      setDxFlagError(errors.length > 0 ? "Vui lòng điền đầy đủ thông tin trước khi xuất chẩn đoán" : "");
+      return;
+    }
 
     // đảm bảo không có combination choVe + taiKham (phòng thủ)
     if (dxFlags.choVe && dxFlags.taiKham) {
