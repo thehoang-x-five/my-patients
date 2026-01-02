@@ -11,6 +11,37 @@
 
 ## ✅ Backend - Đã hoàn thành
 
+### 0. RequireNurseTypeAttribute.cs ⚡ FIXED
+**File**: `HealthCare/Attributes/RequireNurseTypeAttribute.cs`
+
+**Vấn đề đã sửa:**
+- Database lưu: `"hanhchinh"`, `"ls"`, `"cls"`
+- Code kiểm tra: `"hanhchinh"`, `"phong_kham"`, `"can_lam_sang"`
+- ❌ Mismatch → Y tá hành chính bị chặn khi tạo phiếu khám
+
+**Giải pháp:**
+- ✅ Thêm alias mapping để hỗ trợ cả tên cũ và tên mới
+- ✅ Case-insensitive comparison
+- ✅ Mapping:
+  - `hanhchinh` → accepts: "hanhchinh", "hanh_chinh", "y_ta_hanh_chinh"
+  - `phong_kham` → accepts: "phong_kham", "ls", "lam_sang", "y_ta_lam_sang"
+  - `can_lam_sang` → accepts: "can_lam_sang", "cls", "y_ta_can_lam_sang"
+
+### 0.1. RequireRoleAttribute.cs ⚡ FIXED
+**File**: `HealthCare/Attributes/RequireRoleAttribute.cs`
+
+**Vấn đề đã sửa:**
+- Attribute đang check **ChucVu** thay vì **VaiTro**
+- Y tá hành chính có: `VaiTro = "y_ta"`, `ChucVu = "y_ta_hanh_chinh"`
+- Endpoint có: `[RequireRole("y_ta")]`
+- ❌ Check ChucVu == "y_ta" → Fail (vì ChucVu = "y_ta_hanh_chinh")
+
+**Giải pháp:**
+- ✅ Đổi từ check `ChucVu` sang check `VaiTro`
+- ✅ Admin vẫn check qua ChucVu (vì admin không có VaiTro riêng)
+- ✅ Case-insensitive comparison
+- ✅ Bây giờ: `[RequireRole("y_ta")]` → check `VaiTro == "y_ta"` → Pass ✅
+
 ### 1. AppointmentsController.cs
 ```csharp
 // Đã thêm using HealthCare.Attributes;
@@ -134,10 +165,12 @@ Các hàm helper:
 | Check-in | ✅ Có |
 | Tạo/sửa bệnh nhân | ✅ Có |
 | Lập phiếu khám LS | ✅ Có |
+| Cập nhật trạng thái phiếu khám | ✅ Có |
 | Xem hàng chờ khám | ✅ Có |
 | Gọi vào khám | ❌ Không |
 | Chẩn đoán | ❌ Không |
 | Chỉ định CLS | ❌ Không |
+| Xử lý & chẩn đoán (hậu cần) | ✅ Có |
 
 ### Bác sĩ / Y tá Lâm sàng (quyền bằng nhau):
 | Chức năng | Quyền |
@@ -222,6 +255,7 @@ Các hàm helper:
 - ✅ Bác sĩ KHÔNG có quyền lập phiếu khám LS (chỉ có quyền chỉ định CLS)
 - ✅ Bác sĩ KHÔNG có quyền "Xử lý & chẩn đoán" (hậu cần) - chỉ làm việc trong trang Khám bệnh
 - ✅ **Tự động lọc data theo VaiTro + ChucVu** (Y tá LS chỉ thấy LS, Y tá CLS chỉ thấy CLS)
+- ✅ **RequireNurseTypeAttribute hỗ trợ aliases** (hanhchinh, ls, cls) - FIX lỗi Y tá HC bị chặn
 
 **Phân công rõ ràng:**
 - **Y tá hành chính**: Tiếp nhận + Hậu cần (lập phiếu, xử lý & chẩn đoán để phát thuốc) + Xem cả LS và CLS
@@ -232,5 +266,9 @@ Các hàm helper:
 - Mỗi user chỉ thấy data liên quan đến công việc của mình
 - Không cần chọn thủ công "Lâm sàng" hay "CLS"
 - Dựa trên VaiTro + ChucVu để tự động filter
+
+**Bug fixes:**
+- ✅ Fixed: Y tá hành chính bị chặn khi tạo phiếu khám (do mismatch giữa database value "hanhchinh" và code check)
+- ✅ Solution: Thêm alias mapping trong RequireNurseTypeAttribute để hỗ trợ cả tên cũ (ls, cls) và tên mới (phong_kham, can_lam_sang)
 
 Hệ thống giờ đã có phân quyền toàn diện và lọc data chính xác theo vai trò!

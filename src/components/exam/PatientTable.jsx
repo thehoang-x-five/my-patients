@@ -237,7 +237,7 @@ function getKey(p) {
 export default function PatientTable({ items = [], onStart, inProgress = new Set(), stretch = false }) {
   return (
     <section
-      className={`pt-2 bg-white rounded-2xl overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
+      className={`pt-2 bg-white overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
       role="region"
       aria-label="Danh sách chờ khám"
     >

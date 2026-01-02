@@ -5,6 +5,7 @@ import ExamToolbar from "../components/exam/ExamToolbar.jsx";
 import PatientTable from "../components/exam/PatientTable.jsx";
 import ExamDetail from "../components/exam/ExamDetail.jsx";
 import QueueFilterPopover from "../components/exam/QueueFilterPopover.jsx";
+import Pagination from "../components/ui/Pagination.jsx";
 import { toast } from "react-toastify";
 
 import useViewportVH from "../hooks/useViewportVH";
@@ -135,12 +136,25 @@ export default function Examination() {
       params.Keyword = filter.search.trim();
     }
 
-    // Date range: hôm nay
+    // Date range: hôm nay (local time, không convert UTC)
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(startOfToday.getTime() + 86400000 - 1);
-    params.FromTime = startOfToday.toISOString();
-    params.ToTime = endOfToday.toISOString();
+    
+    // ✅ Format local time as ISO string without timezone conversion
+    // Backend expects local time (DateTime.Now), not UTC
+    const formatLocalDateTime = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    };
+    
+    params.FromTime = formatLocalDateTime(startOfToday);
+    params.ToTime = formatLocalDateTime(endOfToday);
 
     return params;
   }, [filter, page]);
@@ -700,13 +714,13 @@ export default function Examination() {
       >
         {!active && (
           <ExamToolbar
-            todayCount={patients.length}
+            todayCount={totalItems}
             waitingCount={waitingCount}
             inProgressCount={inProgressCount}
             doneCount={doneCount}
             onOpenFilter={() => setFilterOpen(true)}
             onReset={() => {
-              setFilter({ source: "all", kind: "all", status: "all", search: "" });
+              setFilter({ source: "all", kind: defaultKind, status: "all", search: "" });
             }}
           />
         )}
@@ -734,14 +748,32 @@ export default function Examination() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                className="h-full min-h-0"
+                className="h-full min-h-0 flex flex-col"
               >
-                <PatientTable
-                  items={filtered}
-                  onStart={canCall ? handleStart : undefined}
-                  inProgress={inProgress}
-                  stretch
-                />
+                <div className="card flex-1 min-h-0 flex flex-col overflow-hidden">
+                  <div className="flex-1 min-h-0 overflow-auto">
+                    <PatientTable
+                      items={filtered}
+                      onStart={canCall ? handleStart : undefined}
+                      inProgress={inProgress}
+                      stretch
+                    />
+                  </div>
+                  
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
+                      <Pagination
+                        currentPage={page}
+                        totalPages={totalPages}
+                        totalItems={totalItems}
+                        pageSize={50}
+                        onPageChange={setPage}
+                        className="px-3 py-2"
+                      />
+                    </div>
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
