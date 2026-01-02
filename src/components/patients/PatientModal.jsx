@@ -1,4 +1,4 @@
-﻿// src/components/patients/PatientModal.jsx
+﻿﻿// src/components/patients/PatientModal.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -2176,7 +2176,7 @@ const transactions = useMemo(() => {
         }
 
         // ✅ 3.5 Navigate to Appointments page with flash animation
-        toast.info("Vui lòng tạo lịch hẹn tái khám cho bệnh nhân");
+        // ❌ REMOVED: toast.info() - will be shown in Appointments.jsx to prevent duplicate
         onClose?.();
         
         // ✅ Sử dụng UIStore để flash nút "Tạo lịch hẹn" giống flow check-in
@@ -2754,6 +2754,3 @@ const transactions = useMemo(() => {
     </AnimatePresence>
   );
 }
-
-
-

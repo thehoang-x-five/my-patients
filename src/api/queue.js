@@ -350,6 +350,8 @@ export async function search(filter = {}) {
     MaNhanSu: maNhanSu,
     LoaiHangDoi: filter.LoaiHangDoi ?? filter.loaiHangDoi ?? null,
     TrangThai: filter.TrangThai ?? filter.trangThai ?? null,
+    Nguon: filter.Nguon ?? filter.nguon ?? filter.source ?? null,
+    Keyword: filter.Keyword ?? filter.keyword ?? filter.search ?? null,
     FromTime: filter.FromTime ?? filter.fromTime ?? null,
     ToTime: filter.ToTime ?? filter.toTime ?? null,
     SortBy: filter.SortBy ?? filter.sortBy ?? null,

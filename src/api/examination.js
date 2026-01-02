@@ -428,17 +428,13 @@ export async function updateClsOrderStatus(maPhieuKhamCls, trangThai) {
   if (!maPhieuKhamCls) throw new Error("Thiếu maPhieuKhamCls");
   if (!trangThai) throw new Error("Thiếu trangThai");
   
-  // Backend expect [FromBody] string trangThai, không phải query param
-  const res = await http.put(
-    `${CLS_BASE}/orders/${maPhieuKhamCls}/status`,
-    JSON.stringify(trangThai),
-    { 
-      headers: { 
-        'Content-Type': 'application/json' 
-      } 
-    }
-  );
-  return unwrap(res);
+    // API nhận trangThai qua query param, không phải JSON body
+    const res = await http.put(
+      `${CLS_BASE}/orders/${maPhieuKhamCls}/status`,
+      null,
+      { params: { trangThai } }
+    );
+    return unwrap(res);
 }
 
 // Tạo chi tiết dịch vụ CLS (1 dịch vụ trên phiếu)

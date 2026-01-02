@@ -18,6 +18,7 @@ import PrescFilterPopover from "../components/prescriptions/PrescFilterPopover.j
 
 import {
   getRxOrders,
+  useSearchRxOrders,
   getStock,
   upsertStockItem,
   subscribePharmacy,
@@ -110,6 +111,10 @@ export default function Prescriptions() {
   const qStockDef = useDeferredValue(qStock);
   const qc = useQueryClient();
 
+  // ✅ Pagination
+  const [orderPage, setOrderPage] = useState(1);
+  const [stockPage, setStockPage] = useState(1);
+
   // Lần đầu vào trang: đảm bảo filter kho hiển thị tất cả
   const initFiltersRef = useRef(false);
   useEffect(() => {
@@ -120,29 +125,63 @@ export default function Prescriptions() {
     setStockStatus("all");
   }, [setQStock, setUnit, setStockStatus]);
 
-   // ===== Queries (BE chỉ trả ALL, FE tự lọc) =====
-   const ordersQuery = useQuery({
-    queryKey: ["rxOrders"],
-    queryFn: getRxOrders,
-    staleTime: 30_000,
-  });
+  // ✅ Map orderRange → fromDate/toDate
+  const getOrderDateRange = () => {
+    if (orderRange === "Tất cả") return { fromDate: null, toDate: null };
+    
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(startOfToday.getTime() + 86400000 - 1);
+    
+    if (orderRange === "Hôm nay") {
+      return {
+        fromDate: startOfToday.toISOString(),
+        toDate: endOfToday.toISOString(),
+      };
+    }
+    
+    const days = orderRange === "7 ngày" ? 7 : orderRange === "30 ngày" ? 30 : 0;
+    if (days > 0) {
+      const fromDate = new Date(startOfToday.getTime() - (days - 1) * 86400000);
+      return {
+        fromDate: fromDate.toISOString(),
+        toDate: endOfToday.toISOString(),
+      };
+    }
+    
+    return { fromDate: null, toDate: null };
+  };
 
-  // ✅ Dùng searchStock với phân trang
-  const [stockPage, setStockPage] = useState(1);
-  const stockQuery = useSearchStock({
-    keyword: qStockDef || "",
-    status: stockStatus === "all" ? null : stockStatus,
-    page: stockPage,
+  const { fromDate, toDate } = getOrderDateRange();
+
+  // ✅ Dùng searchRxOrders với filtering và pagination
+  const ordersQuery = useSearchRxOrders({
+    keyword: qOrdersDef || "",
+    status: orderStatus,
+    fromDate,
+    toDate,
+    page: orderPage,
     pageSize: 50,
   });
 
-  
+  // ✅ Dùng searchStock với phân trang
+  const stockQuery = useSearchStock({
+    keyword: qStockDef || "",
+    status: stockStatus === "all" ? null : stockStatus,
+    unit: unit || "",
+    page: stockPage,
+    pageSize: 50,
+  });
 
   const loadingOrders = ordersQuery.isLoading;
   const loadingStock = stockQuery.isLoading;
   const loadingBoth = loadingOrders && loadingStock;
 
-  const orders = ordersQuery.data || [];
+  // ✅ Lấy data từ PagedResult
+  const ordersResult = ordersQuery.data || { Items: [], TotalItems: 0, Page: 1, PageSize: 50 };
+  const orders = ordersResult.Items || [];
+  const ordersTotalItems = ordersResult.TotalItems || 0;
+  const ordersTotalPages = Math.ceil(ordersTotalItems / 50);
   
   // ✅ Lấy data từ PagedResult
   const stockResult = stockQuery.data || { Items: [], TotalItems: 0, Page: 1, PageSize: 50 };
@@ -158,7 +197,7 @@ export default function Prescriptions() {
     const off = subscribePharmacy((evt) => {
       switch (evt?.type) {
         case "rx_order_updated":
-          qc.invalidateQueries({ queryKey: ["rxOrders"] });
+          qc.invalidateQueries({ queryKey: ["pharmacy", "rxOrders"] });
           break;
         case "stock_upserted":
         case "stock_deleted":
@@ -184,90 +223,31 @@ export default function Prescriptions() {
     }
   }, [loadingOrders, orders, searchParams, setTab, setView]);
 
-  // ===== Filter đơn thuốc =====
-  const filteredOrders = useMemo(() => {
-    const kw = qOrdersDef.trim().toLowerCase();
-    const now = new Date();
-    const startOfToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-    const endOfToday = new Date(startOfToday.getTime() + 86400000);
+  // ✅ Reset orderPage khi filter thay đổi
+  useEffect(() => {
+    if (orderPage > 1) setOrderPage(1);
+  }, [qOrdersDef, orderStatus, orderRange]);
 
-    return orders.filter((o) => {
-      const textOk =
-        !kw ||
-        [o.id, o.ptId, o.ptName, o.doctor, o.diag]
-          .join(" ")
-          .toLowerCase()
-          .includes(kw);
+  // ✅ Filter và sort đã được làm ở backend
+  const filteredOrders = orders;
 
-      const raw = (o.rawStatus || "").toLowerCase();
-      const st = (o.status || "").toLowerCase();
-      let statusOk = true;
-
-      if (orderStatus === "Đã kê") {
-        statusOk = raw === "da_ke" || (!raw && st === "da_ke");
-      } else if (orderStatus === "Chờ phát") {
-        statusOk =
-          raw === "cho_phat" ||
-          (!raw && (st === "pending" || st === "cho_phat"));
-      } else if (orderStatus === "Đã phát") {
-        statusOk =
-          raw === "da_phat" ||
-          (!raw && (st === "done" || st === "da_phat"));
-      }
-
-      let rangeOk = true;
-      if (orderRange !== "Tất cả") {
-        if (!o.at) rangeOk = false;
-        else {
-          const d = new Date(o.at);
-          if (Number.isNaN(d.getTime())) {
-            rangeOk = false;
-          } else if (orderRange === "Hôm nay") {
-            rangeOk = d >= startOfToday && d < endOfToday;
-          } else {
-            const diffDays = Math.floor((now - d) / 86400000);
-            if (orderRange === "7 ngày") rangeOk = diffDays <= 7;
-            else if (orderRange === "30 ngày") rangeOk = diffDays <= 30;
-          }
-        }
-      }
-
-      return textOk && statusOk && rangeOk;
-    });
-  }, [orders, qOrdersDef, orderStatus, orderRange]);
-
-  // ✅ Filter kho thuốc - chỉ filter unit ở FE (vì BE chưa hỗ trợ filter unit)
+  // ✅ Filter kho thuốc - unit đã được filter ở BE (DonViTinh)
   // Keyword và status đã được filter ở BE
+  // Chỉ filter ẩn thuốc tạm dừng ở FE (UI logic, không ảnh hưởng pagination)
   const filteredStock = useMemo(() => {
     if (!stock || !stock.length) return [];
   
     return stock.filter((r) => {
-      const unitOk = unit
-        ? (r.unit || r.donViTinh || "")
-            .toLowerCase()
-            .includes(unit.toLowerCase())
-        : true;
-  
       const statusCode = getDrugStatusCode(r);
-  
       // 🔒 Không hiển thị thuốc tạm dừng
-      if (statusCode === "tam_dung") return false;
-  
-      // Status đã được filter ở BE, nhưng vẫn check để đảm bảo
-      // (BE filter theo TrangThai, FE có thể cần check thêm logic statusCode)
-  
-      return unitOk;
+      return statusCode !== "tam_dung";
     });
-  }, [stock, unit]);
+  }, [stock]);
   
   // ✅ Reset page khi filter thay đổi
   useEffect(() => {
     if (stockPage > 1) setStockPage(1);
-  }, [qStockDef, stockStatus]);
+  }, [qStockDef, stockStatus, unit]);
 
   // ===== Stats đơn thuốc + kho thuốc =====
 const ordersCount = filteredOrders.length;
@@ -418,13 +398,29 @@ const stockNearOutCount = filteredStock.filter((r) => {
                     exit={{ opacity: 0, y: -8 }}
                     className="card flex-1 min-h-0 overflow-auto"
                   >
-                    <OrdersTable
-                      items={filteredOrders}
-                      loading={loadingOrders}
-                      onView={(order) =>
-                        setView({ open: true, order })
-                      }
-                    />
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      <div className="flex-1 min-h-0 overflow-hidden">
+                        <OrdersTable
+                          items={filteredOrders}
+                          loading={loadingOrders}
+                          onView={(order) =>
+                            setView({ open: true, order })
+                          }
+                        />
+                      </div>
+                      {ordersTotalPages > 1 && (
+                        <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
+                          <Pagination
+                            currentPage={orderPage}
+                            totalPages={ordersTotalPages}
+                            totalItems={ordersTotalItems}
+                            pageSize={50}
+                            onPageChange={setOrderPage}
+                            className="px-4 py-3"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </motion.section>
                 ) : (
                   <motion.section
@@ -445,7 +441,7 @@ const stockNearOutCount = filteredStock.filter((r) => {
                         stretch
                       />
                       {stockTotalPages > 1 && (
-                        <div className="border-t border-slate-200 bg-white rounded-b-2xl">
+                        <div className="border-t border-slate-200 bg-white rounded-b-lg">
                           <Pagination
                             currentPage={stockPage}
                             totalPages={stockTotalPages}

@@ -79,22 +79,61 @@ export default function Appointments() {
   const [hasFollowupContext, setHasFollowupContext] = useState(false);
   const [followupContextData, setFollowupContextData] = useState(null);
 
+  // ✅ Ref to prevent duplicate useEffect execution
+  const hasProcessedFollowupRef = React.useRef(false);
+
+  // ✅ Log component mount for debugging
+  React.useEffect(() => {
+    console.log('[Appointments] Component mounted');
+    return () => {
+      console.log('[Appointments] Component unmounted');
+    };
+  }, []);
+
   // Check for follow-up context on mount
   useEffect(() => {
+    // ✅ Guard: Prevent duplicate execution
+    if (hasProcessedFollowupRef.current) {
+      console.log("[Appointments] Follow-up already processed, skipping");
+      return;
+    }
+    
     const context = getFollowupContext();
     if (context) {
+      // ✅ Check if already notified
+      if (context.notified) {
+        console.log("[Appointments] Follow-up context already notified, skipping toast");
+        setHasFollowupContext(true);
+        setFollowupContextData(context);
+        
+        // Still trigger flash animation even if already notified
+        const uiStore = useUIStore.getState();
+        uiStore.flashApptCreate();
+        
+        hasProcessedFollowupRef.current = true;
+        return;
+      }
+      
+      // ✅ First time showing notification
       setHasFollowupContext(true);
       setFollowupContextData(context);
       console.log("[Appointments] Follow-up context detected:", context);
       
-      // Show info toast
+      // Show toast ONCE
       toast.info(`Vui lòng tạo lịch hẹn tái khám cho bệnh nhân: ${context.patientName}`);
       
-      // ✅ Trigger flash animation cho nút "Tạo lịch hẹn"
+      // Mark as notified
+      const { markFollowupNotified } = require("../utils/followupContext.js");
+      markFollowupNotified();
+      
+      // Trigger flash animation
       const uiStore = useUIStore.getState();
       uiStore.flashApptCreate();
+      
+      // Mark as processed
+      hasProcessedFollowupRef.current = true;
     }
-  }, []);
+  }, []); // ✅ Empty deps - run only once on mount
 
   // today list
   const { data: todayItems = [], isLoading } = useAppointmentsByDate(TODAY);
@@ -106,10 +145,11 @@ export default function Appointments() {
   );
 
   // Lịch của cả tháng hiện tại (cho calendar)
+  // ✅ Only fetch when in calendar view to reduce unnecessary calls
   const { data: monthItems = [] } = useAppointmentsRange(
     monthStartStr,
     monthEndStr,
-    { enabled: !!monthStartStr && !!monthEndStr }
+    { enabled: !!monthStartStr && !!monthEndStr && view === "cal" }
   );
 
   const queryClient = useQueryClient();
@@ -453,9 +493,7 @@ export default function Appointments() {
       store.setPatientPrefill({ name });
       store.flashAdd();
       navigate(`/patients`); // Chỉ chuyển trang, không có query params
-      toast.info(
-        "Đã check-in. Vui lòng tạo hồ sơ bệnh nhân trong danh sách để lập phiếu khám."
-      );
+      // ❌ REMOVED: toast.info() - will be shown in Patients.jsx to prevent duplicate
       closeDetail();
       return;
     }
@@ -465,7 +503,7 @@ export default function Appointments() {
       useUIStore.getState().setPatientPrefill({ name });
       useUIStore.getState().setHighlightPid(pid);
       navigate(`/patients`); // Chỉ chuyển trang, không có query params
-      toast.success("Đã check-in. Vui lòng lập phiếu khám cho bệnh nhân.");
+      // ❌ REMOVED: toast.success() - will be shown in Patients.jsx to prevent duplicate
       closeDetail();
       return;
     }
@@ -476,15 +514,13 @@ export default function Appointments() {
       store.setPatientPrefill({ name });
       store.flashAdd();
       navigate(`/patients`);
-      toast.info(
-        "Đã check-in. Vui lòng tạo hồ sơ bệnh nhân trong danh sách để lập phiếu khám."
-      );
+      // ❌ REMOVED: toast.info() - will be shown in Patients.jsx to prevent duplicate
       closeDetail();
     } else {
       useUIStore.getState().setPatientPrefill({ name });
       useUIStore.getState().setHighlightPid(pid);
       navigate(`/patients`);
-      toast.success("Đã check-in. Vui lòng lập phiếu khám cho bệnh nhân.");
+      // ❌ REMOVED: toast.success() - will be shown in Patients.jsx to prevent duplicate
       closeDetail();
     }
   }

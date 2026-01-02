@@ -324,9 +324,12 @@ async function listNotifications(params = {}) {
     tab,        // all | unread | today
     take,       // số bản ghi muốn lấy (bell dùng để lấy top 5)
     page,
-    q,          // keyword - filter client
-    type,       // loại thông báo - filter client
-    priority,   // ưu tiên - filter client
+    q,          // keyword - filter backend
+    keyword,    // keyword - alias
+    type,       // loại thông báo - filter backend
+    priority,   // ưu tiên - filter backend
+    sortBy,     // sorting field
+    sortDirection, // sorting direction
     ...rest
   } = params || {};
 
@@ -346,6 +349,11 @@ async function listNotifications(params = {}) {
           ToTime: new Date(new Date().setHours(23, 59, 59, 999)).toISOString(),
         }
       : {}),
+    ...(q || keyword ? { Keyword: q || keyword } : {}),
+    ...(type && type !== "all" ? { LoaiThongBao: type } : {}),
+    ...(priority && priority !== "all" ? { MucDoUuTien: priority } : {}),
+    ...(sortBy ? { SortBy: sortBy } : {}),
+    ...(sortDirection ? { SortDirection: sortDirection } : {}),
     Page: page || 1,
     PageSize: take || rest.PageSize || rest.pageSize || 50, // ✅ Chuẩn hóa: 50 items mặc định
     ...rest,

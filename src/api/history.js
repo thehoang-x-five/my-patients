@@ -331,23 +331,30 @@ function normalizeTransaction(dto = {}) {
 
 // Lấy danh sách lượt khám (search) – khớp HistoryController.SearchVisits
 
-// Lấy danh sách lượt khám
-export async function getHistoryVisits() {
+// ✅ Lấy danh sách lượt khám với filtering và pagination
+export async function getHistoryVisits(params = {}) {
   const filter = {
-    maBenhNhan: null,
-    fromTime: null,
-    toTime: null,
-    loaiLuot: null,
-    keyword: null,
-    onlyToday: null,
-    page: 1,
-    pageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
+    MaBenhNhan: params.maBenhNhan || null,
+    FromTime: params.fromTime || null,
+    ToTime: params.toTime || null,
+    LoaiLuot: params.loaiLuot || null,
+    Keyword: params.keyword || null,
+    OnlyToday: params.onlyToday || null,
+    Page: params.page ?? 1,
+    PageSize: params.pageSize ?? 50, // ✅ Chuẩn hóa: 50 items mặc định
   };
 
   const res = await http.post("/history/visits/search", filter);
-  const list = ensureArray(res?.data);
-  // debug nếu cần
-  return list.map(normalizeVisit);
+  const data = res?.data || {};
+  
+  // ✅ Trả về PagedResult đầy đủ
+  const items = ensureArray(data);
+  return {
+    Items: items.map(normalizeVisit),
+    TotalItems: data.TotalItems ?? data.totalItems ?? items.length,
+    Page: data.Page ?? data.page ?? filter.Page,
+    PageSize: data.PageSize ?? data.pageSize ?? filter.PageSize,
+  };
 }
 
 // ✅ Lấy lịch sử giao dịch với phân trang

@@ -9,6 +9,7 @@ import DeptGrid from "../components/departments/DeptGrid.jsx";
 import DeptModal from "../components/departments/DeptModal.jsx";
 import ScheduleModal from "../components/departments/ScheduleModal.jsx";
 import DeptFilterPopover from "../components/departments/DeptFilterPopover.jsx";
+import Pagination from "../components/ui/Pagination.jsx";
 
 import {
   useDepartmentRooms,
@@ -231,28 +232,6 @@ export default function Departments() {
 
   const todayKey = dayKeyToday();
 
-  // Load departments (RoomCardDto + DepartmentDto) từ /rooms/cards/search
-  const {
-    data: depResult,
-    isLoading,
-    error,
-  } = useDepartmentRooms();
-
-  // depResult là object có .items
-  const depItems = useMemo(
-    () =>
-      depResult && Array.isArray(depResult.items)
-        ? depResult.items
-        : [],
-    [depResult]
-  );
-
-// chuẩn hóa từng phòng cho UI
-const all = useMemo(
-  () => (depItems || []).map((d) => decorateRow(d)),
-  [depItems]
-);
-
   // ===== Bộ lọc (popover) =====
   const [filters, setFilters] = useState({
     keyword: "",
@@ -260,29 +239,58 @@ const all = useMemo(
     roomType: "all", // all | ls | cls
     sort: "none", // none | capacity_asc | capacity_desc
   });
+  const [page, setPage] = useState(1);
 
-  const filterKey = useMemo(
-    () =>
-      [
-        filters.status,
-        filters.roomType,
-        filters.sort,
-        filters.keyword.trim(),
-      ].join("|"),
-    [filters]
+  // Map frontend filters sang backend filters
+  const mapStatusToBackend = (status) => {
+    if (status === "online") return "hoat_dong";
+    if (status === "offline") return "tam_dung";
+    return null;
+  };
+
+  const mapRoomTypeToBackend = (roomType) => {
+    if (roomType === "ls") return "phong_kham_ls";
+    if (roomType === "cls") return "phong_cls";
+    return null;
+  };
+
+  // Reset page khi filter thay đổi
+  useEffect(() => {
+    setPage(1);
+  }, [filters.keyword, filters.status, filters.roomType]);
+
+  // Query với filters từ backend
+  const { data: depRoomsData, isLoading: depRoomsLoading } = useDepartmentRooms({
+    keyword: filters.keyword || undefined,
+    status: mapStatusToBackend(filters.status) || undefined,
+    roomType: mapRoomTypeToBackend(filters.roomType) || undefined,
+    page,
+    pageSize: 50,
+  }, { enabled: true });
+
+  const depRoomsResult = depRoomsData || { Items: [], TotalItems: 0, Page: 1, PageSize: 50 };
+  const depItems = depRoomsResult.Items || [];
+  const totalItems = depRoomsResult.TotalItems || 0;
+  const totalPages = Math.ceil(totalItems / 50);
+
+  // chuẩn hóa từng phòng cho UI
+  const all = useMemo(
+    () => (depItems || []).map((d) => decorateRow(d)),
+    [depItems]
   );
 
   const filterBtnRef = useRef(null);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // stats cho toolbar
+  // stats cho toolbar (tính từ all đã được filter ở backend)
   const { totalRooms, onlineCount, offlineCount, clinicCount, clsCount } =
     useMemo(() => {
-      const total = all.length;
+      const total = totalItems; // Dùng totalItems từ backend
+      // Tính stats từ items hiện tại (1 page)
       const online = all.filter((d) => d.status === "active").length;
-      const offline = total - online;
+      const offline = all.filter((d) => d.status === "inactive").length;
       const clinic = all.filter((d) => !isClsRoom(d)).length;
-      const cls = total - clinic;
+      const cls = all.filter((d) => isClsRoom(d)).length;
       return {
         totalRooms: total,
         onlineCount: online,
@@ -290,7 +298,7 @@ const all = useMemo(
         clinicCount: clinic,
         clsCount: cls,
       };
-    }, [all]);
+    }, [all, totalItems]);
 
 
 
@@ -338,67 +346,33 @@ const all = useMemo(
   // modal chi tiết
   const [detail, setDetail] = useState({ open: false, dept: null });
 
-  const searchMatch = (d, kw) => {
-    if (!kw) return true;
-    const s = kw.toLowerCase();
-    const roomName =d.room?.name || d.room?.tenPhong || d.room?.ten_phong || d.room?.number;
-    const deptName = d.name || d.dept?.name || d.dept?.tenKhoa || d.dept?.ten_khoa || d.khoaName;
-    return (
-      (roomName || "").toLowerCase().includes(s) ||
-      (deptName || "").toLowerCase().includes(s) ||
-      (d.doctorInCharge || "").toLowerCase().includes(s) ||
-      (d.nurseInCharge || "").toLowerCase().includes(s)
-    );
-  };
-
-  // lọc + sort
+  // Đã được filter ở backend, chỉ cần sort capacity ở FE (backend chưa hỗ trợ)
   const filtered = useMemo(() => {
     let arr = [...all];
 
-    // trạng thái
-    if (filters.status === "online") {
-      arr = arr.filter((d) => d.status === "active");
-    } else if (filters.status === "offline") {
-      arr = arr.filter((d) => d.status === "inactive");
-    }
+    // sort "sức chứa" = tải phòng trong ngày (chỉ sort ở FE vì backend chưa hỗ trợ)
+    if (
+      filters.sort === "capacity_asc" ||
+      filters.sort === "capacity_desc"
+    ) {
+      const getCap = (x) =>
+        Number(
+          // Nếu sau này detail có sức chứa/ngày thì ưu tiên
+          x.capacityPerDay ??
+            // còn hiện tại dùng tổng lượt hôm nay trên card
+            x.totalToday ??
+            (x.waitingPatients ?? 0) + (x.examinedPatients ?? 0)
+        );
 
-    // loại phòng
-    if (filters.roomType === "cls") {
-      arr = arr.filter((d) => isClsRoom(d));
-    } else if (filters.roomType === "ls") {
-      arr = arr.filter((d) => !isClsRoom(d));
+      arr = [...arr].sort((a, b) => {
+        const da = getCap(a);
+        const db = getCap(b);
+        return filters.sort === "capacity_asc" ? da - db : db - da;
+      });
     }
-
-    // keyword
-    const kw = filters.keyword.trim().toLowerCase();
-    if (kw) {
-      arr = arr.filter((d) => searchMatch(d, kw));
-    }
-
-       // sort "sức chứa" = tải phòng trong ngày
-       if (
-        filters.sort === "capacity_asc" ||
-        filters.sort === "capacity_desc"
-      ) {
-        const getCap = (x) =>
-          Number(
-            // Nếu sau này detail có sức chứa/ngày thì ưu tiên
-            x.capacityPerDay ??
-              // còn hiện tại dùng tổng lượt hôm nay trên card
-              x.totalToday ??
-              (x.waitingPatients ?? 0) + (x.examinedPatients ?? 0)
-          );
-  
-        arr = [...arr].sort((a, b) => {
-          const da = getCap(a);
-          const db = getCap(b);
-          return filters.sort === "capacity_asc" ? da - db : db - da;
-        });
-      }
-  
 
     return arr;
-  }, [all, filters]);
+  }, [all, filters.sort]);
 
   function openDetail(dept) {
     setDetail({ open: true, dept });
@@ -442,38 +416,32 @@ const all = useMemo(
           filterBtnRef={filterBtnRef}
         />
 
-        {isLoading ? (
+        {depRoomsLoading ? (
           <section className="card mt-3 p-4 h-full  rounded-2xl bg-white ring-1 ring-slate-200/60 text-sm text-slate-500 min-h-[320px] flex items-center justify-center">
             Đang tải dữ liệu phòng khoa.
           </section>
-        ) : error ? (
-          <section
-            role="alert"
-            className="card h-full  rounded-2xl bg-white ring-1 ring-slate-200/60 text-sm text-slate-500 min-h-[320px] flex items-center justify-center"
-          >
-        
-          </section>
         ) : (
-          <div className="mt-2.5 flex-1 min-h-0">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={filterKey}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18 }}
-                className="h-full min-h-0"
-              >
-                <div className="h-full min-h-0 overflow-auto scrollbar-none">
-                  <DeptGrid
-                    items={filtered}
-                    onOpenDetail={openDetail}
-                    onOpenSchedule={openSchedule}
-                    highlightId={highlightRoomId}
-                  />
-                </div>
-              </motion.div>
-            </AnimatePresence>
+          <div className="mt-2.5 flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-auto scrollbar-none">
+              <DeptGrid
+                items={filtered}
+                onOpenDetail={openDetail}
+                onOpenSchedule={openSchedule}
+                highlightId={highlightRoomId}
+              />
+            </div>
+            {totalPages > 1 && (
+              <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
+                <Pagination
+                  currentPage={page}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  pageSize={50}
+                  onPageChange={setPage}
+                  className="px-4 py-3"
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

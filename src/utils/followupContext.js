@@ -18,6 +18,8 @@ export function saveFollowupContext(context) {
     const data = {
       ...context,
       timestamp: Date.now(),
+      notified: false,  // ✅ NEW: Track if toast notification was shown
+      createdAt: Date.now(),  // ✅ NEW: Track creation time for expiration
     };
     localStorage.setItem(CONTEXT_KEY, JSON.stringify(data));
     console.log("[FollowupContext] Saved:", data);
@@ -37,7 +39,16 @@ export function getFollowupContext() {
     if (!raw) return null;
     
     const data = JSON.parse(raw);
-    const age = Date.now() - (data.timestamp || 0);
+    
+    // ✅ Backward compatibility: Add missing fields with defaults
+    if (data.notified === undefined) {
+      data.notified = false;
+    }
+    if (data.createdAt === undefined) {
+      data.createdAt = data.timestamp || Date.now();
+    }
+    
+    const age = Date.now() - (data.createdAt || data.timestamp || 0);
     
     // Expire after 1 hour
     if (age > EXPIRY_MS) {
@@ -50,7 +61,26 @@ export function getFollowupContext() {
     return data;
   } catch (err) {
     console.error("[FollowupContext] Failed to retrieve:", err);
+    // ✅ Clear corrupted data
+    clearFollowupContext();
     return null;
+  }
+}
+
+/**
+ * Mark follow-up context as notified (toast was shown)
+ * Updates the notified flag in localStorage
+ */
+export function markFollowupNotified() {
+  try {
+    const context = getFollowupContext();
+    if (context) {
+      context.notified = true;
+      localStorage.setItem(CONTEXT_KEY, JSON.stringify(context));
+      console.log("[FollowupContext] Marked as notified");
+    }
+  } catch (err) {
+    console.error("[FollowupContext] Failed to mark as notified:", err);
   }
 }
 

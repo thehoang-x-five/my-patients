@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { ANIMATION_CONFIG, R } from "./Shared.jsx";
+import { formatVietnameseText } from "../../utils/textFormatters.js";
 
 // COMPONENT – Phiếu chẩn đoán cuối  đơn thuốc (dùng để in cho bệnh nhân)
 export default function PatientProcessMode({
@@ -33,8 +34,20 @@ export default function PatientProcessMode({
     diagnosisData?.ChanDoanSoBo ?? diagnosisData?.dxPrimary ?? "";
   const dxFinal =
     diagnosisData?.ChanDoanCuoi ?? diagnosisData?.dxSecondary ?? "";
-  const summary =
-    diagnosisData?.NoiDungKham ?? diagnosisData?.summary ?? "";
+  
+  // ✅ Format text có dấu cho nội dung khám
+  const rawSummary = diagnosisData?.NoiDungKham ?? diagnosisData?.summary ?? "";
+  const summary = rawSummary
+    .split(/\s+/)
+    .map(word => {
+      // Nếu là snake_case thì format, không thì giữ nguyên
+      if (word.includes('_')) {
+        return formatVietnameseText(word);
+      }
+      return word;
+    })
+    .join(' ');
+  
   const treatmentPlan =
     diagnosisData?.PhatDoDieuTri ?? diagnosisData?.orders ?? "";
   const advice =
@@ -132,37 +145,40 @@ export default function PatientProcessMode({
             </div>
           )}
 
-          {/* Hướng xử trí - Checkboxes */}
+          {/* Hướng xử trí - Chỉ xem (Read-only) */}
           <div className="md:col-span-2">
             <div className="text-sm font-semibold text-slate-700 mb-2">
               Hướng xử trí
             </div>
             <div className="rounded-xl px-4 py-3 ring-1 ring-orange-200 bg-yellow-50/40">
               <div className="flex flex-wrap gap-4 text-sm text-slate-700">
-                <label className="inline-flex items-center gap-2 cursor-pointer">
+                <label className="inline-flex items-center gap-2 ">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 focus:ring-emerald-500"
+                    className="h-4 w-4 rounded border-slate-600"
                     checked={!!followupFlags.choVe}
-                    onChange={() => toggleFlag("choVe")}
+                    disabled
+                    readOnly
                   />
                   <span>Cho về</span>
                 </label>
-                <label className="inline-flex items-center gap-2 cursor-pointer">
+                <label className="inline-flex items-center gap-2 ">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 focus:ring-emerald-500"
+                    className="h-4 w-4 rounded border-slate-600"
                     checked={!!followupFlags.choThuocVe}
-                    onChange={() => toggleFlag("choThuocVe")}
+                    disabled
+                    readOnly
                   />
                   <span>Cho thuốc về</span>
                 </label>
-                <label className="inline-flex items-center gap-2 cursor-pointer">
+                <label className="inline-flex items-center gap-2 ">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 focus:ring-emerald-500"
+                    className="h-4 w-4 rounded border-slate-600"
                     checked={!!followupFlags.taiKham}
-                    onChange={() => toggleFlag("taiKham")}
+                    disabled
+                    readOnly
                   />
                   <span>Tái khám</span>
                 </label>

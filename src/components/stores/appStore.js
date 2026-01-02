@@ -306,12 +306,16 @@ const createUiSlice = (set, get) => ({
 
   // ----- Common highlights -----
   highlightPid: null,
-  setHighlightPid: (pid) => set({ highlightPid: pid }),
-  clearHighlight: () => set({ highlightPid: null }),
+  highlightNotified: false,  // ✅ NEW: Track if highlight toast was shown
+  setHighlightPid: (pid) => set({ highlightPid: pid, highlightNotified: false }),  // ✅ Reset notified when setting new highlight
+  clearHighlight: () => set({ highlightPid: null, highlightNotified: false }),  // ✅ Reset notified when clearing
+  markHighlightNotified: () => set({ highlightNotified: true }),  // ✅ NEW: Mark as notified
 
   flashAddAt: 0,
-  flashAdd: () => set({ flashAddAt: Date.now() }),
-  ackFlashAdd: () => set({ flashAddAt: 0 }),
+  flashAddNotified: false,  // ✅ NEW: Track if flash add toast was shown
+  flashAdd: () => set({ flashAddAt: Date.now(), flashAddNotified: false }),  // ✅ Reset notified when flashing
+  ackFlashAdd: () => set({ flashAddAt: 0, flashAddNotified: false }),  // ✅ Reset notified when acknowledging
+  markFlashAddNotified: () => set({ flashAddNotified: true }),  // ✅ NEW: Mark as notified
 
   // highlight phòng (Khoa/Phòng)
   highlightRoomId: null,

@@ -26,6 +26,7 @@ import { useUIStore, useExamStore } from "../components/stores/appStore.js";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
+import { apiLogger } from "../utils/apiLogger.js";
 
 // Lấy chuỗi yyyy-MM-dd của hôm nay
 const todayStr = () => {
@@ -156,10 +157,14 @@ export default function Patients() {
   const [filterAnchor, setFilterAnchor] = useState(null);
 
   const highlightPid = useUIStore((s) => s.highlightPid);
+  const highlightNotified = useUIStore((s) => s.highlightNotified);  // ✅ NEW
+  const markHighlightNotified = useUIStore((s) => s.markHighlightNotified);  // ✅ NEW
   const clearHighlight = useUIStore((s) => s.clearHighlight);
   const setHighlightPid = useUIStore((s) => s.setHighlightPid);
 
   const flashAddAt = useUIStore((s) => s.flashAddAt);
+  const flashAddNotified = useUIStore((s) => s.flashAddNotified);  // ✅ NEW
+  const markFlashAddNotified = useUIStore((s) => s.markFlashAddNotified);  // ✅ NEW
   const ackFlashAdd = useUIStore((s) => s.ackFlashAdd);
 
   const patientPrefill = useUIStore((s) => s.patientPrefill);
@@ -181,7 +186,25 @@ export default function Patients() {
   // ✅ Phân trang
   const [page, setPage] = useState(1);
 
-  // === Tải danh sách từ API (server đã lọc theo keyword nếu backend hỗ trợ)
+  // ✅ Map frontend sort → backend SortBy/SortDirection
+  const getSortParams = (sortValue) => {
+    switch (sortValue) {
+      case "name":
+        return { sortBy: "hoten", sortDirection: "asc" };
+      case "date":
+        return { sortBy: "ngaytrangthai", sortDirection: "desc" };
+      case "priority":
+        // Priority logic phức tạp, tạm thời dùng default của backend (theo HoTen)
+        // TODO: Implement priority sorting ở backend nếu cần
+        return { sortBy: "hoten", sortDirection: "asc" };
+      default:
+        return { sortBy: "hoten", sortDirection: "asc" };
+    }
+  };
+
+  const sortParams = getSortParams(sort);
+
+  // === Tải danh sách từ API (server đã lọc và sort)
   const { data: result = { Items: [], TotalItems: 0, Page: 1, PageSize: 50 } } = usePatientsList({
         keyword: filter.keyword || undefined,
         // mã TrangThaiHomNay theo API (cho_kham, cho_tiep_nhan, ...)
@@ -193,16 +216,18 @@ export default function Patients() {
         todayOnly: viewMode === "today",
         page,
         pageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
+        sortBy: sortParams.sortBy,
+        sortDirection: sortParams.sortDirection,
       });
 
   const items = result.Items || [];
   const totalItems = result.TotalItems || 0;
   const totalPages = Math.ceil(totalItems / 50);
 
-  // ✅ Reset page khi filter hoặc viewMode thay đổi
+  // ✅ Reset page khi filter, viewMode hoặc sort thay đổi
   useEffect(() => {
     if (page > 1) setPage(1);
-  }, [filter.keyword, filter.todayStatus, filter.accountStatus, viewMode]);
+  }, [filter.keyword, filter.todayStatus, filter.accountStatus, viewMode, sort]);
 
   const { mutateAsync: createPatient } = useCreatePatient();
   const { mutateAsync: updatePatient } = useUpdatePatient();
@@ -211,6 +236,9 @@ export default function Patients() {
   // Map to suppress duplicate success toasts for the same patient
   const suppressedStatusToast = React.useRef(new Map());
 
+  // ✅ Refs to prevent duplicate useEffect execution for check-in flow
+  const hasProcessedHighlightRef = React.useRef(false);
+  const hasProcessedFlashAddRef = React.useRef(false);
 
   // === Auto clear highlight sau 5s
   useEffect(() => {
@@ -221,11 +249,28 @@ export default function Patients() {
 
   // === Khi highlight xuất hiện -> call API search appointments đã check-in
   useEffect(() => {
-    if (!highlightPid) return;
+    // ✅ Guard: Prevent duplicate execution
+    if (hasProcessedHighlightRef.current) {
+      console.log("[Patients] Highlight already processed, skipping");
+      return;
+    }
+    
+    if (!highlightPid) {
+      // ✅ Reset ref when highlightPid is cleared
+      hasProcessedHighlightRef.current = false;
+      return;
+    }
 
     (async () => {
       try {
         // Call API search appointments với MaBenhNhan + TrangThai "da_checkin"
+        apiLogger.log({
+          endpoint: '/appointments/search',
+          params: { MaBenhNhan: highlightPid, TrangThai: APPT_STATUS.DA_CHECKIN },
+          source: 'Patients.highlightPid.useEffect',
+          fromCache: false,
+        });
+
         const appts = await searchAppointmentsRaw({
           MaBenhNhan: highlightPid,
           TrangThai: APPT_STATUS.DA_CHECKIN,
@@ -244,6 +289,15 @@ export default function Patients() {
             latestAppointment: latest || null,
           });
         }
+        
+        // ✅ Show toast only if not already notified
+        if (!highlightNotified) {
+          toast.success("Đã check-in. Vui lòng lập phiếu khám cho bệnh nhân.");
+          markHighlightNotified();
+        }
+        
+        // Mark as processed
+        hasProcessedHighlightRef.current = true;
       } catch (err) {
         console.error("Không lấy được lịch hẹn đã check-in khi highlight:", err);
         toast.error("Không thể tải thông tin lịch hẹn. Vui lòng thử lại.");
@@ -252,8 +306,17 @@ export default function Patients() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightPid]);
 
+  // ❌ REMOVED: Separate useEffect to reset ref - causes duplicate execution
+  // Reset is now handled inside the main useEffect when highlightPid is cleared
+
   // === Flash nút + Thêm khi có flashAddAt
   useEffect(() => {
+    // ✅ Guard: Prevent duplicate execution
+    if (hasProcessedFlashAddRef.current) {
+      console.log("[Patients] FlashAdd already processed, skipping");
+      return;
+    }
+    
     if (!flashAddAt) return;
 
     // Hiệu ứng flash nút + Thêm
@@ -263,11 +326,21 @@ export default function Patients() {
         btn.focus();
       } catch {}
       btn.classList.add("flash-once");
-      toast.info("Vui lòng thêm bệnh nhân mới từ lịch hẹn đã check-in.");
+      
+      // ✅ Show toast only if not already notified
+      if (!flashAddNotified) {
+        toast.info("Vui lòng thêm bệnh nhân mới từ lịch hẹn đã check-in.");
+        markFlashAddNotified();
+      }
+      
       const t = setTimeout(() => {
         btn.classList.remove("flash-once");
         ackFlashAdd();
       }, 5000);
+      
+      // Mark as processed
+      hasProcessedFlashAddRef.current = true;
+      
       return () => {
         clearTimeout(t);
         try {
@@ -277,15 +350,35 @@ export default function Patients() {
     } else {
       ackFlashAdd();
     }
-  }, [flashAddAt, ackFlashAdd]);
+  }, [flashAddAt, ackFlashAdd, flashAddNotified, markFlashAddNotified]);
 
   // === Khi có flashAddAt -> call API searchAppointmentsRaw với LoaiHen "kham_moi" + TrangThai "da_checkin"
+  // ✅ Ref to prevent duplicate API calls
+  const hasProcessedFlashAddApiRef = React.useRef(false);
+  
   useEffect(() => {
-    if (!flashAddAt) return;
+    // ✅ Guard: Prevent duplicate API execution
+    if (hasProcessedFlashAddApiRef.current) {
+      console.log("[Patients] FlashAdd API already processed, skipping");
+      return;
+    }
+    
+    if (!flashAddAt) {
+      // ✅ Reset ref when flashAddAt is cleared
+      hasProcessedFlashAddApiRef.current = false;
+      return;
+    }
 
     (async () => {
       try {
         // Call API search appointments với LoaiHen "kham_moi" + TrangThai "da_checkin"
+        apiLogger.log({
+          endpoint: '/appointments/search',
+          params: { LoaiHen: "kham_moi", TrangThai: APPT_STATUS.DA_CHECKIN },
+          source: 'Patients.flashAddAt.useEffect',
+          fromCache: false,
+        });
+
         const appts = await searchAppointmentsRaw({
           LoaiHen: "kham_moi",
           TrangThai: APPT_STATUS.DA_CHECKIN,
@@ -302,9 +395,12 @@ export default function Patients() {
               phone: latest.SoDienThoai || latest.DienThoai || latest.phone || "",
               latestAppointment: latest,
             });
-            toast.info("Đã tải thông tin bệnh nhân từ lịch hẹn đã check-in.");
+            // ❌ REMOVED: Duplicate toast - already shown in flash effect above
           }
         }
+        
+        // ✅ Mark as processed after successful API call
+        hasProcessedFlashAddApiRef.current = true;
       } catch (err) {
         console.error("Không lấy được lịch hẹn đã check-in khi flash add:", err);
         toast.warn("Không thể tải thông tin từ lịch hẹn. Vui lòng nhập thủ công.");
@@ -312,6 +408,9 @@ export default function Patients() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flashAddAt]);
+
+  // ❌ REMOVED: Separate useEffect to reset refs - causes duplicate execution
+  // Reset is now handled inside the main useEffect when flashAddAt is cleared
   
 
   // Clear prefill khi rời trang
@@ -325,58 +424,9 @@ export default function Patients() {
     };
   }, [clearPatientPrefill]);
 
-  // ✅ Với phân trang, filter đã được làm ở BE (status, accountStatus, keyword, todayOnly)
-  // Chỉ cần sort ở FE
-  const filtered = useMemo(() => {
-    let arr = Array.isArray(items) ? items.slice() : [];
-
-    // ✅ Bỏ filter ở FE vì đã được filter ở BE:
-    // - accountStatus: đã filter ở BE (line 189-190)
-    // - todayStatus: đã filter ở BE (line 187)
-    // - keyword: đã filter ở BE (line 185)
-    // - todayOnly: đã filter ở BE (line 192)
-
-    // Sort
-    const normName = (p) =>
-      (p.name || p.ho_ten || "").toString().toLowerCase().trim();
-
-    const priorityScore = (p) => {
-      const s = normStatusCode(p);
-      if (s === STATUSES.WAIT_INTAKE || s === STATUSES.WAIT_INTAKE_SVC) {
-        return 50;
-      }
-      if (s === STATUSES.WAIT_EXAM || s === STATUSES.WAIT_EXAM_SVC) {
-        return 40;
-      }
-      if (s === STATUSES.WAIT_PROC || s === STATUSES.WAIT_PROC_SVC) {
-        return 30;
-      }
-      if (s === STATUSES.IN_EXAM || s === STATUSES.IN_EXAM_SVC) {
-        return 20;
-      }
-      if (s === STATUSES.DONE || s === STATUSES.DONE_EXAM) {
-        return 10;
-      }
-      if (s === STATUSES.CANCELLED) {
-        return 0;
-      }
-      return 5;
-    };
-
-    if (sort === "name") {
-      arr.sort((a, b) => normName(a).localeCompare(normName(b), "vi"));
-    } else if (sort === "date") {
-      arr.sort((a, b) => {
-        const da = normStatusDate(a) || "";
-        const db = normStatusDate(b) || "";
-        return String(db).localeCompare(String(da));
-      });
-    } else {
-      arr.sort((a, b) => priorityScore(b) - priorityScore(a));
-    }
-
-    return arr;
-  }, [items, sort]); // ✅ Chỉ phụ thuộc vào items và sort (filter đã làm ở BE)
+  // ✅ Với phân trang, filter và sort đã được làm ở BE
+  // Không cần filter/sort ở FE nữa
+  const filtered = items; // items đã được filter và sort ở backend
 
   // === Đếm số lượng theo trạng thái hôm nay
   const counts = useMemo(() => {
@@ -449,6 +499,13 @@ export default function Patients() {
 
         // 1. Search lịch hẹn đã check-in mới nhất hôm nay
         try {
+          apiLogger.log({
+            endpoint: '/appointments/search',
+            params: { MaBenhNhan: pid, TrangThai: APPT_STATUS.DA_CHECKIN, FromDate: today, ToDate: today },
+            source: 'Patients.handleAction.intake',
+            fromCache: false,
+          });
+
           const appts = await searchAppointmentsRaw({
             MaBenhNhan: pid,
             TrangThai: APPT_STATUS.DA_CHECKIN,

@@ -310,13 +310,40 @@ function extractItems(data) {
 }
 
 // GET /api/pharmacy/prescriptions
-export async function getRxOrders() {
-  const data = await get("/pharmacy/prescriptions");
+// ✅ Lấy danh sách đơn thuốc với filtering và pagination
+export async function searchRxOrders({ keyword, status, fromDate, toDate, page = 1, pageSize = 50 } = {}) {
+  const params = new URLSearchParams();
+  if (keyword) params.append("keyword", keyword);
+  if (status && status !== "all" && status !== "Tất cả") {
+    // Map frontend status → backend status
+    const statusMap = {
+      "Đã kê": "da_ke",
+      "Chờ phát": "cho_phat",
+      "Đã phát": "da_phat",
+    };
+    params.append("trangThai", statusMap[status] || status);
+  }
+  if (fromDate) params.append("fromDate", fromDate);
+  if (toDate) params.append("toDate", toDate);
+  params.append("page", page);
+  params.append("pageSize", pageSize);
 
- 
-
+  const data = await get(`/pharmacy/prescriptions?${params.toString()}`);
+  
+  // ✅ Trả về PagedResult đầy đủ
   const list = extractItems(data);
-  return list.map(normalizePrescription);
+  return {
+    Items: list.map(normalizePrescription),
+    TotalItems: data?.TotalItems ?? data?.totalItems ?? list.length,
+    Page: data?.Page ?? data?.page ?? page,
+    PageSize: data?.PageSize ?? data?.pageSize ?? pageSize,
+  };
+}
+
+// Deprecated: sử dụng searchRxOrders thay thế
+export async function getRxOrders() {
+  const result = await searchRxOrders({ page: 1, pageSize: 1000 });
+  return result.Items;
 }
 
 // GET /api/pharmacy/stock
@@ -402,6 +429,27 @@ export function useStock(options = {}) {
   });
 }
 
+// ✅ Hook cho search orders với filtering và pagination
+export function useSearchRxOrders(filters = {}, options = {}) {
+  const {
+    keyword = "",
+    status = "Tất cả",
+    fromDate = null,
+    toDate = null,
+    page = 1,
+    pageSize = 50,
+  } = filters;
+
+  return useQuery({
+    queryKey: ["pharmacy", "rxOrders", "search", { keyword, status, fromDate, toDate, page, pageSize }],
+    queryFn: () => searchRxOrders({ keyword, status, fromDate, toDate, page, pageSize }),
+    staleTime: 10_000,
+    keepPreviousData: true,
+    ...options,
+  });
+}
+
+// Deprecated: sử dụng useSearchRxOrders thay thế
 export function useRxOrders(options = {}) {
   return useQuery({
     queryKey: ["pharmacy", "rxOrders"],
@@ -416,6 +464,7 @@ export function useSearchStock(filters = {}, options = {}) {
   const {
     keyword = "",
     status = "all",
+    unit = "",
     expFrom = null,
     expTo = null,
     tonMin = null,
@@ -425,8 +474,8 @@ export function useSearchStock(filters = {}, options = {}) {
   } = filters;
 
   return useQuery({
-    queryKey: ["pharmacy", "stock", "search", { keyword, status, expFrom, expTo, tonMin, tonMax, page, pageSize }],
-    queryFn: () => searchStock({ keyword, status, expFrom, expTo, tonMin, tonMax, page, pageSize }),
+    queryKey: ["pharmacy", "stock", "search", { keyword, status, unit, expFrom, expTo, tonMin, tonMax, page, pageSize }],
+    queryFn: () => searchStock({ keyword, status, unit, expFrom, expTo, tonMin, tonMax, page, pageSize }),
     staleTime: 10_000,
     keepPreviousData: true, // Giữ data cũ khi chuyển trang
     ...options,

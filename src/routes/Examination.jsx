@@ -11,7 +11,7 @@ import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
 import {
-  useQueueToday,
+  useQueueSearch,
   useFinishRemove,
   subscribeQueue,
   getQueueById,
@@ -56,14 +56,65 @@ export default function Examination() {
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
   const qc = useQueryClient();
-  const { data: queueData } = useQueueToday();
 
-  // ✅ Fix: API trả về Items (chữ I hoa), không phải items (chữ i thường)
-  const patients = Array.isArray(queueData?.Items) 
-    ? queueData.Items 
-    : Array.isArray(queueData?.items) 
-    ? queueData.items 
-    : [];
+  // Filter theo nguồn (walkin / appointment / service_return) + loại lượt (ls / cls) + search
+  const [filter, setFilter] = useState({
+    source: "all",
+    kind: "all",
+    search: "",
+    status: "all",
+  });
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  // ✅ Pagination
+  const [page, setPage] = useState(1);
+
+  // ✅ Map frontend filter → backend filter params
+  const queueFilterParams = useMemo(() => {
+    const params = {
+      Page: page,
+      PageSize: 50,
+    };
+
+    // Source (Nguon)
+    if (filter.source !== "all") {
+      params.Nguon = filter.source;
+    }
+
+    // Status (TrangThai)
+    if (filter.status !== "all") {
+      params.TrangThai = filter.status;
+    }
+
+    // Kind (LoaiHangDoi)
+    if (filter.kind === "cls") {
+      params.LoaiHangDoi = "can_lam_sang";
+    } else if (filter.kind === "clinical") {
+      params.LoaiHangDoi = "kham_lam_sang";
+    }
+    // "all" → không set LoaiHangDoi
+
+    // Keyword (search)
+    if (filter.search && filter.search.trim()) {
+      params.Keyword = filter.search.trim();
+    }
+
+    // Date range: hôm nay
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(startOfToday.getTime() + 86400000 - 1);
+    params.FromTime = startOfToday.toISOString();
+    params.ToTime = endOfToday.toISOString();
+
+    return params;
+  }, [filter, page]);
+
+  // ✅ Sử dụng useQueueSearch với filter params
+  const queueSearchResult = useQueueSearch(queueFilterParams);
+  const queueData = queueSearchResult.data || { Items: [], TotalItems: 0, Page: 1, PageSize: 50 };
+  const patients = Array.isArray(queueData?.Items) ? queueData.Items : queueData?.items || [];
+  const totalItems = queueData.TotalItems || queueData.totalItems || 0;
+  const totalPages = Math.ceil(totalItems / 50);
 
   const keyOf = (p) =>
     p?.MaHangDoi ??
@@ -91,15 +142,6 @@ export default function Examination() {
 
   const [active, setActive] = useState(null);
   const [inProgress, setInProgress] = useState(() => new Set());
-
-  // Filter theo nguồn (walkin / appointment / service_return) + loại lượt (ls / cls) + search
-  const [filter, setFilter] = useState({
-    source: "all",
-    kind: "all",
-    search: "",
-    status: "all",
-  });
-  const [filterOpen, setFilterOpen] = useState(false);
 
   // Lấy số theo trạng thái queue
   const waitingCount = useMemo(
@@ -133,51 +175,14 @@ export default function Examination() {
     };
   }, [qc]);
 
-  const filtered = useMemo(() => {
-    let arr = [...patients];
-    const { source, kind, search, status } = filter;
+  // ✅ Reset page khi filter thay đổi
+  useEffect(() => {
+    if (page > 1) setPage(1);
+  }, [filter.source, filter.status, filter.kind, filter.search]);
 
-    if (source !== "all") {
-      arr = arr.filter(
-        (p) => (p.Nguon || p.nguon || p.source || "walkin") === source
-      );
-    }
-
-    if (status !== "all") {
-      arr = arr.filter(
-        (p) => (p.TrangThai || p.trangThai || p.status) === status
-      );
-    }
-
-    if (kind !== "all") {
-      arr = arr.filter((p) => {
-        const qt = p.LoaiHangDoi || p.loaiHangDoi || p.queueType || p.visitType;
-        const isCLS = qt === "can_lam_sang" || qt === "cls";
-        return kind === "cls" ? isCLS : !isCLS;
-      });
-    }
-
-    const term = (search || "").trim().toLowerCase();
-    if (term) {
-      arr = arr.filter((p) => {
-        const bag = [p.name, p.pid, p.id, p.doctor, p.dept, p.phone]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return bag.includes(term);
-      });
-    }
-
-    // Sắp xếp theo trạng thái: chờ -> đang thực hiện -> đã phục vụ -> khác
-    const order = { cho_goi: 0, dang_thuc_hien: 1, dang_kham: 1, da_phuc_vu: 2 };
-    arr.sort((a, b) => {
-      const sa = order[a.TrangThai || a.trangThai || a.status] ?? 99;
-      const sb = order[b.TrangThai || b.trangThai || b.status] ?? 99;
-      return sa - sb;
-    });
-
-    return arr;
-  }, [patients, filter]);
+  // ✅ Filter và sort đã được làm ở backend
+  // Queue có logic sorting đặc biệt (ưu tiên, appointment time) ở backend
+  const filtered = patients;
 
  
 
@@ -450,8 +455,18 @@ export default function Examination() {
         (Array.isArray(phieuClsFull?.ListItemDV) &&
           phieuClsFull.ListItemDV[0]?.MaChiTietDv) ??
         null,
-      maNhanSuThucHien: maNhanSuThucHien,
-      maYTaHoTro: maYTaHoTro,
+      maNhanSuThucHien:
+        raw.MaNhanSuThucHien ??
+        phieuClsFull?.MaNhanSuThucHien ??
+        phieuClsItem?.MaNhanSuThucHien ??
+        p?.maNhanSuThucHien ??
+        null,
+      maYTaHoTro:
+        raw.MaYTaHoTro ??
+        phieuClsFull?.MaYTaHoTro ??
+        phieuClsItem?.MaYTaHoTro ??
+        p?.maYTaHoTro ??
+        null,
       serviceOrder:
         Array.isArray(phieuClsFull?.ListItemDV) &&
         phieuClsFull.ListItemDV.length
@@ -596,6 +611,12 @@ export default function Examination() {
     const huongXuTri =
       huongXuTriArr.join("; ") || payload?.dx?.plan || payload?.dx?.advice || "";
 
+    // ✅ Validation: Nếu tick "Cho thuốc về" thì phải có đơn thuốc
+    if (flags.choThuocVe && donThuoc.length === 0) {
+      toast.error("Vui lòng kê đơn thuốc trước khi chọn 'Cho thuốc về'");
+      return;
+    }
+
     // ✅ Flow mới: Chỉ lưu chẩn đoán, không đóng lượt khám ở đây
     // Lượt khám sẽ được đóng khi hoàn tất (CompleteExamAsync)
     const finalPayload = {
@@ -616,7 +637,7 @@ export default function Examination() {
       HuongXuTri: huongXuTri,
       LoiKhuyen: payload?.dx?.advice || "",
       PhatDoDieuTri: payload?.dx?.plan || "",
-      DonThuoc: donThuoc,
+      DonThuoc: donThuoc.length > 0 ? donThuoc : undefined,  // ✅ Chỉ gửi nếu có thuốc
     };
 
     await dxMut.mutateAsync(finalPayload);

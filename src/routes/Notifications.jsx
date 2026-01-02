@@ -13,6 +13,7 @@ import React, {
   import NotificationList from "../components/notifications/NotificationList.jsx";
   import NotificationDetailModal from "../components/notifications/NotificationDetailModal.jsx";
   import NotificationsFilterPopover from "../components/notifications/NotificationsFilterPopover.jsx";
+  import Pagination from "../components/ui/Pagination.jsx";
   
   import { useNotifications } from "../api/notifications.js";
   
@@ -45,6 +46,7 @@ export default function Notifications() {
     type: "all",
     priority: "all",
   });
+  const [page, setPage] = useState(1);
 
   const deferredKeyword = useDeferredValue(filters.keyword);
 
@@ -60,127 +62,79 @@ export default function Notifications() {
     navigate({ search: sp.toString() }, { replace: true });
   }, [tab, filters.keyword, location.search, navigate]);
 
+  // Map frontend filter values sang backend values
+  const mapTypeToBackend = (type) => {
+    if (type === "all") return null;
+    const map = {
+      appointment: "lich_hen",
+      patient: "benh_nhan",
+      pharmacy: "nha_thuoc",
+      system: "he_thong",
+      result: "result",
+      reminder: "reminder",
+      billing: "thanh_toan",
+    };
+    return map[type] || null;
+  };
+
+  const mapPriorityToBackend = (priority) => {
+    if (priority === "all") return null;
+    const map = {
+      high: "cao",
+      normal: "thuong",
+    };
+    return map[priority] || null;
+  };
+
+  // Reset page khi filter thay đổi
+  useEffect(() => {
+    setPage(1);
+  }, [tab, filters.keyword, filters.type, filters.priority]);
+
   // -------- Query dữ liệu --------
   const { data, isLoading, isError } = useNotifications({
     params: {
       tab,
+      page,
+      keyword: deferredKeyword || undefined,
+      type: mapTypeToBackend(filters.type) || undefined,
+      priority: mapPriorityToBackend(filters.priority) || undefined,
+      sortBy: "MucDoUuTien", // Sort by priority first
+      sortDirection: "asc", // High priority first (cao = 0, thuong = 1)
     },
   });
 
-  const items = useMemo(
-    () => {
-            if (!data) return [];
-            // PagedResult từ API: { items, totalItems, page, pageSize }
-            if (Array.isArray(data.items)) return data.items;
-            // Fallback cũ: data.data hoặc array trần
-            if (Array.isArray(data.data)) return data.data;
-            if (Array.isArray(data)) return data;
-            return [];
-          },
-    [data]
-    
-  );
+  // Extract PagedResult
+  const notificationResult = data || { Items: [], TotalItems: 0, Page: 1, PageSize: 50 };
+  const items = Array.isArray(notificationResult.Items) 
+    ? notificationResult.Items 
+    : Array.isArray(notificationResult.items)
+    ? notificationResult.items
+    : [];
+  const totalItems = notificationResult.TotalItems || notificationResult.totalItems || 0;
+  const totalPages = Math.ceil(totalItems / 50);
 
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
-
-  // Fallback filter client-side (khi BE chưa hỗ trợ)
-    // Fallback filter client-side (khi BE chưa hỗ trợ đầy đủ)
-    const filtered = useMemo(() => {
-      // copy tránh mutate trực tiếp
-      let list = Array.isArray(items) ? [...items] : [];
-  
-      // Tab: unread / today
-      if (tab === "unread") {
-        list = list.filter((n) => !n.read);
-      } else if (tab === "today") {
-        list = list.filter((n) => {
-          if (!n.createdAt) return false;
-          const d = new Date(n.createdAt);
-          d.setHours(0, 0, 0, 0);
-          return d.getTime() === today.getTime();
-        });
-      }
-  
-      // Keyword
-      const kw = (deferredKeyword || "").trim().toLowerCase();
-      if (kw) {
-        list = list.filter((n) => {
-          const haystack = [
-            n.title,
-            n.message,
-            n.description,
-            n.patientName,
-            n.fromStaff,
-            n.fromDept,
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          return haystack.includes(kw);
-        });
-      }
-  
-      // Filter type (system / appointment / patient / pharmacy / billing)
-      if (filters.type && filters.type !== "all") {
-        const t = filters.type.toLowerCase();
-        const th = t==="appointment"?"lich_hen": t==="patient"?"benh_nhan":t==="pharmacy"?"nha_thuoc":t==="system"?"he_thong":t==="result"?"result":t==="reminder"?"reminder":"thanh_toan";
-        list = list.filter((n) => (n.type || "").toLowerCase() === th);
-      }
-  
-     
-      if (filters.priority && filters.priority !== "all") {
-        const p = filters.priority.toLowerCase(); // "high" | "normal"
-        list = list.filter((n) => normalizePriority(n.priority) === p);
-      }
-  
-      // Sort: ưu tiên cao trước, rồi mới tới thời gian mới nhất
-      const priorityMode = "high-first";
-
-      const priorityRank = (p) => {
-        const v = normalizePriority(p);
-        if (v === "high") return 0;
-        if (v === "normal") return 1;
-        return 2;
-      };
-      list.sort((a, b) => {
-        if (priorityMode === "high-first") {
-          const pa = priorityRank(a.priority);
-          const pb = priorityRank(b.priority);
-          if (pa !== pb) return pa - pb;
-        }
-  
-        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return tb - ta;
-      });
-  
-      return list;
-    }, [items, tab, today, deferredKeyword, filters.type, filters.priority]);
+  // Đã được filter và sort ở backend, không cần filter lại
+  const filtered = items;
 
  
  
+    // Stats chỉ để hiển thị UI, tính từ filtered (1 page hiện tại)
     const stats = useMemo(() => {
       if (!Array.isArray(filtered)) {
-        return { total: 0, unread: 0, today: 0, priorityHigh: 0 };
+        return { total: totalItems, unread: 0, today: 0, priorityHigh: 0 };
       }
   
-      // Tính theo danh sách đã lọc ở FE (tab + keyword + type + priority)
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       const end = new Date();
       end.setHours(23, 59, 59, 999);
   
-      let total = 0;
       let unread = 0;
       let today = 0;
       let priorityHigh = 0;
   
       for (const n of filtered) {
-        total += 1;
         if (!n.read) unread += 1;
   
         const createdAt = n.createdAt ? new Date(n.createdAt) : null;
@@ -193,8 +147,8 @@ export default function Notifications() {
         }
       }
   
-      return { total, unread, today, priorityHigh };
-    }, [filtered]);
+      return { total: totalItems, unread, today, priorityHigh };
+    }, [filtered, totalItems]);
   
   
 
@@ -248,7 +202,7 @@ export default function Notifications() {
         />
 
         {/* Content */}
-        <div className="card mt-3 flex-1 min-h-0">
+        <div className="card mt-3 flex-1 min-h-0 flex flex-col">
           {isLoading ? (
             <section className="h-full p-6 rounded-2xl bg-white  text-sm text-slate-500 min-h-[320px] flex items-center justify-center">
              Đang tải dữ liệu thông báo.
@@ -258,11 +212,27 @@ export default function Notifications() {
              Không có bản ghi phù hợp.
             </section>
           ) : (
-            <NotificationList
-              items={filtered}
-              onOpenDetail={(item) => setDetail({ open: true, item })}
-              stretch
-            />
+            <>
+              <div className="flex-1 min-h-0">
+                <NotificationList
+                  items={filtered}
+                  onOpenDetail={(item) => setDetail({ open: true, item })}
+                  stretch
+                />
+              </div>
+              {totalPages > 1 && (
+                <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
+                  <Pagination
+                    currentPage={page}
+                    totalPages={totalPages}
+                    totalItems={totalItems}
+                    pageSize={50}
+                    onPageChange={setPage}
+                    className="px-4 py-3"
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

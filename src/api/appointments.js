@@ -2,6 +2,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { http } from "./http.js";
 import { ensureStarted, on } from "./realtime.js";
+import { apiLogger } from "../utils/apiLogger.js";
+import { withDeduplication } from "../utils/requestDeduplication.js";
 /** ===== Trạng thái lịch hẹn theo ERD ===== */
 export const APPT_STATUS = {
   DANG_CHO: "dang_cho",
@@ -185,7 +187,23 @@ const api = {
       PageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
     };
 
+    const startTime = Date.now();
+    apiLogger.log({
+      endpoint: '/appointments/search',
+      params: filter,
+      source: 'api.listByDate',
+      fromCache: false,
+    });
+
     const res = await http.post("/appointments/search", filter);
+    
+    apiLogger.log({
+      endpoint: '/appointments/search',
+      params: filter,
+      source: 'api.listByDate',
+      fromCache: false,
+      duration: Date.now() - startTime,
+    });
 
 
     // Lấy đúng root thực sự chứa Items
@@ -311,7 +329,23 @@ const api = {
       PageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
     };
 
+    const startTime = Date.now();
+    apiLogger.log({
+      endpoint: '/appointments/search',
+      params: filter,
+      source: 'api.listRange',
+      fromCache: false,
+    });
+
     const res = await http.post("/appointments/search", filter);
+    
+    apiLogger.log({
+      endpoint: '/appointments/search',
+      params: filter,
+      source: 'api.listRange',
+      fromCache: false,
+      duration: Date.now() - startTime,
+    });
 
 
     const root =
@@ -345,9 +379,21 @@ export function useAppointmentsByDate(date, options = {}) {
 
   return useQuery({
     queryKey: ["appointments", "byDate", date || "none"],
-    queryFn: () => api.listByDate(date),
+    queryFn: () => {
+      apiLogger.log({
+        endpoint: '/appointments/search',
+        params: { date },
+        source: 'useAppointmentsByDate',
+        fromCache: false,
+      });
+      return api.listByDate(date);
+    },
     enabled,
-    staleTime: 30_000,
+    staleTime: 5 * 60 * 1000, // ✅ 5 phút
+    cacheTime: 10 * 60 * 1000, // ✅ 10 phút
+    refetchOnWindowFocus: false, // ✅ Không refetch khi focus window
+    refetchOnMount: false, // ✅ Không refetch khi mount nếu có cache
+    refetchOnReconnect: false, // ✅ Không refetch khi reconnect
     ...options,
   });
 }
@@ -358,16 +404,21 @@ export function useCreateAppointment() {
   return useMutation({
     mutationFn: (payload) => api.create(payload),
     onSuccess: (res) => {
-        // Có thể tạo cho bất kỳ ngày nào → làm tươi toàn bộ các query "byDate"
+        // ✅ Chỉ invalidate, KHÔNG tự động refetch để tránh duplicate API calls
+        // Component sẽ tự refetch khi cần (ví dụ: khi user quay lại trang)
       qc.invalidateQueries({
           predicate: (q) =>
             Array.isArray(q.queryKey) &&
             q.queryKey[0] === "appointments" &&
             q.queryKey[1] === "byDate",
+          refetchType: 'none', // ✅ Không tự động refetch
         });
   
         // Cập nhật calendar / khoảng ngày
-        qc.invalidateQueries({ queryKey: ["appointments", "range"] });
+        qc.invalidateQueries({ 
+          queryKey: ["appointments", "range"],
+          refetchType: 'none', // ✅ Không tự động refetch
+        });
     },
   });
 }
@@ -384,8 +435,12 @@ export function useUpdateAppointment() {
             Array.isArray(q.queryKey) &&
             q.queryKey[0] === "appointments" &&
             q.queryKey[1] === "byDate",
+          refetchType: 'none', // ✅ Không tự động refetch
         });
-        qc.invalidateQueries({ queryKey: ["appointments", "range"] });
+        qc.invalidateQueries({ 
+          queryKey: ["appointments", "range"],
+          refetchType: 'none', // ✅ Không tự động refetch
+        });
     },
   });
 }
@@ -402,8 +457,12 @@ export function useCheckInAppointment() {
             Array.isArray(q.queryKey) &&
             q.queryKey[0] === "appointments" &&
             q.queryKey[1] === "byDate",
+          refetchType: 'none', // ✅ Không tự động refetch
         });
-        qc.invalidateQueries({ queryKey: ["appointments", "range"] });
+        qc.invalidateQueries({ 
+          queryKey: ["appointments", "range"],
+          refetchType: 'none', // ✅ Không tự động refetch
+        });
     },
   });
 }
@@ -428,9 +487,21 @@ export function useAppointmentsRange(fromDate, toDate, options = {}) {
 
   return useQuery({
     queryKey: ["appointments", "range", { fromDate, toDate }],
-    queryFn: () => api.listRange(fromDate, toDate),
+    queryFn: () => {
+      apiLogger.log({
+        endpoint: '/appointments/search',
+        params: { fromDate, toDate },
+        source: 'useAppointmentsRange',
+        fromCache: false,
+      });
+      return api.listRange(fromDate, toDate);
+    },
     enabled,
-    staleTime: 30_000,
+    staleTime: 5 * 60 * 1000, // ✅ 5 phút
+    cacheTime: 10 * 60 * 1000, // ✅ 10 phút
+    refetchOnWindowFocus: false, // ✅ Không refetch khi focus window
+    refetchOnMount: false, // ✅ Không refetch khi mount nếu có cache
+    refetchOnReconnect: false, // ✅ Không refetch khi reconnect
     ...options,
   });
 }
@@ -445,8 +516,12 @@ export function useUpdateAppointmentStatus() {
             Array.isArray(q.queryKey) &&
             q.queryKey[0] === "appointments" &&
             q.queryKey[1] === "byDate",
+          refetchType: 'none', // ✅ Không tự động refetch
         });
-        qc.invalidateQueries({ queryKey: ["appointments", "range"] });
+        qc.invalidateQueries({ 
+          queryKey: ["appointments", "range"],
+          refetchType: 'none', // ✅ Không tự động refetch
+        });
       },
     });
   }
@@ -454,8 +529,26 @@ export function useUpdateAppointmentStatus() {
 
   // === Search lịch hẹn (POST /api/appointments/search) ===
 // Trả về raw list (chưa normalize) để các màn khác tự xử lý
-export async function searchAppointmentsRaw(filter = {}) {
+// ✅ Wrapped with deduplication to prevent duplicate simultaneous calls
+async function searchAppointmentsRawImpl(filter = {}) {
+  const startTime = Date.now();
+  apiLogger.log({
+    endpoint: '/appointments/search',
+    params: filter,
+    source: 'searchAppointmentsRaw',
+    fromCache: false,
+  });
+
   const res = await http.post("/appointments/search", filter);
+  
+  apiLogger.log({
+    endpoint: '/appointments/search',
+    params: filter,
+    source: 'searchAppointmentsRaw',
+    fromCache: false,
+    duration: Date.now() - startTime,
+  });
+
   const data = res?.data;
 
   if (!data) return [];
@@ -467,6 +560,12 @@ export async function searchAppointmentsRaw(filter = {}) {
 
   return [];
 }
+
+// Export deduplicated version
+export const searchAppointmentsRaw = withDeduplication(
+  searchAppointmentsRawImpl,
+  '/appointments/search'
+);
 
   // Đăng ký realtime cho lịch hẹn
 export async function subscribeAppointments(queryClient) {

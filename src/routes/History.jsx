@@ -11,6 +11,7 @@ import HistoryToolbar from "../components/history/HistoryToolbar.jsx";
 import HistoryTable from "../components/history/HistoryTable.jsx";
 import HistoryDetailModal from "../components/history/HistoryDetailModal.jsx";
 import HistoryFilterPopover from "../components/history/HistoryFilterPopover.jsx";
+import Pagination from "../components/ui/Pagination.jsx";
 
 import { useHistoryVisits, useHistoryTransactions, subscribeHistory } from "../api/history.js";
 
@@ -102,7 +103,10 @@ export default function History() {
   const [kw, setKw] = useState("");
   const [visitType, setVisitType] = useState("all"); // all | clinic | service
   const [txnType, setTxnType] = useState("all"); // all | exam | cls | drug | other
-  const kwDef = useDeferredValue(kw);
+
+  // ✅ Pagination
+  const [visitPage, setVisitPage] = useState(1);
+  const [txnPage, setTxnPage] = useState(1);
 
   const [detail, setDetail] = useState({
     open: false,
@@ -113,19 +117,73 @@ export default function History() {
   const [openFilter, setOpenFilter] = useState(false);
   const filterBtnRef = useRef(null);
 
+  // ✅ Map frontend filter → backend filter params
+  const visitFilterParams = useMemo(() => {
+    const params = {
+      page: visitPage,
+      pageSize: 50,
+    };
+
+    // Date range
+    if (from) {
+      params.fromTime = new Date(from).toISOString();
+    }
+    if (to) {
+      // Set to end of day
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      params.toTime = toDate.toISOString();
+    }
+
+    // Scope: today
+    if (scope === "today") {
+      params.onlyToday = true;
+    }
+
+    // Keyword
+    if (kw && kw.trim()) {
+      params.keyword = kw.trim();
+    }
+
+    // Visit type: map frontend → backend
+    if (visitType === "clinic") {
+      params.loaiLuot = "kham_lam_sang";
+    } else if (visitType === "service") {
+      params.loaiLuot = "can_lam_sang";
+    }
+    // "all" → không set loaiLuot
+
+    return params;
+  }, [from, to, scope, kw, visitType, visitPage]);
+
   // ✅ useHistoryVisits và useHistoryTransactions giờ trả về PagedResult { Items, TotalItems, Page, PageSize }
   const {
         data: visitResult = { Items: [], TotalItems: 0, Page: 1, PageSize: 50 },
         refetch: refetchVisits,
-      } = useHistoryVisits();
+      } = useHistoryVisits(visitFilterParams);
       const {
         data: txnResult = { Items: [], TotalItems: 0, Page: 1, PageSize: 50 },
         refetch: refetchTxns,
-      } = useHistoryTransactions();
+      } = useHistoryTransactions({
+        page: txnPage,
+        pageSize: 50,
+        fromTime: from ? new Date(from).toISOString() : undefined,
+        toTime: to ? (() => {
+          const toDate = new Date(to);
+          toDate.setHours(23, 59, 59, 999);
+          return toDate.toISOString();
+        })() : undefined,
+        keyword: kw && kw.trim() ? kw.trim() : undefined,
+        loaiDotThu: txnType !== "all" ? txnType : undefined,
+      });
 
       // ✅ Lấy Items từ PagedResult
       const visitRows = visitResult.Items || [];
       const txnRows = txnResult.Items || [];
+      const visitTotalItems = visitResult.TotalItems || 0;
+      const txnTotalItems = txnResult.TotalItems || 0;
+      const visitTotalPages = Math.ceil(visitTotalItems / 50);
+      const txnTotalPages = Math.ceil(txnTotalItems / 50);
       // realtime: lắng nghe "history.updated" từ SignalR và refetch
       useEffect(() => {
      
@@ -137,61 +195,26 @@ export default function History() {
         return () => off && off();
       }, [refetchVisits, refetchTxns]);
 
-  /* ====== common filter helpers ====== */
-  const inRange = (date) => {
-    if (!date) return true;
-    const d = new Date(date);
-    if (from && d < new Date(from)) return false;
-    if (to && d > new Date(to)) return false;
-    return true;
-  };
+  // ✅ Reset page khi filter thay đổi
+  useEffect(() => {
+    if (visitPage > 1) setVisitPage(1);
+  }, [from, to, scope, kw, visitType]);
 
-  const matchKw = (row) =>
-    !kwDef ||
-    JSON.stringify(row)
-      .toLowerCase()
-      .includes(kwDef.trim().toLowerCase());
+  useEffect(() => {
+    if (txnPage > 1) setTxnPage(1);
+  }, [from, to, kw, txnType]);
 
-  const matchScope = (row) =>
-    scope === "all" ? true : isToday(row.date || row.thoiGian);
-
-  const matchVisitType = (row) =>
-    visitType === "all" || getVisitKind(row) === visitType;
-
-  const matchTxnType = (row) =>
-    txnType === "all" || getTxnKind(row) === txnType;
-
-  /* ====== filtered lists cho 2 tab ====== */
-  const filteredVisits = useMemo(
-    () =>
-      visitRows
-        .filter((r) => inRange(r.date))
-        .filter(matchKw)
-        .filter(matchScope)
-        .filter(matchVisitType)
-        .sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [visitRows, from, to, kwDef, scope, visitType]
-  );
-
-  const filteredTxns = useMemo(
-    () =>
-      txnRows
-        .filter((r) => inRange(r.date))
-        .filter(matchKw)
-        .filter(matchScope)
-        .filter(matchTxnType)
-        .sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [txnRows, from, to, kwDef, scope, txnType]
-  );
-
-  const rows = tab === "visits" ? filteredVisits : filteredTxns;
+  // ✅ Filter và sort đã được làm ở backend
+  const rows = tab === "visits" ? visitRows : txnRows;
 
   /* ====== stats dựa trên dữ liệu đang lọc ====== */
+  // ⚠️ Lưu ý: Stats chỉ tính trên 1 page (50 items), không phải toàn bộ dataset
+  // Để có stats chính xác, cần call API riêng hoặc load tất cả data (không scalable)
   const stats = useMemo(() => {
     // visits
     let vClinic = 0;
     let vService = 0;
-    filteredVisits.forEach((v) => {
+    visitRows.forEach((v) => {
       const kind = getVisitKind(v);
       if (kind === "service") vService += 1;
       else vClinic += 1;
@@ -204,7 +227,7 @@ export default function History() {
     let tOther = 0;
     let tSum = 0;
 
-    filteredTxns.forEach((t) => {
+    txnRows.forEach((t) => {
       const kind = getTxnKind(t);
       if (kind === "exam") tExam += 1;
       else if (kind === "cls") tCls += 1;
@@ -219,17 +242,17 @@ export default function History() {
 
     return {
       scope,
-      vCount: filteredVisits.length,
+      vCount: visitRows.length,
       vClinic,
       vService,
-      tCount: filteredTxns.length,
+      tCount: txnRows.length,
       tSum,
       tExam,
       tCls,
       tDrug,
       tOther,
     };
-  }, [filteredVisits, filteredTxns, scope]);
+  }, [visitRows, txnRows, scope]);
 
   const resetFilters = () => {
     setFrom("");
@@ -276,14 +299,42 @@ export default function History() {
             exit={{ opacity: 0, y: -6 }}
             className="card p-4 pt-2 mt-0 flex-1 min-h-0 flex flex-col"
           >
-            <HistoryTable
-              tab={tab}
-              rows={rows}
-              onEye={(row, type) =>
-                setDetail({ open: true, type, row })
-              }
-              stretch
-            />
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <HistoryTable
+                  tab={tab}
+                  rows={rows}
+                  onEye={(row, type) =>
+                    setDetail({ open: true, type, row })
+                  }
+                  stretch
+                />
+              </div>
+              {tab === "visits" && visitTotalPages > 1 && (
+                <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
+                  <Pagination
+                    currentPage={visitPage}
+                    totalPages={visitTotalPages}
+                    totalItems={visitTotalItems}
+                    pageSize={50}
+                    onPageChange={setVisitPage}
+                    className="px-4 py-3"
+                  />
+                </div>
+              )}
+              {tab === "transactions" && txnTotalPages > 1 && (
+                <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
+                  <Pagination
+                    currentPage={txnPage}
+                    totalPages={txnTotalPages}
+                    totalItems={txnTotalItems}
+                    pageSize={50}
+                    onPageChange={setTxnPage}
+                    className="px-4 py-3"
+                  />
+                </div>
+              )}
+            </div>
           </motion.section>
         </AnimatePresence>
       </div>

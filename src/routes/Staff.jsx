@@ -104,7 +104,8 @@ export default function Staff() {
       dept: apiDept,
     });
   
-    const items = data?.items ?? [];
+    // ✅ Fix: useStaff returns { Items, TotalItems, Page, PageSize }
+    const items = data?.Items ?? data?.items ?? [];
   
     // ====== STATS (online / pause / offline / depts) ======
     const { data: statsRes } = useStaffStats({
