@@ -11,6 +11,7 @@ export default function PatientsToolbar({
   onChangeViewMode,
   sort = "priority",
   onChangeSort,
+  flashAddAt = 0, // ✅ timestamp for flash animation
 }) {
   const {
     done = 0,
@@ -63,14 +64,18 @@ export default function PatientsToolbar({
           Lọc
         </button>
 
-        <button
-          id="patients-add-btn"
-          onClick={onAdd}
-          type="button"
-          className="inline-flex items-center gap-2 rounded-xl border border-transparent px-3 py-1.5 text-sm font-semibold text-white shadow-soft hover:-translate-y-px transition bg-gradient-to-tr from-teal-600 to-emerald-500"
-        >
-          + Thêm
-        </button>
+        {onAdd && (
+          <button
+            id="patients-add-btn"
+            onClick={onAdd}
+            type="button"
+            className={`inline-flex items-center gap-2 rounded-xl border border-transparent px-3 py-1.5 text-sm font-semibold text-white shadow-soft hover:-translate-y-px transition bg-gradient-to-tr from-teal-600 to-emerald-500 ${
+              flashAddAt > 0 ? 'flash-once' : ''
+            }`}
+          >
+            + Thêm
+          </button>
+        )}
       </div>
     </div>
   );

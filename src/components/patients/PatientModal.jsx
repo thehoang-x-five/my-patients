@@ -32,7 +32,7 @@ import { getStoredAccessToken } from "../../api/http.js";
 // History (lượt khám)
 import { useCreateHistoryVisit } from "../../api/history";
 import { getClinicalExam, getFinalDiagnosis, useCompleteExam } from "../../api/examination";
-import { useExamStore, useUIStore } from "../stores/appStore.js";
+import { useExamStore, useUIStore, useAuthStore } from "../stores/appStore.js";
 import { useNavigate } from "react-router-dom";
 
 // Hàng đợi (enqueue khám LS, CLS, quay lại khám)
@@ -49,6 +49,9 @@ import PrintExamTicket from "../print/PrintExamTicket.jsx";
 
 // Follow-up context utilities
 import { saveFollowupContext } from "../../utils/followupContext.js";
+
+// Permission helpers
+import { canManageReception } from "../../utils/permissions.js";
 
 // (giả sử các helper addVisit, addTransaction, listAppointmentHolds, getLastVisit,
 //  createFollowupHold, markAppointmentDoneForPid, markServiceDispatched,
@@ -67,6 +70,9 @@ export default function PatientModal({
   const firstRef = useRef(null);
   const scrollTopRef = useRef(null);
 
+  // ✅ Check permissions
+  const user = useAuthStore((s) => s.user);
+  const hasReceptionPermission = canManageReception(user);
 
   
  
@@ -2345,6 +2351,10 @@ const transactions = useMemo(() => {
       // Lưu vào localStorage
       localStorage.setItem("appt-prefill", JSON.stringify(apptPrefillData));
       
+      // ✅ Flash nút "Tạo lịch hẹn" ở trang Appointments
+      const uiStore = useUIStore.getState();
+      uiStore.flashApptCreate();
+      
       // Navigate to appointments page
       navigate("/appointments");
     } catch (err) {
@@ -2411,7 +2421,7 @@ const transactions = useMemo(() => {
                     visits={visits}
                     transactions={transactions}
                     patientExtras={patientExtras}
-                    handleCreateAppointmentFromView={handleCreateAppointmentFromView}
+                    handleCreateAppointmentFromView={hasReceptionPermission ? handleCreateAppointmentFromView : undefined}
                   />
                 )}
 

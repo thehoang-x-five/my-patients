@@ -5,17 +5,18 @@ import Button from "../ui/Button.jsx";
 
 export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
   const wrapperCls = stretch
-    ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none"
-    : "overflow-x-auto overflow-y-auto scrollbar-none";
+    ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none p-4 pt-0 pb-0 mt-2"
+    : "overflow-x-auto overflow-y-auto scrollbar-none p-4";
 
   const Thead = ({ children }) => (
     <thead
       className="
-        sticky top-0 z-9
-        bg-slate-100/75 backdrop-blur
+        sticky top-0 z-10
+        bg-slate-100 backdrop-blur
         text-left text-[13px] font-semibold text-slate-600
         shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)]
       "
+      
     >
       {children}
     </thead>
@@ -168,7 +169,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
   return (
     <div className={wrapperCls}>
       {tab === "visits" ? (
-        <table className="min-w-full">
+        <table className="min-w-full ">
           <Thead>
             <tr>
               <Th first>Ngày</Th>

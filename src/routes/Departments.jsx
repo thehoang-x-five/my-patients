@@ -421,7 +421,7 @@ export default function Departments() {
             Đang tải dữ liệu phòng khoa.
           </section>
         ) : (
-          <div className="mt-2.5 flex-1 min-h-0 flex flex-col">
+          <div className="card mt-2.5 p-1 pt-0 flex-1 min-h-0 flex flex-col">
             <div className="flex-1 min-h-0 overflow-auto scrollbar-none">
               <DeptGrid
                 items={filtered}
@@ -431,7 +431,7 @@ export default function Departments() {
               />
             </div>
             {totalPages > 1 && (
-              <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
+              <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
                 <Pagination
                   currentPage={page}
                   totalPages={totalPages}

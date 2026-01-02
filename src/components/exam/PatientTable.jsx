@@ -241,7 +241,7 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
       role="region"
       aria-label="Danh sách chờ khám"
     >
-      <div className={`${stretch ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"} p-4 pt-0`}>
+      <div className={`${stretch ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"} p-4 pb-0 pt-0`}>
         <table className="min-w-full table-fixed">
           <colgroup>
             <col style={{ width: "2%" }} />

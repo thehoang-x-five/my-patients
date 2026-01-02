@@ -21,12 +21,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { APPT_STATUS, searchAppointmentsRaw } from "../api/appointments";
 import { searchClinicalRaw, getFinalDiagnosis } from "../api/examination";
 
-import { useUIStore, useExamStore } from "../components/stores/appStore.js";
+import { useUIStore, useExamStore, useAuthStore } from "../components/stores/appStore.js";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
 import { apiLogger } from "../utils/apiLogger.js";
+import { canManageReception } from "../utils/permissions.js";
 
 // Lấy chuỗi yyyy-MM-dd của hôm nay
 const todayStr = () => {
@@ -117,6 +118,10 @@ export default function Patients() {
   const nav = useNavigate();
   const { search } = useLocation();
   const sp = new URLSearchParams(search);
+
+  // ✅ Check permissions
+  const user = useAuthStore((s) => s.user);
+  const hasReceptionPermission = canManageReception(user);
 
   // === Bộ lọc
   const [filter, setFilter] = useState({
@@ -239,6 +244,20 @@ export default function Patients() {
   // ✅ Refs to prevent duplicate useEffect execution for check-in flow
   const hasProcessedHighlightRef = React.useRef(false);
   const hasProcessedFlashAddRef = React.useRef(false);
+  
+  // ✅ Clear stale prefill khi mount nếu flash đã quá cũ (> 5 phút)
+  useEffect(() => {
+    const now = Date.now();
+    const flashAge = flashAddAt ? now - flashAddAt : Infinity;
+    
+    // Chỉ clear nếu flash đã cũ hơn 5 phút (300000ms)
+    // Điều này cho phép user chuyển trang rồi quay lại vẫn còn highlight
+    if (patientPrefill && flashAddAt && flashAge > 300000) {
+      console.log("[Patients] Clearing stale prefill on mount (flashAge:", flashAge, "ms, > 5 min)");
+      clearPatientPrefill();
+      ackFlashAdd();
+    }
+  }, []); // Chỉ chạy 1 lần khi mount
 
   // === Auto clear highlight sau 5s
   useEffect(() => {
@@ -317,39 +336,29 @@ export default function Patients() {
       return;
     }
     
-    if (!flashAddAt) return;
-
-    // Hiệu ứng flash nút + Thêm
-    const btn = document.getElementById("patients-add-btn");
-    if (btn) {
-      try {
-        btn.focus();
-      } catch {}
-      btn.classList.add("flash-once");
-      
-      // ✅ Show toast only if not already notified
-      if (!flashAddNotified) {
-        toast.info("Vui lòng thêm bệnh nhân mới từ lịch hẹn đã check-in.");
-        markFlashAddNotified();
-      }
-      
-      const t = setTimeout(() => {
-        btn.classList.remove("flash-once");
-        ackFlashAdd();
-      }, 5000);
-      
-      // Mark as processed
-      hasProcessedFlashAddRef.current = true;
-      
-      return () => {
-        clearTimeout(t);
-        try {
-          btn.classList.remove("flash-once");
-        } catch {}
-      };
-    } else {
-      ackFlashAdd();
+    if (!flashAddAt) {
+      // ✅ Reset ref when flashAddAt is cleared
+      hasProcessedFlashAddRef.current = false;
+      return;
     }
+
+    // ✅ Show toast only if not already notified
+    if (!flashAddNotified) {
+      toast.info("Vui lòng thêm bệnh nhân mới từ lịch hẹn đã check-in.");
+      markFlashAddNotified();
+    }
+    
+    // ✅ Auto-clear flash after 5 seconds
+    const t = setTimeout(() => {
+      ackFlashAdd();
+    }, 5000);
+    
+    // Mark as processed
+    hasProcessedFlashAddRef.current = true;
+    
+    return () => {
+      clearTimeout(t);
+    };
   }, [flashAddAt, ackFlashAdd, flashAddNotified, markFlashAddNotified]);
 
   // === Khi có flashAddAt -> call API searchAppointmentsRaw với LoaiHen "kham_moi" + TrangThai "da_checkin"
@@ -413,16 +422,21 @@ export default function Patients() {
   // Reset is now handled inside the main useEffect when flashAddAt is cleared
   
 
-  // Clear prefill khi rời trang
+  // ✅ KHÔNG clear prefill khi unmount - cho phép user chuyển trang rồi quay lại
+  // Chỉ clear khi reload trang (beforeunload)
   useEffect(() => {
-    const onBeforeUnload = () => clearPatientPrefill();
-    window.addEventListener("pagehide", onBeforeUnload);
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => {
-      window.removeEventListener("pagehide", onBeforeUnload);
-      window.removeEventListener("beforeunload", onBeforeUnload);
+    const onBeforeUnload = () => {
+      // Clear khi reload/đóng tab
+      clearPatientPrefill();
+      ackFlashAdd();
     };
-  }, [clearPatientPrefill]);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      // ❌ KHÔNG clear khi unmount (chuyển trang) - giữ prefill để quay lại
+    };
+  }, [clearPatientPrefill, ackFlashAdd]);
 
   // ✅ Với phân trang, filter và sort đã được làm ở BE
   // Không cần filter/sort ở FE nữa
@@ -629,7 +643,7 @@ export default function Patients() {
           counts={counts}
           viewMode={viewMode}
           onChangeViewMode={setViewMode}
-          onAdd={() => {
+          onAdd={hasReceptionPermission ? () => {
             // Nếu có patientPrefill (từ flashAddAt) -> fill sẵn tên + sdt
             // Nếu không có patientPrefill -> mở bình thường không fill
             const hasPrefill = !!patientPrefill;
@@ -663,7 +677,13 @@ export default function Patients() {
                 latestAppointment: latest || null,
               },
             });
-          }}
+            
+            // ✅ Clear prefill và flash ngay sau khi mở modal
+            if (hasPrefill) {
+              clearPatientPrefill();
+              ackFlashAdd();
+            }
+          } : undefined}
           onOpenFilter={() => {
             setFilterAnchor(filterBtnRef.current);
             setFilterOpen(true);
@@ -680,6 +700,7 @@ export default function Patients() {
           sort={sort}
           onChangeSort={setSort}
           filterBtnRef={filterBtnRef}
+          flashAddAt={flashAddAt}
         />
 
         <div className="card mt-0 flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -689,6 +710,8 @@ export default function Patients() {
               onAction={handleAction}
               stretch
               highlightPid={highlightPid}
+              hasReceptionPermission={hasReceptionPermission}
+              canCreateExam={hasReceptionPermission}
             />
           </div>
           {totalPages > 1 && (

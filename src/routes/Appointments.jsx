@@ -20,11 +20,12 @@ import {
   useAppointmentsRange,
   subscribeAppointments,
 } from "../api/appointments.js";
-import { useUIStore } from "../components/stores/appStore";
+import { useUIStore, useAuthStore } from "../components/stores/appStore";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
 import { getFollowupContext, clearFollowupContext } from "../utils/followupContext.js";
+import { canManageReception } from "../utils/permissions.js";
 
 const RECEPTION_HOURS = { start: 0, end: 24 };
 const isWithinReceptionHours = () => {
@@ -48,6 +49,10 @@ export default function Appointments() {
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
   const navigate = useNavigate();
+
+  // ✅ Check permissions
+  const user = useAuthStore((s) => s.user);
+  const hasReceptionPermission = canManageReception(user);
 
   const TODAY = toYMD(new Date());
   const [view, setView] = useState("list");
@@ -545,7 +550,7 @@ export default function Appointments() {
             setView(v);
             clearIfAnyPrefill();
           }} // ✅ đổi view cũng hủy prefill
-          onOpenCreate={() => {
+          onOpenCreate={hasReceptionPermission ? () => {
             if (!isWithinReceptionHours()) {
               toast.warn(
                 `Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`
@@ -575,7 +580,7 @@ export default function Appointments() {
                 console.error("[Appointments] Failed to save prefill:", err);
               }
             }
-          }}
+          } : undefined}
           counts={counts}
           withinReception={isWithinReceptionHours()}
           timeLabel={formatTime(currentTime)}
@@ -590,11 +595,11 @@ export default function Appointments() {
               loading={isLoading}
               error={null}
               onDetail={openDetail}
-              onCheckIn={handleCheckIn}
-              onCreate={() => {
+              onCheckIn={hasReceptionPermission ? handleCheckIn : undefined}
+              onCreate={hasReceptionPermission ? () => {
                 setCreateDate(TODAY);
                 setDrawerOpen(true);
-              }}
+              } : undefined}
             />
           ) : (
             <div className="h-full min-h-0 p-0.5 overflow-auto scrollbar-none">
@@ -640,7 +645,7 @@ export default function Appointments() {
           openDetail(a);
         }} // ✅ mở chi tiết → clear
         onCreate={
-          panelDate
+          hasReceptionPermission && panelDate
             ? () => {
                 if (!isWithinReceptionHours()) {
                   toast.warn(
@@ -653,7 +658,7 @@ export default function Appointments() {
               }
             : undefined
         }
-        onCheckIn={handleCheckIn}
+        onCheckIn={hasReceptionPermission ? handleCheckIn : undefined}
         highlightId={newId}
       />
 
@@ -681,7 +686,7 @@ export default function Appointments() {
           clearIfAnyPrefill();
           closeDetail();
         }}
-        onUpdate={async (patch) => {
+        onUpdate={hasReceptionPermission ? async (patch) => {
           if (!patch?.id) return;
          
           // Lấy bản hiện tại
@@ -731,8 +736,8 @@ export default function Appointments() {
             cur && cur.id === patch.id ? { ...cur, ...patch } : cur
           );
           toast.success("Đã cập nhật lịch hẹn.");
-        }}
-        onCheckIn={handleCheckIn}
+        } : undefined}
+        onCheckIn={hasReceptionPermission ? handleCheckIn : undefined}
       />
     </motion.main>
   );

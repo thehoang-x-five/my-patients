@@ -221,6 +221,8 @@ export default function PatientsTable({
   onAction,
   stretch = false,
   highlightPid = null,
+  hasReceptionPermission = true, // ✅ Default true for backward compatibility
+  canCreateExam = true, // ✅ Quyền lập phiếu khám (chỉ Y tá HC)
 }) {
   // Prefetch danh sách dịch vụ khám lâm sàng để PatientExamMode dùng ngay
   useServicesOverview({ loaiDichVu: "kham_lam_sang" }, { enabled: true });
@@ -314,7 +316,7 @@ export default function PatientsTable({
 
   return (
     <section
-      className={`pt-2 bg-white rounded-2xl overflow-hidden shadow-soft ${
+      className={`pt-2 bg-white overflow-hidden shadow-soft ${
         stretch ? "h-full flex flex-col min-h-0" : "mt-3"
       }`}
       role="region"
@@ -365,9 +367,14 @@ export default function PatientsTable({
                 const today = new Date().toISOString().slice(0, 10);
                 const isToday =
                   statusDate && String(statusDate).slice(0, 10) === today;
-                const accountActive = /hoat_dong|hoạt động|active|1/.test(
-                  String(account).toLowerCase()
-                );
+                // ✅ FIX: Regex phải match chính xác "hoat_dong" hoặc "hoạt động", không match "khong_hoat_dong"
+                const accountLower = String(account).toLowerCase();
+                const accountActive = 
+                  accountLower === "hoat_dong" || 
+                  accountLower === "hoạt động" || 
+                  accountLower === "active" || 
+                  accountLower === "1" ||
+                  /^hoat_dong$|^hoạt động$|^active$/.test(accountLower);
                 // Hiển thị status nếu có statusCode (không cần kiểm tra ngày)
                 const hasTodayStatus = !!statusCode;
 
@@ -510,17 +517,19 @@ export default function PatientsTable({
                         >
                           👁️
                         </Button>
-                        <Button
-                          className="!px-2"
-                          onClick={() => onAction?.("edit", p)}
-                        >
-                          ✎
-                        </Button>
+                        {hasReceptionPermission && (
+                          <Button
+                            className="!px-2"
+                            onClick={() => onAction?.("edit", p)}
+                          >
+                            ✎
+                          </Button>
+                        )}
 
                         {accountActive &&
                           (showExamBtn || showProcessBtn) && <span className="grow" />}
 
-                        {accountActive && showExamBtn && (
+                        {accountActive && showExamBtn && canCreateExam && (
                           <button
                             onClick={() => handleIntakeSmart(p)}
                             className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-gradient-to-tr from-teal-100 to-emerald-200 px-3 py-1.5 text-sm font-semibold text-emerald-900 shadow hover:shadow-md hover:-translate-y-0.5 transition"
@@ -529,7 +538,7 @@ export default function PatientsTable({
                           </button>
                         )}
 
-                        {accountActive && showProcessBtn && (
+                        {accountActive && showProcessBtn && hasReceptionPermission && (
                           <button
                             onClick={() => onAction?.("process", p)}
                             className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-gradient-to-tr from-rose-100 to-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-900 shadow hover:shadow-md hover:-translate-y-0.5 transition"

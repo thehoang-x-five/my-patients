@@ -84,18 +84,20 @@ export default function ApptToolbar({
       </div>
 
       {/* CTA tạo lịch - ✅ Flash animation when flashApptCreateAt > 0 */}
-      <motion.button
-        type="button"
-        id="appt-create-btn"
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={onOpenCreate}
-        className={`px-3 py-1.5 rounded-xl font-semibold shadow-md hover:shadow-lg transition bg-gradient-to-r from-violet-500 to-purple-500 text-white ${
-          flashApptCreateAt > 0 ? 'flash-once' : ''
-        }`}
-      >
-        + Tạo lịch hẹn
-      </motion.button>
+      {onOpenCreate && (
+        <motion.button
+          type="button"
+          id="appt-create-btn"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={onOpenCreate}
+          className={`px-3 py-1.5 rounded-xl font-semibold shadow-md hover:shadow-lg transition bg-gradient-to-r from-violet-500 to-purple-500 text-white ${
+            flashApptCreateAt > 0 ? 'flash-once' : ''
+          }`}
+        >
+          + Tạo lịch hẹn
+        </motion.button>
+      )}
     </div>
   );
 }

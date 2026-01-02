@@ -24,6 +24,8 @@ import {
 } from "../api/examination.js";
 import { useCreateHistoryVisit } from "../api/history.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuthStore } from "../components/stores/appStore.js";
+import { canCallPatient } from "../utils/permissions.js";
 
 const CLS_CREATED_KEY = "cls-orders-created";
 
@@ -57,13 +59,47 @@ export default function Examination() {
 
   const qc = useQueryClient();
 
+  // ✅ Check permissions
+  const user = useAuthStore((s) => s.user);
+  const canCall = canCallPatient(user);
+
+  // ✅ Auto-detect queue type based on user role
+  const userRole = user?.ChucVu || user?.chucVu || user?.role || null;
+  const nurseType = user?.LoaiYTa || user?.loaiYTa || user?.nurseType || null;
+
+  // Determine default queue kind based on user
+  const defaultKind = useMemo(() => {
+    // Bác sĩ → chỉ LS
+    if (userRole === 'bac_si') return 'clinical';
+    
+    // Kỹ thuật viên → chỉ CLS
+    if (userRole === 'ky_thuat_vien') return 'cls';
+    
+    // Y tá → phụ thuộc vào loại
+    if (userRole === 'y_ta') {
+      if (nurseType === 'phong_kham') return 'clinical'; // Y tá LS
+      if (nurseType === 'can_lam_sang') return 'cls'; // Y tá CLS
+      if (nurseType === 'hanhchinh') return 'all'; // Y tá HC xem cả 2
+    }
+    
+    // Admin → xem tất cả
+    if (userRole === 'admin') return 'all';
+    
+    return 'all';
+  }, [userRole, nurseType]);
+
   // Filter theo nguồn (walkin / appointment / service_return) + loại lượt (ls / cls) + search
   const [filter, setFilter] = useState({
     source: "all",
-    kind: "all",
+    kind: defaultKind, // ✅ Auto-set based on user
     search: "",
     status: "all",
   });
+
+  // ✅ Update filter.kind when user changes
+  useEffect(() => {
+    setFilter(prev => ({ ...prev, kind: defaultKind }));
+  }, [defaultKind]);
   const [filterOpen, setFilterOpen] = useState(false);
 
   // ✅ Pagination
@@ -702,7 +738,7 @@ export default function Examination() {
               >
                 <PatientTable
                   items={filtered}
-                  onStart={handleStart}
+                  onStart={canCall ? handleStart : undefined}
                   inProgress={inProgress}
                   stretch
                 />

@@ -114,7 +114,7 @@ export default function OrdersTable({
       className="pt-2 bg-white rounded-2xl overflow-hidden shadow-soft h-full flex flex-col min-h-0"
       aria-label="Danh sách đơn thuốc"
     >
-      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none px-4 pb-2 pt-0">
+      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none px-4 pb-0 pt-0">
         <table className="min-w-full table-fixed">
           <colgroup>
             <col style={{ width: "15%" }} /> 

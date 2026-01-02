@@ -297,25 +297,22 @@ export default function History() {
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
-            className="card p-4 pt-2 mt-0 flex-1 min-h-0 flex flex-col"
+            className="card mt-0 flex-1 min-h-0 flex flex-col overflow-hidden"
           >
-            <div className="flex-1 min-h-0 flex flex-col">
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <HistoryTable
-                  tab={tab}
-                  rows={rows}
-                  onEye={(row, type) =>
-                    setDetail({ open: true, type, row })
-                  }
-                  stretch
-                />
-              </div>
-              {tab === "visits" && visitTotalPages > 1 && (
-                <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
-                  <Pagination
-                    currentPage={visitPage}
-                    totalPages={visitTotalPages}
-                    totalItems={visitTotalItems}
+            <HistoryTable
+              tab={tab}
+              rows={rows}
+              onEye={(row, type) =>
+                setDetail({ open: true, type, row })
+              }
+              stretch
+            />
+            {tab === "visits" && visitTotalPages > 1 && (
+              <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
+                <Pagination
+                  currentPage={visitPage}
+                  totalPages={visitTotalPages}
+                  totalItems={visitTotalItems}
                     pageSize={50}
                     onPageChange={setVisitPage}
                     className="px-4 py-3"
@@ -334,7 +331,6 @@ export default function History() {
                   />
                 </div>
               )}
-            </div>
           </motion.section>
         </AnimatePresence>
       </div>

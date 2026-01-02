@@ -396,31 +396,30 @@ const stockNearOutCount = filteredStock.filter((r) => {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
-                    className="card flex-1 min-h-0 overflow-auto"
+                    className="card flex-1 min-h-0 flex flex-col overflow-hidden"
                   >
-                    <div className="flex-1 min-h-0 flex flex-col">
-                      <div className="flex-1 min-h-0 overflow-hidden">
-                        <OrdersTable
-                          items={filteredOrders}
-                          loading={loadingOrders}
-                          onView={(order) =>
-                            setView({ open: true, order })
-                          }
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      <OrdersTable
+                        items={filteredOrders}
+                        loading={loadingOrders}
+                        onView={(order) =>
+                          setView({ open: true, order })
+                        }
+                        stretch
+                      />
+                    </div>
+                    {ordersTotalPages > 1 && (
+                      <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
+                        <Pagination
+                          currentPage={orderPage}
+                          totalPages={ordersTotalPages}
+                          totalItems={ordersTotalItems}
+                          pageSize={50}
+                          onPageChange={setOrderPage}
+                          className="px-4 py-3"
                         />
                       </div>
-                      {ordersTotalPages > 1 && (
-                        <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
-                          <Pagination
-                            currentPage={orderPage}
-                            totalPages={ordersTotalPages}
-                            totalItems={ordersTotalItems}
-                            pageSize={50}
-                            onPageChange={setOrderPage}
-                            className="px-4 py-3"
-                          />
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </motion.section>
                 ) : (
                   <motion.section
@@ -428,9 +427,9 @@ const stockNearOutCount = filteredStock.filter((r) => {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
-                    className="card flex-1 min-h-0 overflow-auto"
+                    className="card h-full flex-1 min-h-0 flex flex-col overflow-hidden"
                   >
-                    <div className="flex-1 min-h-0 flex flex-col">
+                    <div className="flex-1 min-h-0 overflow-hidden">
                       <StockTable
                         items={filteredStock}
                         loading={loadingStock}
@@ -440,19 +439,19 @@ const stockNearOutCount = filteredStock.filter((r) => {
                         nearExpiryDays={NEAR_EXPIRY_DAYS}
                         stretch
                       />
-                      {stockTotalPages > 1 && (
-                        <div className="border-t border-slate-200 bg-white rounded-b-lg">
-                          <Pagination
-                            currentPage={stockPage}
-                            totalPages={stockTotalPages}
-                            totalItems={stockTotalItems}
-                            pageSize={50}
-                            onPageChange={setStockPage}
-                            className="px-4 py-3"
-                          />
-                        </div>
-                      )}
                     </div>
+                    {stockTotalPages > 1 && (
+                      <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
+                        <Pagination
+                          currentPage={stockPage}
+                          totalPages={stockTotalPages}
+                          totalItems={stockTotalItems}
+                          pageSize={50}
+                          onPageChange={setStockPage}
+                          className="px-4 py-3"
+                        />
+                      </div>
+                    )}
                     <StockModal
                       open={edit.open}
                       item={edit.item}

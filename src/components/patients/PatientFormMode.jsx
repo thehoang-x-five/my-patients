@@ -130,8 +130,8 @@ export default function PatientFormMode({
           <select
             value={mode === "add" ? (form.status || STATUSES.WAIT_INTAKE) : (form.status || "")}
             onChange={(e) => change("status", e.target.value)}
-            disabled={mode === "add"}
-            className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
+            disabled={true} // ✅ Luôn disable - không cho phép chỉnh sửa trạng thái hôm nay
+            className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
           >
             {mode === "add" ? (
               <>
@@ -141,12 +141,22 @@ export default function PatientFormMode({
               </>
             ) : (
               <>
-                <option value="">—</option>
-                {Object.entries(TODAY_STATUS_MAP).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
+                {/* ✅ Hiển thị trạng thái hiện tại của bệnh nhân */}
+                {form.status && form.status !== "" ? (
+                  <option value={form.status}>
+                    {TODAY_STATUS_MAP[form.status] || form.status}
                   </option>
-                ))}
+                ) : (
+                  <option value="">—</option>
+                )}
+                {/* ✅ Hiển thị tất cả các trạng thái khác (disabled, chỉ để xem) */}
+                {Object.entries(TODAY_STATUS_MAP)
+                  .filter(([k]) => k !== form.status) // Loại bỏ trạng thái hiện tại để không bị duplicate
+                  .map(([k, v]) => (
+                    <option key={k} value={k} disabled>
+                      {v}
+                    </option>
+                  ))}
               </>
             )}
           </select>

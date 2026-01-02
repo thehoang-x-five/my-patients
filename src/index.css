@@ -179,5 +179,4 @@ html {
   animation: flash 1s ease-in-out 5;
   outline: none;
   position: relative; 
-  z-index: 9999;
 }
