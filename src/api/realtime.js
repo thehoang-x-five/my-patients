@@ -134,10 +134,12 @@ export async function invoke(method, ...args) {
 // Nhân sự join realtime chuẩn:
 //   - Role: "bac_si" hoặc "y_ta" (tùy loại nhân sự)
 //   - User: "nhan_vien_y_te:{maNhanVien}"  (nếu cần) "bac_si:{maNhanVien}"
+//   - NurseType: "hanhchinh" | "phong_kham" | "can_lam_sang" (chỉ y tá)
 export async function initStaffRealtime({
     staffId,
     rooms = [],
     staffRole, // "bac_si" | "y_ta" | undefined (fallback: join cả hai)
+    nurseType, // "hanhchinh" | "phong_kham" | "can_lam_sang" (chỉ y tá)
   } = {}) {
   const conn = await ensureStarted();
   try {
@@ -149,6 +151,14 @@ export async function initStaffRealtime({
       await conn.invoke("JoinRoleAsync", "bac_si");
     } else if (staffRole === "y_ta") {
       await conn.invoke("JoinRoleAsync", "y_ta");
+      
+      // ===== JOIN NURSE TYPE GROUP (CHỈ Y TÁ) =====
+      // Y tá hành chính: nhận invoices, prescriptions, appointments
+      // Y tá LS: nhận clinical exams trong phòng
+      // Y tá CLS: nhận CLS orders trong phòng
+      if (nurseType) {
+        await conn.invoke("JoinNurseTypeAsync", nurseType);
+      }
     } else {
       // Nếu FE chưa phân loại được nhân sự, join cả hai để đảm bảo nhận đủ realtime
       await conn.invoke("JoinRoleAsync", "bac_si");

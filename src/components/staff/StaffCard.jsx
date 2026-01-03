@@ -163,12 +163,12 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
       {/* Badges góc phải */}
       <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5 z-10">
         <span
-          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 transition uppercase tracking-wide ${statusView.className}`}
+          className={`px-2 py-0.5 rounded-full text-[11px] font-bold ring-1 transition uppercase tracking-wide ${statusView.className}`}
         >
           {statusView.label}
         </span>
         <span
-          className="px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 bg-teal-50 text-teal-600 ring-teal-200/50 whitespace-nowrap"
+          className="px-2 py-0.5 rounded-full text-[11px] font-bold ring-1 bg-teal-50 text-teal-600 ring-teal-200/50 whitespace-nowrap"
           title={todayChipLabel}
         >
           📍 {roomToday}
@@ -179,16 +179,16 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
         <Avatar src={avatar[randomInRange(1, 6)]} item={item} size={40} />
         <div className="flex-1 min-w-0 pr-24">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-slate-900 truncate">
+            <h3 className="text-[15px] font-semibold text-slate-900 truncate">
               {item.name}
             </h3>
             {item.degree && (
-              <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-slate-200">
+              <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[13px] text-slate-600 ring-1 ring-slate-200">
                 {item.degree}
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-slate-600 flex items-center gap-1">
+          <p className="mt-0.5 text-[13px] text-slate-600 flex items-center gap-1">
             <span>{item.dept || "Chưa gán khoa"}</span>
             {item.specialties?.length ? (
               <>
@@ -202,7 +202,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
         </div>
       </header>
 
-      <ul className="mt-3 text-xs text-slate-600 space-y-0.5">
+      <ul className="mt-3 text-[13px] text-slate-600 space-y-0.5">
         {item.skills?.length ? (
           <li className="flex gap-1">
             <span className="mt-0.5">✨</span>
@@ -257,7 +257,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
 
       <footer className="mt-3 flex items-center justify-between">
         <Button
-          className="bg-gradient-to-tr from-teal-100 via-cyan-100 to-teal-50 text-teal-800 hover:from-teal-200 hover:via-cyan-200 hover:to-teal-100 transition !py-1 !px-3 shadow-sm ring-1 ring-teal-200/50"
+          className="bg-gradient-to-tr from-teal-100 via-cyan-100 to-teal-50 text-teal-800 hover:from-teal-200 hover:via-cyan-200 hover:to-teal-100 transition !py-1 !px-3 shadow-sm ring-1 ring-teal-200/50 text-[13px]"
           onClick={() => onDetail?.(item)}
         >
           Chi tiết
@@ -266,7 +266,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
         <div className="flex items-center gap-1.5">
           {item.phone && (
             <a
-              className="inline-flex items-center justify-center rounded-full ring-1 ring-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 transition px-2 py-1 text-xs font-medium"
+              className="inline-flex items-center justify-center rounded-full ring-1 ring-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 transition px-2 py-1 text-[13px] font-medium"
               href={
                 item.phone
                   ? `tel:${encodeURIComponent(
@@ -280,7 +280,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
           )}
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-full ring-1 ring-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 transition px-2 py-1 text-xs font-medium"
+            className="inline-flex items-center justify-center rounded-full ring-1 ring-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 transition px-2 py-1 text-[13px] font-medium"
             onClick={() => onSchedule?.(item)}
           >
             Lịch trực

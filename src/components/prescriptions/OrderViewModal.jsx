@@ -2,6 +2,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import React from "react";
+import { formatVietnameseText } from "../../utils/textFormatters.js";
 
 // --- Các biến thể (variants) cho hiệu ứng animation ---
 
@@ -59,6 +60,7 @@ const XIcon = (props) => (
 export default function OrderViewModal({ open, order, onClose }) {
   const statusText =
     order?.statusLabel || order?.status || "";
+  const statusDisplay = formatVietnameseText(statusText);
   const total =
     order?.total != null
       ? Number(order.total) || 0
@@ -107,7 +109,7 @@ export default function OrderViewModal({ open, order, onClose }) {
                   {statusText && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 px-2 py-0.5 font-semibold">
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                      {statusText}
+                      {statusDisplay}
                     </span>
                   )}
                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 text-slate-700 ring-1 ring-slate-200 px-2 py-0.5">

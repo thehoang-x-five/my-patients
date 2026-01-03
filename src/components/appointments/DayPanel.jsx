@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments.js";
+import { formatVietnameseText } from "../../utils/textFormatters.js";
 
 function getApptChipColor(status) {
   switch (status) {
@@ -182,7 +183,7 @@ function DayPanel({
                       )}
 
                       <Chip tone="slate" className="text-xs mb-2">
-                        {apptType}
+                        {formatVietnameseText(apptType)}
                       </Chip>
 
                       {a.note && (

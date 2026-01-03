@@ -18,6 +18,7 @@ import {
   getQueueById,
   rememberQueueAwaitingReturn,
 } from "../api/queue.js";
+import { on } from "../api/realtime.js";
 
 import {
   useCreateExamOrder,
@@ -222,6 +223,40 @@ export default function Examination() {
     })();
     return () => {
       if (off) off();
+    };
+  }, [qc]);
+
+  // ✅ Subscribe realtime events for Clinical Exams and Queue
+  useEffect(() => {
+    // Subscribe Clinical Exam events
+    const offClinicalCreated = on('ClinicalExamCreated', (exam) => {
+      console.log('[Examination] Phiếu khám mới:', exam);
+      qc.invalidateQueries({ queryKey: ['queue'] });
+      qc.invalidateQueries({ queryKey: ['examinations'] });
+    });
+    
+    const offClinicalUpdated = on('ClinicalExamUpdated', (exam) => {
+      console.log('[Examination] Phiếu khám cập nhật:', exam);
+      qc.invalidateQueries({ queryKey: ['queue'] });
+      qc.invalidateQueries({ queryKey: ['examinations'] });
+    });
+    
+    // Subscribe Queue events
+    const offQueueChanged = on('QueueItemChanged', (item) => {
+      console.log('[Examination] Hàng đợi thay đổi:', item);
+      qc.invalidateQueries({ queryKey: ['queue'] });
+    });
+    
+    const offQueueByRoom = on('QueueByRoomUpdated', (items) => {
+      console.log('[Examination] Hàng đợi phòng cập nhật:', items);
+      qc.invalidateQueries({ queryKey: ['queue'] });
+    });
+    
+    return () => {
+      offClinicalCreated?.();
+      offClinicalUpdated?.();
+      offQueueChanged?.();
+      offQueueByRoom?.();
     };
   }, [qc]);
 

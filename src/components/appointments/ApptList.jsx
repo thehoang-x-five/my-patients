@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments.js";
+import { formatVietnameseText } from "../../utils/textFormatters.js";
 
 function getApptChipColor(status) {
   switch (status) {
@@ -163,7 +164,7 @@ function ApptList({
                           }
                           className="text-[11px] px-2 py-0.5"
                         >
-                          {apptType}
+                          {formatVietnameseText(apptType)}
                         </Chip>
                         {a.phone && (
                           <div className="text-xs text-slate-600">

@@ -20,6 +20,7 @@ import {
   useAppointmentsRange,
   subscribeAppointments,
 } from "../api/appointments.js";
+import { on } from "../api/realtime.js";
 import { useUIStore, useAuthStore } from "../components/stores/appStore";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -173,6 +174,18 @@ export default function Appointments() {
 
     return () => {
       if (typeof off === "function") off();
+    };
+  }, [queryClient]);
+
+  // ✅ Subscribe realtime events for Appointments
+  useEffect(() => {
+    const offApptChanged = on('AppointmentChanged', (appt) => {
+      console.log('[Appointments] Lịch hẹn thay đổi:', appt);
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    });
+    
+    return () => {
+      offApptChanged?.();
     };
   }, [queryClient]);
 

@@ -283,10 +283,10 @@ export default function StaffSchedule({
         {/* HEADER (Sticky) */}
         <header className="sticky top-0 z-10 backdrop-blur bg-white/80 border-b border-slate-200 p-4 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-[15px] font-semibold text-slate-900">
               Lịch trực &amp; bàn trực
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-[13px] text-slate-500">
               Nhân sự:{" "}
               <span className="font-medium text-slate-800">
                 {item.name} – {item.position}
@@ -296,16 +296,16 @@ export default function StaffSchedule({
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
-              className="text-xs border-slate-300"
+              size="md"
+              className="text-[13px] border-slate-300 px-3 py-1.5"
               onClick={printSched}
             >
               In lịch
             </Button>
             <Button
               variant="ghost"
-              size="sm"
-              className="text-xs text-slate-500 hover:text-slate-800"
+              size="md"
+              className="text-[13px] text-slate-500 hover:text-slate-800 px-3 py-1.5"
               onClick={onClose}
             >
               Đóng
@@ -314,10 +314,10 @@ export default function StaffSchedule({
         </header>
 
         {/* BODY (Scrollable) */}
-        <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-3 text-sm">
+        <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-3 text-[14px]">
           <Card className ="border-0">
-            <div className="flex items-center justify-between text-xs text-slate-600 mb-3">
-              <span className="text-sm">
+            <div className="flex items-center justify-between text-[13px] text-slate-600 mb-3">
+              <span className="text-[14px]">
                 Hôm nay:{" "}
                 <b className="font-semibold text-teal-700">
                   {today}
@@ -334,24 +334,24 @@ export default function StaffSchedule({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-slate-500 hover:text-slate-800"
+                className="text-[13px] text-slate-500 hover:text-slate-800 px-2 py-1"
                 onClick={printSched}
               >
                 In
               </Button>
             </div>
 
-            <div className="max-h-80 overflow-y-auto scrollbar-none text-xs rounded-lg border border-slate-200">
+            <div className="max-h-80 overflow-y-auto scrollbar-none text-[13px] rounded-lg border border-slate-200">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 z-10 bg-slate-50">
                   <tr className="border-b border-slate-200">
-                    <th className="px-3 py-2 text-left font-semibold text-slate-700 w-16">
+                    <th className="px-3 py-2 text-left font-semibold text-slate-700 w-16 text-[13px]">
                       Thứ
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold text-slate-700">
+                    <th className="px-3 py-2 text-left font-semibold text-slate-700 text-[13px]">
                       Ca &amp; giờ
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold text-slate-700 w-32">
+                    <th className="px-3 py-2 text-left font-semibold text-slate-700 w-32 text-[13px]">
                       {thirdColumnHeader}
                     </th>
                   </tr>
@@ -393,7 +393,7 @@ export default function StaffSchedule({
                           {third === "—" ? (
                             <span className="text-slate-400">—</span>
                           ) : (
-                            <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 ring-teal-200">
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 ring-teal-200 text-[12px]">
                               {third}
                             </span>
                           )}
@@ -414,7 +414,7 @@ export default function StaffSchedule({
 // Card wrapper (giữ nguyên, nếu anh đang dùng Card riêng thì bỏ/đổi import cho đúng)
 function Card({ children ,className}) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>
+    <section className={`rounded-xl border border-slate-200 bg-white shadow-sm p-4 ${className}`}>
       {children}
     </section>
   );

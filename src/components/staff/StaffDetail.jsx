@@ -15,7 +15,7 @@ for (let i = 1; i <= 6; i++) {
 
 const NURSE_WORK_ROLE_LABEL = {
   lam_sang: "Y tá lâm sàng",
-  can_lam_sang: "Y tá cận lâm_sang",
+  can_lam_sang: "Y tá cận lâm sàng",
   hanh_chinh: "Y tá hành chính",
 };
 
@@ -164,8 +164,8 @@ const getNurseWorkRole = (item) => {
   function Tile({ label, value }) {
     return (
       <div className="rounded-lg ring-1 ring-slate-200 p-2 bg-white hover:bg-teal-50 transition">
-        <div className="text-[11px] text-slate-500">{label}</div>
-        <div className="text-sm font-semibold text-slate-900 truncate">
+        <div className="text-[12px] text-slate-500">{label}</div>
+        <div className="text-[14px] font-semibold text-slate-900 truncate">
           {value}
         </div>
       </div>
@@ -178,8 +178,8 @@ const getNurseWorkRole = (item) => {
         whileHover={{ scale: 1.03 }}
         className="rounded-xl p-3 border border-teal-200 bg-teal-50 hover:bg-teal-50/80 hover:border-teal-300 transition"
       >
-        <div className="text-xs text-teal-700">{label}</div>
-        <div className="text-lg font-semibold text-teal-900">
+        <div className="text-[13px] text-teal-700">{label}</div>
+        <div className="text-[19px] font-semibold text-teal-900">
           {value}
         </div>
       </motion.div>
@@ -232,10 +232,10 @@ const getNurseWorkRole = (item) => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <h2 className="text-base font-semibold text-slate-900 truncate">
+                      <h2 className="text-[17px] font-semibold text-slate-900 truncate">
                         {view.name}
                       </h2>
-                      <p className="text-xs text-slate-500 truncate">
+                      <p className="text-[13px] text-slate-500 truncate">
                         {view.degree ? view.degree + " • " : ""}
                         {view.dept || "Chưa gán khoa"}
                       </p>
@@ -243,7 +243,7 @@ const getNurseWorkRole = (item) => {
                     <div className="flex flex-col items-end gap-1">
                       
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ${statusView.className}`}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ring-1 ${statusView.className}`}
                       >
                         Trạng thái: {statusView.label}
                       </span>
@@ -262,12 +262,12 @@ const getNurseWorkRole = (item) => {
               </header>
 
               {/* BODY */}
-              <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-3 text-sm">
+              <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-3 text-[14px]">
                 <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)] gap-3">
                   {/* Cột trái: hành chính + chuyên môn + kỹ năng */}
                   <section className="space-y-3">
                     <Card>
-                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                      <h3 className="text-[13px] font-semibold text-slate-700 mb-2">
                         Thông tin hành chính
                       </h3>
                       <div className="grid grid-cols-2 gap-2">
@@ -285,7 +285,7 @@ const getNurseWorkRole = (item) => {
                     </Card>
 
                     <Card>
-                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                      <h3 className="text-[13px] font-semibold text-slate-700 mb-2">
                         Chuyên môn
                       </h3>
                       <div className="grid grid-cols-2 gap-2">
@@ -300,7 +300,7 @@ const getNurseWorkRole = (item) => {
                     </Card>
 
                     <Card>
-                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                      <h3 className="text-[13px] font-semibold text-slate-700 mb-2">
                         Kỹ năng
                       </h3>
                       <div className="flex flex-wrap gap-1.5">
@@ -315,7 +315,7 @@ const getNurseWorkRole = (item) => {
                         ).map((s, i) => (
                           <span
                             key={s + i}
-                            className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] text-teal-700 bg-teal-50 ring-1 ring-teal-200 hover:bg-teal-100 hover:ring-teal-300 transition"
+                            className="inline-flex items-center rounded-full px-2 py-0.5 text-[12px] text-teal-700 bg-teal-50 ring-1 ring-teal-200 hover:bg-teal-100 hover:ring-teal-300 transition"
                           >
                             {s}
                           </span>
@@ -327,10 +327,10 @@ const getNurseWorkRole = (item) => {
                   {/* Cột phải: liên hệ + thống kê + phòng/bàn trực hôm nay */}
                   <section className="space-y-3">
                     <Card>
-                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                      <h3 className="text-[13px] font-semibold text-slate-700 mb-2">
                         Liên hệ
                       </h3>
-                      <div className="space-y-1 text-xs text-slate-600">
+                      <div className="space-y-1 text-[13px] text-slate-600">
                         <div>
                           Email:{" "}
                           <a
@@ -359,7 +359,7 @@ const getNurseWorkRole = (item) => {
                     </Card>
 
                     <Card>
-                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                      <h3 className="text-[13px] font-semibold text-slate-700 mb-2">
                         Thống kê nhanh
                       </h3>
                       <div className="grid grid-cols-2 gap-2">
@@ -387,14 +387,14 @@ const getNurseWorkRole = (item) => {
                     </Card>
 
                     <Card>
-                      <h3 className="text-xs font-semibold text-slate-700 mb-2">
+                      <h3 className="text-[13px] font-semibold text-slate-700 mb-2">
                         {isDoctor
                           ? "Phòng khám phụ trách"
                           : isNurse
                           ? "Phòng / bàn trực hôm nay"
                           : "Phòng / bàn"}
                       </h3>
-                      <div className="flex flex-wrap gap-1.5 text-xs text-slate-700">
+                      <div className="flex flex-wrap gap-1.5 text-[13px] text-slate-700">
                         
                           {isDoctor && (view.doctorRoom || roomTodayText) && (
                             <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition">
@@ -427,7 +427,7 @@ const getNurseWorkRole = (item) => {
 
               {/* FOOTER */}
               <footer className="sticky bottom-0 z-10 px-4 py-3 border-t border-slate-100 flex justify-end backdrop-blur-sm bg-white/80">
-                <Button variant="ghost" size="sm" onClick={onClose}>
+                <Button variant="ghost" size="md" onClick={onClose} className="text-[14px] px-4 py-2">
                   Đóng
                 </Button>
               </footer>

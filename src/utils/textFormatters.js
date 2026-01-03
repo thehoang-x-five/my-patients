@@ -24,6 +24,11 @@ export function formatVietnameseText(text) {
     "da_lap_chan_doan": "Đã lập chẩn đoán",
     "dang_thuc_hien": "Đang thực hiện",
     
+    // Trạng thái đơn thuốc
+    "da_ke": "Đã kê",
+    "cho_phat": "Chờ phát",
+    "da_phat": "Đã phát",
+    
     // Hướng xử trí
     "cho_ve": "Cho về",
     "cho_thuoc_ve": "Cho thuốc về",

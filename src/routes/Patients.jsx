@@ -17,6 +17,7 @@ import {
   
   STATUSES,
 } from "../api/patients";
+import { on } from "../api/realtime.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { APPT_STATUS, searchAppointmentsRaw } from "../api/appointments";
 import { searchClinicalRaw, getFinalDiagnosis } from "../api/examination";
@@ -240,6 +241,30 @@ export default function Patients() {
   const qc = useQueryClient();
   // Map to suppress duplicate success toasts for the same patient
   const suppressedStatusToast = React.useRef(new Map());
+
+  // ✅ Subscribe realtime events for Patients
+  useEffect(() => {
+    const offPatientCreated = on('PatientCreated', (patient) => {
+      console.log('[Patients] Bệnh nhân mới:', patient);
+      qc.invalidateQueries({ queryKey: ['patients'] });
+    });
+    
+    const offPatientUpdated = on('PatientUpdated', (patient) => {
+      console.log('[Patients] Bệnh nhân cập nhật:', patient);
+      qc.invalidateQueries({ queryKey: ['patients'] });
+    });
+    
+    const offPatientStatusUpdated = on('PatientStatusUpdated', (patient) => {
+      console.log('[Patients] Trạng thái bệnh nhân cập nhật:', patient);
+      qc.invalidateQueries({ queryKey: ['patients'] });
+    });
+    
+    return () => {
+      offPatientCreated?.();
+      offPatientUpdated?.();
+      offPatientStatusUpdated?.();
+    };
+  }, [qc]);
 
   // ✅ Refs to prevent duplicate useEffect execution for check-in flow
   const hasProcessedHighlightRef = React.useRef(false);

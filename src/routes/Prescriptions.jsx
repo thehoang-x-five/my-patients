@@ -25,6 +25,7 @@ import {
   searchStock,
   useSearchStock
 } from "../api/pharmacy.js";
+import { on } from "../api/realtime.js";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Pagination from "../components/ui/Pagination.jsx";
@@ -209,6 +210,33 @@ export default function Prescriptions() {
       }
     });
     return off;
+  }, [qc]);
+
+  // ✅ Subscribe realtime events for Prescriptions
+  useEffect(() => {
+    const offPrescCreated = on('PrescriptionCreated', (presc) => {
+      console.log('[Prescriptions] Đơn thuốc mới:', presc);
+      qc.invalidateQueries({ queryKey: ['pharmacy', 'rxOrders'] });
+      qc.invalidateQueries({ queryKey: ['pharmacy', 'rxOrders', 'search'] });
+    });
+    
+    const offPrescUpdated = on('PrescriptionStatusUpdated', (presc) => {
+      console.log('[Prescriptions] Đơn thuốc cập nhật:', presc);
+      qc.invalidateQueries({ queryKey: ['pharmacy', 'rxOrders'] });
+      qc.invalidateQueries({ queryKey: ['pharmacy', 'rxOrders', 'search'] });
+    });
+    
+    const offDrugChanged = on('DrugChanged', (drug) => {
+      console.log('[Prescriptions] Kho thuốc thay đổi:', drug);
+      qc.invalidateQueries({ queryKey: ['pharmacy', 'stock'] });
+      qc.invalidateQueries({ queryKey: ['pharmacy', 'stock', 'search'] });
+    });
+    
+    return () => {
+      offPrescCreated?.();
+      offPrescUpdated?.();
+      offDrugChanged?.();
+    };
   }, [qc]);
 
   // Deep link ?view=ID

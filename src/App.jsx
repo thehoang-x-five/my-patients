@@ -96,8 +96,21 @@ export default function App() {
     // Nếu chưa login thì khỏi subscribe
     if (!MaNguoiNhan || !accessToken) return;
 
-    // 1) Khởi tạo SignalR staff (join group role:staff + nhan_vien_y_te)
-    initStaffRealtime({ staffId: MaNguoiNhan }).catch(console.error);
+    // ✅ Lấy thông tin user để join đúng groups
+    const user = useAuthStore.getState().user;
+    const staffRole = user?.VaiTro || user?.vaiTro || user?.role || VaiTro || null;
+    const nurseType = user?.LoaiYTa || user?.loaiYTa || user?.nurseType || null;
+    const userRoom = user?.MaPhong || user?.maPhong || user?.room || null;
+    const rooms = userRoom ? [userRoom] : [];
+
+    // 1) Khởi tạo SignalR staff với đầy đủ thông tin
+    // Join role groups (bac_si / y_ta), nurse type groups, user groups, và room groups
+    initStaffRealtime({ 
+      staffId: MaNguoiNhan,
+      staffRole: staffRole, // "bac_si" | "y_ta"
+      nurseType: nurseType, // "hanhchinh" | "phong_kham" | "can_lam_sang" (chỉ y tá)
+      rooms: rooms // Mảng các phòng user làm việc
+    }).catch(console.error);
 
     // 2) Đăng ký nhận NotificationCreated/NotificationUpdated
     const unsubscribe = subscribeNotifications(queryClient);
@@ -106,7 +119,7 @@ export default function App() {
     return () => {
       unsubscribe?.();
     };
-  }, [MaNguoiNhan, accessToken]);
+  }, [MaNguoiNhan, accessToken, VaiTro]);
 
   // ========== RENDER GUARD ==========
 
