@@ -118,16 +118,16 @@ function AccountBadge({ a }) {
     /đã xóa|da_xoa|xoa/.test(low)
       ? "bg-rose-50 text-rose-700 ring-rose-200"
       : /không hoạt động|khong_hoat_dong/.test(low)
-      ? "bg-slate-50 text-slate-700 ring-slate-200"
-      : "bg-emerald-50 text-emerald-700 ring-emerald-200";
+        ? "bg-slate-50 text-slate-700 ring-slate-200"
+        : "bg-emerald-50 text-emerald-700 ring-emerald-200";
   const text =
     /đã xóa|da_xoa|xoa/.test(low)
       ? "Đã xóa"
       : /không hoạt động|khong_hoat_dong/.test(low)
-      ? "Không hoạt động"
-      : /hoat_dong|hoạt động|active|1/.test(low)
-      ? "Hoạt động"
-      : a || "—";
+        ? "Không hoạt động"
+        : /hoat_dong|hoạt động|active|1/.test(low)
+          ? "Hoạt động"
+          : a || "—";
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${cls}`}>
       {text}
@@ -252,7 +252,7 @@ export default function PatientsTable({
     if (row && row.scrollIntoView) {
       try {
         row.scrollIntoView({ block: "center", behavior: "smooth" });
-      } catch {}
+      } catch { }
     }
   }, [highlightPid]);
 
@@ -280,16 +280,16 @@ export default function PatientsTable({
   function handleReturnToDoctor(p) {
     const pid = p.id ?? p.pid;
     if (!pid) return;
-  
+
     const fromDoctor =
       p?.serviceOrder?.fromDoctor || p.doctor || "Bác sĩ phụ trách";
-  
+
     // Cập nhật flow dịch vụ: đã hoàn thành dịch vụ, chờ bác sĩ xem xét
     updatePatientStatus.mutate({
       id: pid,
       status: STATUSES.WAIT_PROC,
     });
-  
+
     // ĐẨY VỀ HÀNG ĐỢI BÁC SĨ với pid đúng
     returnToDoctorMut.mutate({
       pid,
@@ -299,15 +299,15 @@ export default function PatientsTable({
       note: "Đã có kết quả dịch vụ",
     });
   }
-  
+
   // Click "Lập phiếu khám" — logic DV / thường
   function handleIntakeSmart(p) {
     const status = String(getTodayStatusCode(p) || "").toLowerCase();
-    
+
     // Dựa hoàn toàn vào Status Code từ API
-    const isServiceWait = 
-        status === STATUSES.WAIT_INTAKE_SVC || 
-        status === STATUSES.WAIT_EXAM_SVC;
+    const isServiceWait =
+      status === STATUSES.WAIT_INTAKE_SVC ||
+      status === STATUSES.WAIT_EXAM_SVC;
 
     // Chỉ mở modal, truyền action 'intake'. 
     // PatientModal sẽ gọi API lấy chi tiết nếu cần thiết.
@@ -316,18 +316,16 @@ export default function PatientsTable({
 
   return (
     <section
-      className={`pt-2 bg-white overflow-hidden shadow-soft ${
-        stretch ? "h-full flex flex-col min-h-0" : "mt-3"
-      }`}
+      className={`pt-2 bg-white overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"
+        }`}
       role="region"
       aria-label="Danh sách bệnh nhân"
     >
       <div
-        className={`${
-          stretch
-            ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none"
-            : "overflow-x-auto scrollbar-none"
-        } p-4 pt-0 pb-0 `}
+        className={`${stretch
+          ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none"
+          : "overflow-x-auto scrollbar-none"
+          } p-4 pt-0 pb-0 `}
       >
         <table className="min-w-full table-fixed">
           <colgroup>
@@ -369,10 +367,10 @@ export default function PatientsTable({
                   statusDate && String(statusDate).slice(0, 10) === today;
                 // ✅ FIX: Regex phải match chính xác "hoat_dong" hoặc "hoạt động", không match "khong_hoat_dong"
                 const accountLower = String(account).toLowerCase();
-                const accountActive = 
-                  accountLower === "hoat_dong" || 
-                  accountLower === "hoạt động" || 
-                  accountLower === "active" || 
+                const accountActive =
+                  accountLower === "hoat_dong" ||
+                  accountLower === "hoạt động" ||
+                  accountLower === "active" ||
                   accountLower === "1" ||
                   /^hoat_dong$|^hoạt động$|^active$/.test(accountLower);
                 // Hiển thị status nếu có statusCode (không cần kiểm tra ngày)
@@ -546,6 +544,26 @@ export default function PatientsTable({
                             Xử lý & chẩn đoán
                           </button>
                         )}
+
+                        {/* ✅ Nút BN bỏ về — cho phép hủy BN đang chờ/đang khám */}
+                        {accountActive && hasTodayStatus && hasReceptionPermission &&
+                          statusCode !== STATUSES.DONE &&
+                          statusCode !== STATUSES.CANCELLED && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Xác nhận BN "${p.name || p.ho_ten}" bỏ về?`)) {
+                                  const id = p.id ?? p.pid;
+                                  if (id) {
+                                    updatePatientStatus.mutate({ id, status: "da_huy" });
+                                  }
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition"
+                              title="BN bỏ về"
+                            >
+                              ✕ Bỏ về
+                            </button>
+                          )}
                       </div>
                     </Td>
                   </Row>

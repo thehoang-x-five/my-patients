@@ -3,18 +3,25 @@ import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import { useUI } from "../../context/UIContext.jsx";
+import { useAuthStore } from "../stores/appStore.js";
+import {
+  isAdmin,
+  isDoctor,
+  canManageReception,
+} from "../../utils/permissions.js";
 
-const links = [
-  ["/", "Tổng quan", "index"],
-  ["/appointments", "Lịch hẹn", "appointments"],
-  ["/patients", "Bệnh nhân", "patients"],
-  ["/examination", "Khám bệnh", "examinations"],
-  ["/departments", "Khoa phòng", "departments"],
-  ["/staff", "Nhân sự", "staff"],
-  ["/prescriptions", "Đơn thuốc", "prescriptions"],
-  ["/history", "Lịch sử", "history"],
-  ["/notifications", "Thông báo", "notifications"],
-  ["/reports", "Báo cáo", "reports"],
+// Định nghĩa tất cả links + điều kiện hiển thị theo UC_00
+const allLinks = [
+  ["/", "Tổng quan", "index", () => true],
+  ["/appointments", "Lịch hẹn", "appointments", (u) => canManageReception(u)],
+  ["/patients", "Bệnh nhân", "patients", (u) => canManageReception(u) || isDoctor(u)],
+  ["/examination", "Khám bệnh", "examinations", (u) => !isAdmin(u)],
+  ["/departments", "Khoa phòng", "departments", () => true],
+  ["/staff", "Nhân sự", "staff", (u) => isAdmin(u)],
+  ["/prescriptions", "Đơn thuốc", "prescriptions", (u) => canManageReception(u) || isDoctor(u)],
+  ["/history", "Lịch sử", "history", (u) => canManageReception(u) || isDoctor(u)],
+  ["/notifications", "Thông báo", "notifications", () => true],
+  ["/reports", "Báo cáo", "reports", (u) => isAdmin(u) || canManageReception(u) || isDoctor(u)],
 ];
 
 const iconMap = {
@@ -200,10 +207,17 @@ export default function Sidebar() {
     useUI();
   const { pathname } = useLocation();
   const [hovered, setHovered] = useState(null);
+  const user = useAuthStore((s) => s.user);
+
+  // Lọc menu theo vai trò user đang đăng nhập
+  const links = useMemo(
+    () => allLinks.filter(([, , , show]) => show(user)),
+    [user]
+  );
 
   const activeKey = useMemo(
     () => links.find(([to]) => to === pathname)?.[0] || null,
-    [pathname]
+    [pathname, links]
   );
 
   return (
@@ -347,8 +361,8 @@ export default function Sidebar() {
                         active
                           ? "text-white"
                           : isHover
-                          ? "text-brand-700"
-                          : "text-slate-700 dark:text-slate-100",
+                            ? "text-brand-700"
+                            : "text-slate-700 dark:text-slate-100",
                         !active && !isHover ? "hover:-translate-y-0.5" : "",
                         "transition-all duration-150",
                       ].join(" ")
@@ -361,8 +375,8 @@ export default function Sidebar() {
                           isActive
                             ? "bg-white/95 text-sky-500 shadow-md shadow-sky-200/80"
                             : isHover
-                            ? "bg-white text-sky-500 shadow-sm"
-                            : "bg-slate-100 dark:bg-slate-800 text-slate-500",
+                              ? "bg-white text-sky-500 shadow-sm"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-500",
                         ].join(" ")}
                       >
                         {Icon && <Icon />}
@@ -377,7 +391,7 @@ export default function Sidebar() {
                         >
                           {t[key] || label}
                         </span>
-                       
+
                       </div>
 
                       <motion.span
@@ -415,7 +429,7 @@ export default function Sidebar() {
       {/* Footer: ngôn ngữ + theme + trạng thái nhỏ */}
       {!collapsed && (
         <div className="absolute left-2 right-2 bottom-2">
-          
+
 
           <div className="flex items-center justify-between gap-2 rounded-2xl  px-3 py-2.5 shadow-sm">
             <div className="flex flex-col gap-1">
@@ -424,21 +438,19 @@ export default function Sidebar() {
               </span>
               <div className="flex gap-1.5" role="group" aria-label="Chọn ngôn ngữ">
                 <Button
-                  className={`px-2.5 py-1 text-[11px] rounded-xl border ${
-                    lang === "vi"
+                  className={`px-2.5 py-1 text-[11px] rounded-xl border ${lang === "vi"
                       ? "btn-primary bg-sky-500 text-white font-bold border-sky-500 shadow-sm shadow-sky-300/70"
                       : "bg-white/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-600"
-                  }`}
+                    }`}
                   onClick={() => setLang("vi")}
                 >
                   VI
                 </Button>
                 <Button
-                  className={`px-2.5 py-1 text-[11px] rounded-xl border ${
-                    lang === "en"
+                  className={`px-2.5 py-1 text-[11px] rounded-xl border ${lang === "en"
                       ? "btn-primary bg-sky-500 text-white font-bold border-sky-500 shadow-sm shadow-sky-300/70"
                       : "bg-white/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-600"
-                  }`}
+                    }`}
                   onClick={() => setLang("en")}
                 >
                   EN

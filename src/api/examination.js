@@ -18,15 +18,15 @@ const CLINICAL_BASE = "/clinical";
 const CLS_BASE = "/cls";
 const MASTER_BASE = "/master-data";
 export const EXTRA_FIELDS = [
-    { key: "di_ung", label: "Dị ứng" },
-    { key: "chong_chi_dinh", label: "Chống chỉ định" },
-    { key: "thuoc_dang_dung", label: "Thuốc đang dùng" },
-    { key: "tieu_su_benh", label: "Tiểu sử bệnh" },
-    { key: "tien_su_phau_thuat", label: "Tiền sử phẫu thuật" },
-    { key: "nhom_mau", label: "Nhóm máu" },
-    { key: "benh_man_tinh", label: "Bệnh mạn tính" },
-    {key: "sinh_hieu", label:"Sinh hiệu"}
-  ];
+  { key: "di_ung", label: "Dị ứng" },
+  { key: "chong_chi_dinh", label: "Chống chỉ định" },
+  { key: "thuoc_dang_dung", label: "Thuốc đang dùng" },
+  { key: "tieu_su_benh", label: "Tiểu sử bệnh" },
+  { key: "tien_su_phau_thuat", label: "Tiền sử phẫu thuật" },
+  { key: "nhom_mau", label: "Nhóm máu" },
+  { key: "benh_man_tinh", label: "Bệnh mạn tính" },
+  { key: "sinh_hieu", label: "Sinh hiệu" }
+];
 /** ===== Helpers chung ===== */
 
 function unwrap(res) {
@@ -114,118 +114,118 @@ export async function getServicesOverview(params = {}) {
 
 // Tạo phiếu khám lâm sàng
 export async function createClinicalExam(payload = {}) {
-    if (!payload) throw new Error("createClinicalExam: missing payload");
-  
-    // Nếu FE đã map đúng ClinicalExamCreateRequest thì forward 1:1
-    if (
-      payload.MaBenhNhan ||
-      payload.MaKhoa ||
-      payload.MaPhong ||
-      payload.MaBacSiKham
-    ) {
-      const res = await http.post(CLINICAL_BASE, payload);
-      return unwrap(res);
-    }
-  
-    const {
-      pid,
-      patientId,
-      deptId,
-      roomId,
-      doctorId,
-      createdBy,
-      examType,
-      symptoms,
-      note,
-      receptionNote,
-      examDate,
-      examTime,
-      bhyt = {},
-      extra = {},
-    } = payload;
-  
-    const now = new Date();
-    const ngayLap =
-      examDate || payload.NgayLap || now.toISOString().slice(0, 10);
-    const gioLap =
-      examTime ||
-      payload.GioLap ||
-      now.toISOString().slice(11, 19);
-  
-    const body = {
-      // Bắt buộc
-      MaBenhNhan:
-        payload.MaBenhNhan ?? payload.maBenhNhan ?? pid ?? patientId ?? null,
-      MaKhoa: payload.MaKhoa ?? payload.maKhoa ?? deptId ?? null,
-      MaPhong: payload.MaPhong ?? payload.maPhong ?? roomId ?? null,
-      MaBacSiKham:
-        payload.MaBacSiKham ?? payload.maBacSiKham ?? doctorId ?? null,
-      MaNguoiLap:
-        payload.MaNguoiLap ?? payload.maNguoiLap ?? createdBy ?? "admin",
-      MaDichVuKham:
-        payload.MaDichVuKham ?? payload.maDichVuKham ?? payload.serviceId ?? null,
-  
-      // Tuỳ chọn / enum
-      HinhThucTiepNhan:
-        payload.HinhThucTiepNhan ||
-        payload.hinhThucTiepNhan ||
-        payload.hinhThuc ||
-        "tiep_nhan_truc_tiep",
-      LoaiPhieuKham:
-        payload.LoaiPhieuKham ?? payload.loaiPhieuKham ?? examType ?? null,
-  
-      TrieuChung:
-        payload.TrieuChung ?? payload.trieuChung ?? symptoms ?? "",
-      GhiChu:
-        payload.GhiChu ??
-        payload.ghiChu ??
-        receptionNote ??
-        note ??
-        "",
-  
-      NgayLap: ngayLap,
-      GioLap: gioLap,
-      MaLichHen:
-        payload.MaLichHen ?? payload.maLichHen ?? payload.bookingId ?? null,
-  
-      // Thông tin BHYT
-      TheBHYT:
-        payload.TheBHYT ?? payload.theBHYT ?? bhyt.soThe ?? null,
-      NoiDangKyKCB:
-        payload.NoiDangKyKCB ??
-        payload.noiDangKyKCB ??
-        bhyt.coQuan ??
-        null,
-      ThongTinBHYT:
-        payload.ThongTinBHYT ??
-        payload.thongTinBHYT ??
-        bhyt.thongTin ??
-        null,
-      GhiChuBHYT:
-        payload.GhiChuBHYT ??
-        payload.ghiChuBHYT ??
-        bhyt.ghiChu ??
-        null,
-  
-      // Các trường mở rộng (dị ứng, tiền sử...)
-      DiUng: payload.DiUng ?? extra.di_ung ?? null,
-      ChongChiDinh:
-        payload.ChongChiDinh ?? extra.chong_chi_dinh ?? null,
-      ThuocDangDung:
-        payload.ThuocDangDung ?? extra.thuoc_dang_dung ?? null,
-      TieuSuBenh:
-        payload.TieuSuBenh ?? extra.tieu_su_benh ?? null,
-      TienSuPhauThuat:
-        payload.TienSuPhauThuat ?? extra.tien_su_phau_thuat ?? null,
-      NhomMau: payload.NhomMau ?? extra.nhom_mau ?? null,
-      BenhManTinh:
-        payload.BenhManTinh ?? extra.benh_man_tinh ?? null,
-      SinhHieu: payload.SinhHieu ?? extra.sinh_hieu ?? null,
-    };
-  
-    const res = await http.post(CLINICAL_BASE, body);
+  if (!payload) throw new Error("createClinicalExam: missing payload");
+
+  // Nếu FE đã map đúng ClinicalExamCreateRequest thì forward 1:1
+  if (
+    payload.MaBenhNhan ||
+    payload.MaKhoa ||
+    payload.MaPhong ||
+    payload.MaBacSiKham
+  ) {
+    const res = await http.post(CLINICAL_BASE, payload);
     return unwrap(res);
   }
+
+  const {
+    pid,
+    patientId,
+    deptId,
+    roomId,
+    doctorId,
+    createdBy,
+    examType,
+    symptoms,
+    note,
+    receptionNote,
+    examDate,
+    examTime,
+    bhyt = {},
+    extra = {},
+  } = payload;
+
+  const now = new Date();
+  const ngayLap =
+    examDate || payload.NgayLap || now.toISOString().slice(0, 10);
+  const gioLap =
+    examTime ||
+    payload.GioLap ||
+    now.toISOString().slice(11, 19);
+
+  const body = {
+    // Bắt buộc
+    MaBenhNhan:
+      payload.MaBenhNhan ?? payload.maBenhNhan ?? pid ?? patientId ?? null,
+    MaKhoa: payload.MaKhoa ?? payload.maKhoa ?? deptId ?? null,
+    MaPhong: payload.MaPhong ?? payload.maPhong ?? roomId ?? null,
+    MaBacSiKham:
+      payload.MaBacSiKham ?? payload.maBacSiKham ?? doctorId ?? null,
+    MaNguoiLap:
+      payload.MaNguoiLap ?? payload.maNguoiLap ?? createdBy ?? "admin",
+    MaDichVuKham:
+      payload.MaDichVuKham ?? payload.maDichVuKham ?? payload.serviceId ?? null,
+
+    // Tuỳ chọn / enum
+    HinhThucTiepNhan:
+      payload.HinhThucTiepNhan ||
+      payload.hinhThucTiepNhan ||
+      payload.hinhThuc ||
+      "tiep_nhan_truc_tiep",
+    LoaiPhieuKham:
+      payload.LoaiPhieuKham ?? payload.loaiPhieuKham ?? examType ?? null,
+
+    TrieuChung:
+      payload.TrieuChung ?? payload.trieuChung ?? symptoms ?? "",
+    GhiChu:
+      payload.GhiChu ??
+      payload.ghiChu ??
+      receptionNote ??
+      note ??
+      "",
+
+    NgayLap: ngayLap,
+    GioLap: gioLap,
+    MaLichHen:
+      payload.MaLichHen ?? payload.maLichHen ?? payload.bookingId ?? null,
+
+    // Thông tin BHYT
+    TheBHYT:
+      payload.TheBHYT ?? payload.theBHYT ?? bhyt.soThe ?? null,
+    NoiDangKyKCB:
+      payload.NoiDangKyKCB ??
+      payload.noiDangKyKCB ??
+      bhyt.coQuan ??
+      null,
+    ThongTinBHYT:
+      payload.ThongTinBHYT ??
+      payload.thongTinBHYT ??
+      bhyt.thongTin ??
+      null,
+    GhiChuBHYT:
+      payload.GhiChuBHYT ??
+      payload.ghiChuBHYT ??
+      bhyt.ghiChu ??
+      null,
+
+    // Các trường mở rộng (dị ứng, tiền sử...)
+    DiUng: payload.DiUng ?? extra.di_ung ?? null,
+    ChongChiDinh:
+      payload.ChongChiDinh ?? extra.chong_chi_dinh ?? null,
+    ThuocDangDung:
+      payload.ThuocDangDung ?? extra.thuoc_dang_dung ?? null,
+    TieuSuBenh:
+      payload.TieuSuBenh ?? extra.tieu_su_benh ?? null,
+    TienSuPhauThuat:
+      payload.TienSuPhauThuat ?? extra.tien_su_phau_thuat ?? null,
+    NhomMau: payload.NhomMau ?? extra.nhom_mau ?? null,
+    BenhManTinh:
+      payload.BenhManTinh ?? extra.benh_man_tinh ?? null,
+    SinhHieu: payload.SinhHieu ?? extra.sinh_hieu ?? null,
+  };
+
+  const res = await http.post(CLINICAL_BASE, body);
+  return unwrap(res);
+}
 
 // Lấy chi tiết phiếu khám theo mã
 export async function getClinicalExam(maPhieuKham) {
@@ -304,91 +304,91 @@ export async function searchClinicalExams(filters = {}) {
 
 // Tạo phiếu CLS (order) cho một lượt khám
 export async function createClsOrder(payload = {}) {
-    if (!payload) throw new Error("createClsOrder: missing payload");
-  
-    // Nếu đã là ClsOrderCreateRequest thì post thẳng
-    if (
-      payload.MaBenhNhan &&
-      payload.MaPhieuKhamLs &&
-      Array.isArray(payload.ListItemDV)
-    ) {
-      const res = await http.post(`${CLS_BASE}/orders`, payload);
-      return unwrap(res);
-    }
-  
-    const {
-      pid,
-      patientId,
-      clinicalExamId,
-      createdBy,
-      autoPublishEnabled = true,
-      note,
-      status,
-      services = [],
-    } = payload;
-  
-    const listItemDV =
-      Array.isArray(services) && services.length
-        ? services.map((s) => ({
-            MaChiTietDv:
-              s.MaChiTietDv ??
-              s.maChiTietDv ??
-              s.serviceItemId ??
-              null,
-            MaPhieuKhamCls:
-              s.MaPhieuKhamCls ?? s.maPhieuKhamCls ?? null,
-            MaDichVu:
-              s.MaDichVu ??
-              s.maDichVu ??
-              s.id ??
-              s.serviceId ??
-              null,
-            TenDichVu:
-              s.TenDichVu ??
-              s.tenDichVu ??
-              s.name ??
-              s.ten ??
-              "",
-            LoaiDichVu:
-              s.LoaiDichVu ?? s.loaiDichVu ?? s.type ?? null,
-            PhiDV: String(
-              s.PhiDV ?? s.phiDV ?? s.price ?? s.fee ?? ""
-            ),
-            GhiChu: s.GhiChu ?? s.note ?? "",
-            TrangThai: s.TrangThai ?? s.status ?? "cho_ket_qua",
-          }))
-        : [];
-  
-    const body = {
-      MaBenhNhan:
-        payload.MaBenhNhan ??
-        payload.maBenhNhan ??
-        pid ??
-        patientId ??
-        null,
-      MaPhieuKhamLs:
-        payload.MaPhieuKhamLs ??
-        payload.maPhieuKhamLs ??
-        clinicalExamId ??
-        payload.clinicalExamId ??
-        null,
-      MaNguoiLap:
-        payload.MaNguoiLap ?? payload.maNguoiLap ?? createdBy ?? null,
-      AutoPublishEnabled:
-        payload.AutoPublishEnabled ??
-        payload.autoPublishEnabled ??
-        autoPublishEnabled,
-      GhiChu: payload.GhiChu ?? payload.ghiChu ?? note ?? "",
-      TrangThai:
-        payload.TrangThai ?? payload.trangThai ?? status ?? null,
-      ListItemDV:
-        payload.ListItemDV ??
-        payload.listItemDV ??
-        listItemDV,
-    };
-  
-    const res = await http.post(`${CLS_BASE}/orders`, body);
+  if (!payload) throw new Error("createClsOrder: missing payload");
+
+  // Nếu đã là ClsOrderCreateRequest thì post thẳng
+  if (
+    payload.MaBenhNhan &&
+    payload.MaPhieuKhamLs &&
+    Array.isArray(payload.ListItemDV)
+  ) {
+    const res = await http.post(`${CLS_BASE}/orders`, payload);
     return unwrap(res);
+  }
+
+  const {
+    pid,
+    patientId,
+    clinicalExamId,
+    createdBy,
+    autoPublishEnabled = true,
+    note,
+    status,
+    services = [],
+  } = payload;
+
+  const listItemDV =
+    Array.isArray(services) && services.length
+      ? services.map((s) => ({
+        MaChiTietDv:
+          s.MaChiTietDv ??
+          s.maChiTietDv ??
+          s.serviceItemId ??
+          null,
+        MaPhieuKhamCls:
+          s.MaPhieuKhamCls ?? s.maPhieuKhamCls ?? null,
+        MaDichVu:
+          s.MaDichVu ??
+          s.maDichVu ??
+          s.id ??
+          s.serviceId ??
+          null,
+        TenDichVu:
+          s.TenDichVu ??
+          s.tenDichVu ??
+          s.name ??
+          s.ten ??
+          "",
+        LoaiDichVu:
+          s.LoaiDichVu ?? s.loaiDichVu ?? s.type ?? null,
+        PhiDV: String(
+          s.PhiDV ?? s.phiDV ?? s.price ?? s.fee ?? ""
+        ),
+        GhiChu: s.GhiChu ?? s.note ?? "",
+        TrangThai: s.TrangThai ?? s.status ?? "cho_ket_qua",
+      }))
+      : [];
+
+  const body = {
+    MaBenhNhan:
+      payload.MaBenhNhan ??
+      payload.maBenhNhan ??
+      pid ??
+      patientId ??
+      null,
+    MaPhieuKhamLs:
+      payload.MaPhieuKhamLs ??
+      payload.maPhieuKhamLs ??
+      clinicalExamId ??
+      payload.clinicalExamId ??
+      null,
+    MaNguoiLap:
+      payload.MaNguoiLap ?? payload.maNguoiLap ?? createdBy ?? null,
+    AutoPublishEnabled:
+      payload.AutoPublishEnabled ??
+      payload.autoPublishEnabled ??
+      autoPublishEnabled,
+    GhiChu: payload.GhiChu ?? payload.ghiChu ?? note ?? "",
+    TrangThai:
+      payload.TrangThai ?? payload.trangThai ?? status ?? null,
+    ListItemDV:
+      payload.ListItemDV ??
+      payload.listItemDV ??
+      listItemDV,
+  };
+
+  const res = await http.post(`${CLS_BASE}/orders`, body);
+  return unwrap(res);
 }
 
 // Search CLS orders (GET /api/cls/orders)
@@ -427,14 +427,14 @@ export async function getClsOrder(maPhieuKhamCls) {
 export async function updateClsOrderStatus(maPhieuKhamCls, trangThai) {
   if (!maPhieuKhamCls) throw new Error("Thiếu maPhieuKhamCls");
   if (!trangThai) throw new Error("Thiếu trangThai");
-  
-    // API nhận trangThai qua query param, không phải JSON body
-    const res = await http.put(
-      `${CLS_BASE}/orders/${maPhieuKhamCls}/status`,
-      null,
-      { params: { trangThai } }
-    );
-    return unwrap(res);
+
+  // API nhận trangThai qua query param, không phải JSON body
+  const res = await http.put(
+    `${CLS_BASE}/orders/${maPhieuKhamCls}/status`,
+    null,
+    { params: { trangThai } }
+  );
+  return unwrap(res);
 }
 
 // Tạo chi tiết dịch vụ CLS (1 dịch vụ trên phiếu)
@@ -662,7 +662,7 @@ export function useCreateDiagnosis(options = {}) {
 export function useCompleteExam(options = {}) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ maPhieuKham, ...payload }) => 
+    mutationFn: async ({ maPhieuKham, ...payload }) =>
       completeExam(maPhieuKham, payload),
     onSuccess: (data, vars, ctx) => {
       if (!options.skipInvalidate) {
@@ -671,6 +671,30 @@ export function useCompleteExam(options = {}) {
         qc.invalidateQueries({ queryKey: ["patients"] });
         qc.invalidateQueries({ queryKey: ["visits"] });
       }
+      if (typeof options.onSuccess === "function") {
+        options.onSuccess(data, vars, ctx);
+      }
+    },
+    ...options,
+  });
+}
+
+// ===== HỦY LƯỢT KHÁM =====
+// Backend: PUT /api/clinical/visits/{maLuotKham}/cancel
+export async function cancelVisit(maLuotKham) {
+  if (!maLuotKham) throw new Error("Thiếu maLuotKham");
+  const res = await http.put(`${CLINICAL_BASE}/visits/${maLuotKham}/cancel`);
+  return unwrap(res);
+}
+
+export function useCancelVisit(options = {}) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: cancelVisit,
+    onSuccess: (data, vars, ctx) => {
+      qc.invalidateQueries({ queryKey: ["queue"] });
+      qc.invalidateQueries({ queryKey: ["visits"] });
+      qc.invalidateQueries({ queryKey: ["patients"] });
       if (typeof options.onSuccess === "function") {
         options.onSuccess(data, vars, ctx);
       }

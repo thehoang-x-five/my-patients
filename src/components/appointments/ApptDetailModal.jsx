@@ -22,9 +22,8 @@ function Badge({ status }) {
 
   return (
     <span
-      className={`badge ${
-        clsMap[status] || "bg-slate-100 text-slate-700 border-slate-200"
-      } transition-colors`}
+      className={`badge ${clsMap[status] || "bg-slate-100 text-slate-700 border-slate-200"
+        } transition-colors`}
     >
       {label}
     </span>
@@ -39,7 +38,7 @@ export default function ApptDetailModal({
   onCheckIn,
 }) {
 
- 
+
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     date: "",
@@ -142,7 +141,7 @@ export default function ApptDetailModal({
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge status={appt.status} />
-                
+
                   {/* Link hồ sơ chỉ khi tái khám */}
                   {isFollowup && pid && (
                     <Link
@@ -203,12 +202,12 @@ export default function ApptDetailModal({
 
                 <section className="rounded-xl ring-1 ring-violet-200/80 p-3 bg-white">
                   <div className="flex items-center justify-between">
-                  {appt.status !== APPT_STATUS.DA_CHECKIN ? (
-                    <b className="text-violet-800">Thao tác</b>):(<p className="text-violet-800 ml-auto mr-auto text-center" > --- Đã Check-in: Không thể thao tác--- </p>)}
-                
+                    {appt.status !== APPT_STATUS.DA_CHECKIN ? (
+                      <b className="text-violet-800">Thao tác</b>) : (<p className="text-violet-800 ml-auto mr-auto text-center" > --- Đã Check-in: Không thể thao tác--- </p>)}
+
                     {!editing ? (
                       <div className="flex gap-2 flex-wrap">
-                        {appt.status !== APPT_STATUS.DA_XAC_NHAN && appt.status !== APPT_STATUS.DA_CHECKIN &&(
+                        {appt.status !== APPT_STATUS.DA_XAC_NHAN && appt.status !== APPT_STATUS.DA_CHECKIN && (
                           <button
                             onClick={() =>
                               doUpdate({ status: APPT_STATUS.DA_XAC_NHAN })
@@ -218,7 +217,7 @@ export default function ApptDetailModal({
                             Xác nhận
                           </button>
                         )}
-                        {appt.status !== APPT_STATUS.DANG_CHO && appt.status !== APPT_STATUS.DA_CHECKIN &&(
+                        {appt.status !== APPT_STATUS.DANG_CHO && appt.status !== APPT_STATUS.DA_CHECKIN && (
                           <button
                             onClick={() =>
                               doUpdate({ status: APPT_STATUS.DANG_CHO })
@@ -228,11 +227,13 @@ export default function ApptDetailModal({
                             Đánh dấu chờ
                           </button>
                         )}
-                        {appt.status !== APPT_STATUS.DA_HUY && appt.status !== APPT_STATUS.DA_CHECKIN &&(
+                        {appt.status !== APPT_STATUS.DA_HUY && appt.status !== APPT_STATUS.DA_CHECKIN && (
                           <button
-                            onClick={() =>
-                              doUpdate({ status: APPT_STATUS.DA_HUY })
-                            }
+                            onClick={() => {
+                              if (window.confirm("Bạn có chắc chắn muốn hủy lịch hẹn này?")) {
+                                doUpdate({ status: APPT_STATUS.DA_HUY });
+                              }
+                            }}
                             className="px-3 py-2 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 transition"
                           >
                             Hủy lịch
@@ -242,19 +243,19 @@ export default function ApptDetailModal({
                         {onCheckIn && canCheckIn && (
                           <button
                             onClick={() => onCheckIn(appt)
-                                            }
+                            }
                             className="px-3 py-2 rounded-xl text-white bg-gradient-to-r from-violet-500 to-purple-500 hover:brightness-105 shadow-sm hover:shadow transition"
                           >
                             Check-in
                           </button>
                         )}
- {appt.status !== APPT_STATUS.DA_CHECKIN && (
-                        <button
-                          onClick={() => setEditing(true)}
-                          className="px-3 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
-                        >
-                          Đổi lịch
-                        </button> )}
+                        {appt.status !== APPT_STATUS.DA_CHECKIN && (
+                          <button
+                            onClick={() => setEditing(true)}
+                            className="px-3 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
+                          >
+                            Đổi lịch
+                          </button>)}
                       </div>
                     ) : (
                       <div className="flex gap-2">

@@ -120,10 +120,10 @@ function StatusBadge({ item }) {
     status === "cho_goi"
       ? "Đang chờ"
       : status === "dang_thuc_hien" || status === "dang_kham"
-      ? "Đang thực hiện"
-      : status === "da_phuc_vu"
-      ? "Đã phục vụ"
-      : "Không rõ";
+        ? "Đang thực hiện"
+        : status === "da_phuc_vu"
+          ? "Đã phục vụ"
+          : "Không rõ";
 
   let tone = pillTone.slate;
   if (status === "cho_goi") tone = pillTone.amber;
@@ -132,7 +132,7 @@ function StatusBadge({ item }) {
 
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${tone.wrap}`}>
-     
+
       {label}
     </span>
   );
@@ -209,13 +209,10 @@ function ActionButton({ active, onClick }) {
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-xl border ${
-        active ? "border-teal-100" : "border-rose-100"
-      } bg-gradient-to-tr ${
-        active ? "from-teal-50 to-teal-200" : "from-rose-50 to-rose-200"
-      } px-2 py-1.5 mt-0 text-sm font-semibold ${
-        active ? "text-teal-900" : "text-rose-900"
-      } shadow hover:shadow-md transition`}
+      className={`inline-flex items-center gap-2 rounded-xl border ${active ? "border-teal-100" : "border-rose-100"
+        } bg-gradient-to-tr ${active ? "from-teal-50 to-teal-200" : "from-rose-50 to-rose-200"
+        } px-2 py-1.5 mt-0 text-sm font-semibold ${active ? "text-teal-900" : "text-rose-900"
+        } shadow hover:shadow-md transition`}
       aria-label={active ? "Đang khám" : "Gọi vào"}
       title={active ? "Đang khám" : "Gọi vào"}
     >
@@ -234,7 +231,7 @@ function getKey(p) {
   );
 }
 
-export default function PatientTable({ items = [], onStart, inProgress = new Set(), stretch = false }) {
+export default function PatientTable({ items = [], onStart, onCancelVisit, inProgress = new Set(), stretch = false }) {
   return (
     <section
       className={`pt-2 bg-white overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
@@ -291,15 +288,15 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                   const sourceVal = isClsQueue
                     ? null
                     : fld(
-                        p,
-                        "Nguon",
-                        "nguon",
-                        "source",
-                        "HinhThucTiepNhan",
-                        "hinhThucTiepNhan",
-                        "LoaiHen",
-                        "loaiHen"
-                      );
+                      p,
+                      "Nguon",
+                      "nguon",
+                      "source",
+                      "HinhThucTiepNhan",
+                      "hinhThucTiepNhan",
+                      "LoaiHen",
+                      "loaiHen"
+                    );
 
                   // Resolve patient display values depending on queue type (LS vs CLS)
                   const patientId = fld(p, "MaBenhNhan", "maBenhNhan", "pid", "id");
@@ -380,6 +377,9 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                   const checkinRaw = fld(p, "ThoiGianCheckin", "thoiGianCheckin", "checkIn");
                   const noteText = fld(p, "Nhan", "nhan", "GhiChu", "note", "symptoms");
 
+                  // ✅ Queue status for cancel button visibility
+                  const queueStatus = (p.TrangThai || p.trangThai || p.status || "").toLowerCase();
+
                   return (
                     <Row key={key ?? i} i={i}>
                       <Td first>
@@ -430,8 +430,24 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                         <div className="truncate text-slate-700 max-w-[8rem] break-words">{noteText || "--"}</div>
                       </Td>
                       <Td last right>
-                        <div className="flex items-center justify-end gap-3">
+                        <div className="flex items-center justify-end gap-2">
                           <ActionButton active={active} onClick={() => onStart?.(p)} />
+                          {onCancelVisit && (queueStatus === "cho_goi" || queueStatus === "dang_goi") && (
+                            <motion.button
+                              whileHover={{ y: -2 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={() => {
+                                const maLuot = p.MaLuotKham || p.maLuotKham || p.visitId;
+                                if (maLuot && window.confirm(`Xác nhận hủy lượt khám của "${patientName}"?`)) {
+                                  onCancelVisit(maLuot);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition"
+                              title="Hủy lượt khám"
+                            >
+                              ✕ Hủy
+                            </motion.button>
+                          )}
                         </div>
                       </Td>
                     </Row>
