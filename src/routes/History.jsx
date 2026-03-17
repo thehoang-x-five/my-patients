@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import HistoryToolbar from "../components/history/HistoryToolbar.jsx";
 import HistoryTable from "../components/history/HistoryTable.jsx";
@@ -89,20 +90,58 @@ function getTxnKind(row) {
 
 /* ====== main page ====== */
 export default function History() {
+  const { search } = useLocation();
+  const nav = useNavigate();
+  
   useViewportVH();
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
-  const [tab, setTab] = useState("visits"); // visits | transactions
-  const [scope, setScope] = useState("all"); // all | today
+  const sp = useMemo(() => new URLSearchParams(search), [search]);
+  const initTab = sp.get("tab") || "visits";
+  const initPid = sp.get("pid") || "";
+  const initHighlight = sp.get("highlight") || null;
+
+  const [tab, setTab] = useState(initTab); // visits | transactions
+  const [scope, setScope] = useState(initPid ? "all" : "all"); // all | today
 
   // filter state
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [kw, setKw] = useState("");
+  const [kw, setKw] = useState(initPid);
   const [visitType, setVisitType] = useState("all"); // all | clinic | service
   const [txnType, setTxnType] = useState("all"); // all | exam | cls | drug | other
+  
+  // Highlight state for row animation
+  const [highlightId, setHighlightId] = useState(initHighlight);
+
+  // Sync state when URL search changes externally
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search);
+    const h = s.get("highlight");
+    const p = s.get("pid");
+    const t = s.get("tab");
+    
+    if (h) setHighlightId(h);
+    if (p) { setKw(p); setScope("all"); }
+    if (t) setTab(t);
+  }, [search]);
+
+  // Auto clear highlight after 5 seconds
+  useEffect(() => {
+    if (highlightId) {
+      const timer = setTimeout(() => {
+        setHighlightId(null);
+        const s = new URLSearchParams(window.location.search);
+        if (s.has("highlight")) {
+          s.delete("highlight");
+          nav({ search: s.toString() }, { replace: true });
+        }
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightId, nav]);
 
   // ✅ Pagination
   const [visitPage, setVisitPage] = useState(1);
@@ -302,6 +341,7 @@ export default function History() {
             <HistoryTable
               tab={tab}
               rows={rows}
+              highlightId={highlightId}
               onEye={(row, type) =>
                 setDetail({ open: true, type, row })
               }

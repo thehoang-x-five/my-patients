@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import ConfirmModal from "../ui/ConfirmModal.jsx";
 
 // Resolve fields that may be PascalCase, camelCase, or nested (supports dotted paths)
 function fld(obj, ...paths) {
@@ -232,7 +233,10 @@ function getKey(p) {
 }
 
 export default function PatientTable({ items = [], onStart, onCancelVisit, inProgress = new Set(), stretch = false }) {
+  const [confirmCancel, setConfirmCancel] = useState({ open: false, name: "", maLuot: null });
+
   return (
+    <>
     <section
       className={`pt-2 bg-white overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
       role="region"
@@ -438,8 +442,8 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, inPro
                               whileTap={{ scale: 0.98 }}
                               onClick={() => {
                                 const maLuot = p.MaLuotKham || p.maLuotKham || p.visitId;
-                                if (maLuot && window.confirm(`Xác nhận hủy lượt khám của "${patientName}"?`)) {
-                                  onCancelVisit(maLuot);
+                                if (maLuot) {
+                                  setConfirmCancel({ open: true, name: patientName, maLuot });
                                 }
                               }}
                               className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition"
@@ -459,5 +463,21 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, inPro
         </table>
       </div>
     </section>
+
+      <ConfirmModal
+        open={confirmCancel.open}
+        onClose={() => setConfirmCancel({ open: false, name: "", maLuot: null })}
+        onConfirm={() => {
+          if (confirmCancel.maLuot) {
+            onCancelVisit(confirmCancel.maLuot);
+          }
+        }}
+        title="Hủy lượt khám"
+        message={`Lượt khám của bênh nhân "${confirmCancel.name}" sẽ bị hủy bỏ. Bạn có chắc chắn?`}
+        confirmText="Hủy lượt"
+        cancelText="Để sau"
+        tone="warning"
+      />
+    </>
   );
 }

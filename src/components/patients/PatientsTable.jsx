@@ -1,7 +1,8 @@
 // src/components/patients/PatientsTable.jsx
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
+import ConfirmModal from "../ui/ConfirmModal.jsx";
 
 import {
   STATUSES,
@@ -232,6 +233,9 @@ export default function PatientsTable({
   const returnToDoctorMut = useReturnToDoctor();
   const updatePatientStatus = useUpdatePatientStatus();
 
+  // ===== Confirm modal state =====
+  const [confirmBoVe, setConfirmBoVe] = useState({ open: false, name: "", id: null });
+
   const handleStartToday = (p) => {
     if (!p) return;
     const id = p.id ?? p.pid;
@@ -315,6 +319,7 @@ export default function PatientsTable({
   }
 
   return (
+    <>
     <section
       className={`pt-2 bg-white overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"
         }`}
@@ -551,12 +556,8 @@ export default function PatientsTable({
                           statusCode !== STATUSES.CANCELLED && (
                             <button
                               onClick={() => {
-                                if (window.confirm(`Xác nhận BN "${p.name || p.ho_ten}" bỏ về?`)) {
-                                  const id = p.id ?? p.pid;
-                                  if (id) {
-                                    updatePatientStatus.mutate({ id, status: "da_huy" });
-                                  }
-                                }
+                                const id = p.id ?? p.pid;
+                                setConfirmBoVe({ open: true, name: p.name || p.ho_ten, id });
                               }}
                               className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition"
                               title="BN bỏ về"
@@ -574,5 +575,21 @@ export default function PatientsTable({
         </table>
       </div>
     </section>
+
+      <ConfirmModal
+        open={confirmBoVe.open}
+        onClose={() => setConfirmBoVe({ open: false, name: "", id: null })}
+        onConfirm={() => {
+          if (confirmBoVe.id) {
+            updatePatientStatus.mutate({ id: confirmBoVe.id, status: "da_huy" });
+          }
+        }}
+        title="Xác nhận bỏ về"
+        message={`Bệnh nhân "${confirmBoVe.name}" sẽ được chuyển trạng thái bỏ về. Bạn có chắc chắn?`}
+        confirmText="Xác nhận bỏ về"
+        cancelText="Không"
+        tone="danger"
+      />
+    </>
   );
 }

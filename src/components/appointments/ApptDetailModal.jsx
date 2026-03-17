@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments.js";
 import { useUIStore } from "../stores/appStore";
+import ConfirmModal from "../ui/ConfirmModal.jsx";
 
 function Badge({ status }) {
   const label = APPT_STATUS_LABEL[status] || "—";
@@ -229,11 +230,7 @@ export default function ApptDetailModal({
                         )}
                         {appt.status !== APPT_STATUS.DA_HUY && appt.status !== APPT_STATUS.DA_CHECKIN && (
                           <button
-                            onClick={() => {
-                              if (window.confirm("Bạn có chắc chắn muốn hủy lịch hẹn này?")) {
-                                doUpdate({ status: APPT_STATUS.DA_HUY });
-                              }
-                            }}
+                            onClick={() => setConfirmCancel(true)}
                             className="px-3 py-2 rounded-xl border border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 transition"
                           >
                             Hủy lịch
@@ -324,6 +321,18 @@ export default function ApptDetailModal({
           </motion.div>
         </>
       )}
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        open={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        onConfirm={() => doUpdate({ status: APPT_STATUS.DA_HUY })}
+        title="Hủy lịch hẹn"
+        message="Bạn có chắc chắn muốn hủy lịch hẹn này? Thao tác này có thể không hoàn tác được."
+        confirmText="Hủy lịch"
+        cancelText="Đóng"
+        tone="danger"
+      />
     </AnimatePresence>
   );
 }

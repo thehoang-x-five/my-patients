@@ -24,7 +24,8 @@
   --color-brand-200: #bfdbfe;
   --color-brand-300: #93c5fd;
   --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6; /* ring-brand-500, text/bg-brand-500 */
+  --color-brand-500: #3b82f6;
+  /* ring-brand-500, text/bg-brand-500 */
   --color-brand-600: #2563eb;
   --color-brand-700: #1d4ed8;
   --color-brand-800: #1e40af;
@@ -73,26 +74,31 @@
 :root {
   --sbw: 260px;
 }
+
 *:focus-visible {
   @apply outline-none ring-2 ring-brand-200 ring-offset-2 ring-offset-white dark:ring-offset-slate-900;
 }
+
 .search:focus {
   @apply outline-none ring-0 ring-offset-0 shadow-none;
 }
+
 /* ====== Reusable patterns ====== */
 .card {
-  @apply bg-white dark:bg-slate-800  rounded-2xl shadow-soft;
+  @apply bg-white dark:bg-slate-800 rounded-2xl shadow-soft;
 }
+
 .btn {
-  @apply inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700
-         bg-white dark:bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 transition;
+  @apply inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 transition;
   /* v4: tránh @apply gap-2 -> dùng token spacing trực tiếp */
   gap: var(--spacing-2);
 }
 
 .btn:hover {
   @apply -translate-y-px shadow-md;
-} /* dùng shadow-md, không dùng shadow-medium */
+}
+
+/* dùng shadow-md, không dùng shadow-medium */
 .btn-primary {
   @apply bg-gradient-to-tr from-sky-400 via-sky-300 to-sky-400 text-white border-transparent;
 }
@@ -100,14 +106,16 @@
 .badge {
   @apply inline-flex items-center rounded-full border border-slate-200 dark:border-slate-600 px-2 py-0.5 text-xs font-bold;
 }
+
 .tag {
-  @apply inline-flex items-center rounded-full border border-slate-200 dark:border-slate-600
-         bg-slate-100 dark:bg-slate-700 px-2 py-1 text-xs font-bold text-slate-700 dark:text-slate-200;
+  @apply inline-flex items-center rounded-full border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 px-2 py-1 text-xs font-bold text-slate-700 dark:text-slate-200;
 }
+
 .progress {
   @apply h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden;
 }
-.progress > span {
+
+.progress>span {
   @apply block h-full bg-gradient-to-r from-sky-500 to-sky-400;
 }
 
@@ -122,6 +130,7 @@
 .grid-2 {
   @apply grid grid-cols-1 gap-4 md:grid-cols-2;
 }
+
 .sidebar-w {
   width: var(--sbw);
 }
@@ -132,9 +141,12 @@
 }
 
 .scrollbar-none {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge cũ */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE/Edge cũ */
 }
+
 .scrollbar-none::-webkit-scrollbar {
   /* Chrome/Safari */
   display: none;
@@ -143,18 +155,23 @@
 /* Ẩn scrollbar của trang, nhưng vẫn cho cuộn */
 html,
 body {
-  -ms-overflow-style: none; /* IE/Edge cũ */
-  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;
+  /* IE/Edge cũ */
+  scrollbar-width: none;
+  /* Firefox */
 }
+
 html::-webkit-scrollbar,
 body::-webkit-scrollbar {
-  display: none; /* Chrome/Safari */
+  display: none;
+  /* Chrome/Safari */
 }
 
 /* (khuyến nghị) tránh giật layout khi các vùng khác xuất hiện scrollbar */
 html {
   scrollbar-gutter: stable both-edges;
 }
+
 .shadow-soft {
   box-shadow: 0 6px 16px rgba(2, 6, 23, 0.06);
 }
@@ -162,6 +179,7 @@ html {
 .input {
   @apply w-full rounded-xl px-3 py-2 ring-1 ring-slate-200/80 outline-none focus:ring-2 focus:ring-sky-500;
 }
+
 html {
   font-size: clamp(14px, 0.95vw + 10px, 16px);
 }
@@ -169,14 +187,53 @@ html {
 :root[data-density="compact"] {
   font-size: clamp(13px, 0.85vw + 9px, 15px);
 }
-@keyframes flash {
-  0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, .6); transform: scale(1.00); }
-  50% { box-shadow: 0 0 0 6px rgba(124, 58, 237, .15); transform: scale(1.02); }
-  100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); transform: scale(1.00); }
 
+@keyframes flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, .6);
+    transform: scale(1.00);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(124, 58, 237, .15);
+    transform: scale(1.02);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0);
+    transform: scale(1.00);
+  }
 }
+
 .flash-once {
   animation: flash 1s ease-in-out 5;
   outline: none;
-  position: relative; 
+  position: relative;
+}
+
+@keyframes flash-emerald {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, .5);
+    transform: scale(1.00);
+    background-color: rgba(16, 185, 129, 0.05);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, .15);
+    transform: scale(1.01);
+    background-color: rgba(16, 185, 129, 0.15);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    transform: scale(1.00);
+    background-color: transparent;
+  }
+}
+
+.flash-emerald-once {
+  animation: flash-emerald 1s ease-in-out 5;
+  outline: none;
+  position: relative;
+
 }

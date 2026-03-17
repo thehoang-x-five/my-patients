@@ -3,7 +3,7 @@ import React from 'react';
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 
-export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
+export default function HistoryTable({ tab, rows, onEye, stretch = true, highlightId }) {
   const wrapperCls = stretch
     ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none p-4 pt-0 pb-0 mt-2"
     : "overflow-x-auto overflow-y-auto scrollbar-none p-4";
@@ -44,20 +44,24 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
     </td>
   );
 
-  const Row = ({ children, i }) => (
+  const Row = ({ children, i, isHighlighted }) => (
     <motion.tr
       initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: i * 0.02 }}
+      animate={
+        isHighlighted
+          ? { opacity: 1, y: 0 }
+          : { opacity: 1, y: 0, backgroundColor: i % 2 === 0 ? "transparent" : "rgb(248 250 252 / 0.4)" }
+      }
+      transition={{ delay: i * 0.02, duration: 0.2 }}
       whileHover={{ y: -2 }}
-      className="
+      className={`
         group
-        odd:bg-slate-50/40
         hover:bg-sky-100/50
         focus-within:bg-sky-50/60
         transition
         shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)]
-      "
+        ${isHighlighted ? "flash-emerald-once z-10" : "odd:bg-slate-50/40"}
+      `}
     >
       {children}
     </motion.tr>
@@ -185,8 +189,11 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
             </tr>
           </Thead>
           <tbody>
-            {rows.map((r, i) => (
-              <Row key={`${getVisitCode(r)}-${i}`} i={i}>
+            {rows.map((r, i) => {
+              const visitCode = getVisitCode(r);
+              const isHighlight = highlightId && (visitCode === highlightId || r.id === highlightId);
+              return (
+              <Row key={`${visitCode}-${i}`} i={i} isHighlighted={isHighlight}>
                 <Td first>
                   <span className="inline-flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shadow-[0_0_0_3px_rgba(56,189,248,.25)]" />
@@ -214,7 +221,8 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
                   </Button>
                 </Td>
               </Row>
-            ))}
+              );
+            })}
             {!rows.length && (
               <tr>
                 <td
@@ -244,8 +252,11 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
             </tr>
           </Thead>
           <tbody>
-            {rows.map((r, i) => (
-              <Row key={`${r.invoiceId || r.id}-${i}`} i={i}>
+            {rows.map((r, i) => {
+              const txnCode = r.invoiceId || r.id;
+              const isHighlight = highlightId && txnCode === highlightId;
+              return (
+              <Row key={`${txnCode}-${i}`} i={i} isHighlighted={isHighlight}>
                 <Td first>
                   <span className="inline-flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_0_3px_rgba(6,182,212,.25)]" />
@@ -277,7 +288,8 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
                   </Button>
                 </Td>
               </Row>
-            ))}
+              );
+            })}
             {!rows.length && (
               <tr>
                 <td
