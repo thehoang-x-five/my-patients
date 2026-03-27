@@ -5,9 +5,13 @@ import KpiCard from "./KpiCard.jsx";
 /**
  * Dải 4 KPI trên cùng Dashboard.
  * Dùng grid + items-stretch để các card cao bằng nhau.
+ *
+ * @param {string} role - "clinical" | "cls" | "admin" | "reception" | "default"
+ * @param {object} services - KPI dịch vụ CLS (dùng khi role === "cls")
  */
-export default function KpiRail({ kpi }) {
+export default function KpiRail({ kpi, role = "default", services }) {
   const safe = kpi || {};
+  const isCls = role === "cls";
 
   return (
     <section
@@ -28,19 +32,35 @@ export default function KpiRail({ kpi }) {
       </FadeIn>
 
       <FadeIn>
-        <KpiCard
-          title="Lịch hẹn hôm nay"
-          value={safe.appointments?.value}
-          delta={safe.appointments?.delta}
-          deltaTone="info"
-          meta={safe.appointments?.meta}
-          data24={safe.appointments?.spark}
-          barColor="#0ea5e9"
-          link={{
-            href: "/appointments?view=today",
-            label: "Xem lịch chi tiết",
-          }}
-        />
+        {isCls ? (
+          <KpiCard
+            title="Dịch vụ CLS hôm nay"
+            value={services?.value ?? "0"}
+            delta={services?.delta}
+            deltaTone="info"
+            meta={services?.meta}
+            data24={services?.spark}
+            barColor="#14b8a6"
+            link={{
+              href: "/examination?tab=cls",
+              label: "Xem dịch vụ",
+            }}
+          />
+        ) : (
+          <KpiCard
+            title="Lịch hẹn hôm nay"
+            value={safe.appointments?.value}
+            delta={safe.appointments?.delta}
+            deltaTone="info"
+            meta={safe.appointments?.meta}
+            data24={safe.appointments?.spark}
+            barColor="#0ea5e9"
+            link={{
+              href: "/appointments?view=today",
+              label: "Xem lịch chi tiết",
+            }}
+          />
+        )}
       </FadeIn>
 
       <FadeIn>

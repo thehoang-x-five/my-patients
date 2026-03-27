@@ -48,7 +48,7 @@ function Chip({ active, dot, children, ...rest }) {
   );
 }
 
-const ORDER_STATUS_SEG = ["Tất cả", "Đã kê", "Chờ phát", "Đã phát"];
+const ORDER_STATUS_SEG = ["Tất cả", "Đã kê", "Chờ phát", "Đã phát", "Đã hủy"];
 const ORDER_RANGE_SEG = ["Tất cả", "Hôm nay", "7 ngày", "30 ngày"];
 
 // Trạng thái kho mới: bỏ "Tạm dừng", thay bằng "Hết hạn"
@@ -264,6 +264,8 @@ export default function PrescFilterPopover({
                               ? "amber"
                               : s === "Đã phát"
                               ? "emerald"
+                              : s === "Đã hủy"
+                              ? "rose"
                               : "slate"
                           }
                         >

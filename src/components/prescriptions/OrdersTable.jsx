@@ -107,6 +107,7 @@ const Td = ({ children, first, last, right, classNameOverride = "" }) => (
 export default function OrdersTable({
   items = [],
   onView,
+  onCancel,
   loading = false,
 }) {
   return (
@@ -241,14 +242,26 @@ export default function OrdersTable({
 
                     {/* Thao tác */}
                     <Td last right classNameOverride="whitespace-nowrap">
-                      <Button
-                        type="button"
-                        className="!px-2"
-                        onClick={() => onView?.(o)}
-                        title="Xem chi tiết đơn"
-                      >
-                        👁️
-                      </Button>
+                      <div className="inline-flex items-center gap-1">
+                        <Button
+                          type="button"
+                          className="!px-2"
+                          onClick={() => onView?.(o)}
+                          title="Xem chi tiết đơn"
+                        >
+                          👁️
+                        </Button>
+                        {onCancel && /^(da_ke|cho_phat)$/i.test(o.status || o.trangThai || "") && (
+                          <Button
+                            type="button"
+                            className="!px-2 !text-rose-600 hover:!bg-rose-50"
+                            onClick={() => onCancel?.(o)}
+                            title="Hủy đơn thuốc"
+                          >
+                            ✕
+                          </Button>
+                        )}
+                      </div>
                     </Td>
                   </Row>
                 );

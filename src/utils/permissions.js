@@ -15,40 +15,48 @@ export const NURSE_TYPES = {
 
 // Lấy thông tin user từ store
 export const getUserRole = (user) => {
-  return user?.ChucVu || user?.chucVu || user?.role || null;
+  const r = user?.ChucVu || user?.chucVu || user?.role || "";
+  return r.toString().toLowerCase().trim();
 };
 
 export const getNurseType = (user) => {
-  return user?.LoaiYTa || user?.loaiYTa || user?.nurseType || null;
+  const t = user?.LoaiYTa || user?.loaiYTa || user?.nurseType || "";
+  return t.toString().toLowerCase().replace(/_/g, "").trim();
 };
 
 // Kiểm tra quyền
 export const isAdmin = (user) => {
-  return getUserRole(user) === ROLES.ADMIN;
+  return getUserRole(user) === "admin";
 };
 
 export const isDoctor = (user) => {
-  return getUserRole(user) === ROLES.BAC_SI;
+  const r = getUserRole(user);
+  return r === "bac_si" || r === "doctor";
 };
 
 export const isNurse = (user) => {
-  return getUserRole(user) === ROLES.Y_TA;
+  const r = getUserRole(user);
+  return r === "y_ta" || r === "nurse";
 };
 
 export const isReceptionNurse = (user) => {
-  return isNurse(user) && getNurseType(user) === NURSE_TYPES.HANH_CHINH;
+  const t = getNurseType(user);
+  return isNurse(user) && (t === "hanhchinh" || t === "hc");
 };
 
 export const isClinicalNurse = (user) => {
-  return isNurse(user) && getNurseType(user) === NURSE_TYPES.PHONG_KHAM;
+  const t = getNurseType(user);
+  return isNurse(user) && (t === "phongkham" || t === "lamsang" || t === "pk" || t === "ls");
 };
 
 export const isClsNurse = (user) => {
-  return isNurse(user) && getNurseType(user) === NURSE_TYPES.CAN_LAM_SANG;
+  const t = getNurseType(user);
+  return isNurse(user) && (t === "canlamsang" || t === "cls");
 };
 
 export const isTechnician = (user) => {
-  return getUserRole(user) === ROLES.KY_THUAT_VIEN;
+  const r = getUserRole(user);
+  return r === "ky_thuat_vien" || r === "kythuatvien" || r === "ktv" || r === "technician";
 };
 
 // Quyền tiếp nhận (Lịch hẹn + Bệnh nhân)
@@ -58,15 +66,15 @@ export const canManageReception = (user) => {
 
 // Quyền khám lâm sàng
 export const canManageClinical = (user) => {
-  return isAdmin(user) || isDoctor(user) || isClinicalNurse(user);
+  return isAdmin(user) || isDoctor(user) || isClinicalNurse(user) || isReceptionNurse(user);
 };
 
 // Quyền khám CLS
 export const canManageCls = (user) => {
-  return isAdmin(user) || isTechnician(user) || isClsNurse(user);
+  return isAdmin(user) || isTechnician(user) || isClsNurse(user) || isReceptionNurse(user);
 };
 
 // Quyền gọi vào khám
 export const canCallPatient = (user) => {
-  return canManageClinical(user) || canManageCls(user);
+  return canManageClinical(user) || canManageCls(user) || isReceptionNurse(user);
 };

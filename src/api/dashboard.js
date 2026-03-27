@@ -243,11 +243,6 @@ function mapExamsKpi(src = {}) {
     src.tongSo,
     src.total
   );
-  const waiting = toNumber(
-    src.ChoKham,
-    src.choKham,
-    src.waiting
-  );
   const inProgress = toNumber(
     src.DangKham,
     src.dangKham,
@@ -258,6 +253,11 @@ function mapExamsKpi(src = {}) {
     src.daHoanTat,
     src.done
   );
+  const cancelled = toNumber(
+    src.DaHuy,
+    src.daHuy,
+    src.cancelled
+  );
   const delta = toNumber(
     src.TangTruongPhanTram,
     src.tangTruongPhanTram,
@@ -267,9 +267,9 @@ function mapExamsKpi(src = {}) {
   );
 
   const parts = [];
-  if (waiting !== null) parts.push(`Chờ khám: ${waiting}`);
   if (inProgress !== null) parts.push(`Đang khám: ${inProgress}`);
   if (done !== null) parts.push(`Hoàn tất: ${done}`);
+  if (cancelled !== null) parts.push(`Đã hủy: ${cancelled}`);
 
   return {
     value: total !== null ? String(total) : "0",
@@ -280,6 +280,30 @@ function mapExamsKpi(src = {}) {
         src.phanBoTheoGio ||
         src.duLieu24Gio ||
         src.spark
+    ),
+  };
+}
+
+function mapServicesKpi(src = {}) {
+  const total = toNumber(src.TongDichVu, src.tongDichVu, src.total);
+  const done = toNumber(src.HoanTat, src.hoanTat, src.done);
+  const inProg = toNumber(src.DangLam, src.dangLam, src.inProgress);
+  const cancelled = toNumber(src.DaHuy, src.daHuy, src.cancelled);
+  const delta = toNumber(
+    src.TangTruongPhanTram, src.tangTruongPhanTram, src.deltaPercent, src.delta
+  );
+
+  const parts = [];
+  if (done !== null) parts.push(`Hoàn tất: ${done}`);
+  if (inProg !== null) parts.push(`Đang làm: ${inProg}`);
+  if (cancelled !== null) parts.push(`Đã hủy: ${cancelled}`);
+
+  return {
+    value: total !== null ? String(total) : "0",
+    delta: formatDelta(delta),
+    meta: parts.join(" · ") || null,
+    spark: mapSpark(
+      src.PhanBoTheoGio || src.phanBoTheoGio || src.spark
     ),
   };
 }
@@ -431,6 +455,32 @@ function normalizeDashboardDto(dto) {
       revenue: mapRevenueKpi(revenueRaw),
       exams: mapExamsKpi(examsRaw),
     },
+    // Role-specific: services KPI (for CLS/KTV)
+    services: mapServicesKpi(
+      dto.DichVuHomNay || dto.dichVuHomNay || {}
+    ),
+    // Role-specific: upcoming services list (for CLS/KTV)
+    upcomingServices: (() => {
+      const raw = dto.DichVuSapLam || dto.dichVuSapLam || [];
+      return (Array.isArray(raw) ? raw : []).map((s, i) => ({
+        id: s.MaChiTietDV || s.maChiTietDV || `SVC-${i}`,
+        service: s.TenDichVu || s.tenDichVu || "",
+        patient: s.TenBenhNhan || s.tenBenhNhan || "",
+        status: s.TrangThai || s.trangThai || "da_lap",
+        at: formatTime(s.GioChiDinh || s.gioChiDinh),
+        hasResult: s.CoKetQua ?? s.coKetQua ?? false,
+      }));
+    })(),
+    // Role-specific: trending services (for Admin/HC)
+    trendingServices: (() => {
+      const raw = dto.DichVuTangManh || dto.dichVuTangManh || [];
+      return (Array.isArray(raw) ? raw : []).map((s, i) => ({
+        id: `TREND-${i}`,
+        name: s.TenDichVu || s.tenDichVu || "",
+        type: s.LoaiDichVu || s.loaiDichVu || "cls",
+        count: s.SoLuong ?? s.soLuong ?? 0,
+      }));
+    })(),
     upcomingAppointments: Array.isArray(rawUpcoming)
       ? rawUpcoming.map(normalizeUpcomingAppointment)
       : [],

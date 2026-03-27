@@ -23,7 +23,8 @@ import {
   upsertStockItem,
   subscribePharmacy,
   searchStock,
-  useSearchStock
+  useSearchStock,
+  useCancelPrescription,
 } from "../api/pharmacy.js";
 import { on } from "../api/realtime.js";
 
@@ -33,6 +34,7 @@ import { usePrescStore } from "../components/stores/appStore.js";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
+import { toast } from "react-toastify";
 
 const NEAR_EXPIRY_DAYS = 30;
 const LOW_STOCK_QTY = 10;
@@ -81,6 +83,12 @@ export default function Prescriptions() {
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
+
+  // === Cancel Prescription ===
+  const cancelRx = useCancelPrescription({
+    onSuccess: () => toast.success("Đã hủy đơn thuốc — kho thuốc đã hoàn"),
+    onError: (err) => toast.error(err.message || "Không thể hủy đơn thuốc"),
+  });
 
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -433,6 +441,10 @@ const stockNearOutCount = filteredStock.filter((r) => {
                         onView={(order) =>
                           setView({ open: true, order })
                         }
+                        onCancel={(order) => {
+                          if (!window.confirm(`Bạn có chắc muốn hủy đơn thuốc ${order.id || order.code}? Kho thuốc sẽ được hoàn lại.`)) return;
+                          cancelRx.mutate(order.id || order.code);
+                        }}
                         stretch
                       />
                     </div>

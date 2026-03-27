@@ -1,9 +1,11 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 
 import KpiRail from "../components/overview/KpiRail.jsx";
 import AppointmentsCard from "../components/overview/AppointmentsCard.jsx";
+import UpcomingServicesCard from "../components/overview/UpcomingServicesCard.jsx";
+import TrendingServicesCard from "../components/overview/TrendingServicesCard.jsx";
 import ActivityCard from "../components/overview/ActivityCard.jsx";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -11,6 +13,15 @@ import {
   useDashboardToday,
   subscribeDashboard,
 } from "../api/dashboard.js";
+import { useAuthStore } from "../components/stores/appStore.js";
+import {
+  isAdmin,
+  isDoctor,
+  isClinicalNurse,
+  isClsNurse,
+  isReceptionNurse,
+  isTechnician,
+} from "../utils/permissions.js";
 
 export default function Overview() {
   useViewportVH();
@@ -19,8 +30,18 @@ export default function Overview() {
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
 
-  // Realtime: lắng nghe các event dashboard.* và cập nhật React Query cache
+  // Detect role group
+  const roleGroup = useMemo(() => {
+    if (isAdmin(user)) return "admin";
+    if (isDoctor(user) || isClinicalNurse(user)) return "clinical";
+    if (isTechnician(user) || isClsNurse(user)) return "cls";
+    if (isReceptionNurse(user)) return "reception";
+    return "default";
+  }, [user]);
+
+  // Realtime
   useEffect(() => {
     let off;
     (async () => {
@@ -28,7 +49,6 @@ export default function Overview() {
         off = await subscribeDashboard(queryClient);
       } catch (err) {
         if (import.meta?.env?.DEV) {
-          // eslint-disable-next-line no-console
           console.error("[Dashboard] subscribe realtime failed", err);
         }
       }
@@ -48,7 +68,47 @@ export default function Overview() {
   };
 
   const upcomingAppointments = data?.upcomingAppointments || [];
+  const upcomingServices = data?.upcomingServices || [];
+  const trendingServices = data?.trendingServices || [];
+  const services = data?.services || { value: "0", delta: null, meta: null, spark: [] };
   const activities = data?.activities || [];
+
+  // Left card: depends on role
+  const renderLeftCard = () => {
+    const errMsg = error ? error.message : null;
+
+    if (roleGroup === "cls") {
+      return (
+        <UpcomingServicesCard
+          rows={upcomingServices}
+          loading={isLoading}
+          error={errMsg}
+          maxBodyClass="max-h-none overflow-y-auto pr-1 scrollbar-none"
+        />
+      );
+    }
+
+    if (roleGroup === "admin" || roleGroup === "reception") {
+      return (
+        <TrendingServicesCard
+          rows={trendingServices}
+          loading={isLoading}
+          error={errMsg}
+          maxBodyClass="max-h-none overflow-y-auto pr-1 scrollbar-none"
+        />
+      );
+    }
+
+    // clinical / default
+    return (
+      <AppointmentsCard
+        rows={upcomingAppointments}
+        loading={isLoading}
+        error={errMsg}
+        maxBodyClass="max-h-none overflow-y-auto pr-1 scrollbar-none"
+      />
+    );
+  };
 
   return (
     <motion.main
@@ -66,10 +126,10 @@ export default function Overview() {
       >
         {/* Dải KPI 4 box */}
         <div className="flex-none">
-          <KpiRail kpi={kpi} />
+          <KpiRail kpi={kpi} role={roleGroup} services={services} />
         </div>
 
-        {/* Vùng bên dưới: chỉ còn 2 card, kéo cao full */}
+        {/* Vùng bên dưới: Left card + Activities */}
         <div className="mt-1.5 flex-1 min-h-0 overflow-hidden">
           <section
             className="
@@ -77,20 +137,19 @@ export default function Overview() {
               grid gap-2 items-stretch md:grid-cols-12 content-stretch
             "
           >
-            {/* Lịch hẹn sắp tới (hôm nay) - chiếm nửa trái, cao full */}
-            <div className="p-1  pb-0 md:col-span-6 min-w-0 h-full">
-              <AppointmentsCard
-                rows={upcomingAppointments}
+            {/* Left card — role-specific */}
+            <div className="p-1 pb-0 md:col-span-6 min-w-0 h-full">
+              {renderLeftCard()}
+            </div>
+
+            {/* Hoạt động gần đây — shared */}
+            <div className="p-1 pb-0 md:col-span-6 min-w-0 h-full">
+              <ActivityCard
+                items={activities}
                 loading={isLoading}
                 error={error ? error.message : null}
                 maxBodyClass="max-h-none overflow-y-auto pr-1 scrollbar-none"
               />
-            </div>
-
-            {/* Hoạt động gần đây - nửa phải, cao full */}
-            <div className="p-1 pb-0 md:col-span-6 min-w-0 h-full">
-            <ActivityCard items={activities}   loading={isLoading}
-                error={error ? error.message : null} maxBodyClass="max-h-none overflow-y-auto pr-1 scrollbar-none" />
             </div>
           </section>
         </div>

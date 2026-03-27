@@ -702,3 +702,27 @@ export function useCancelVisit(options = {}) {
     ...options,
   });
 }
+
+// ===== HỦY PHIẾU CLS =====
+// Backend: PUT /api/cls/orders/{maPhieuKhamCls}/cancel
+export async function cancelClsOrder(maPhieuKhamCls) {
+  if (!maPhieuKhamCls) throw new Error("Thiếu maPhieuKhamCls");
+  const res = await http.put(`${CLS_BASE}/orders/${maPhieuKhamCls}/cancel`);
+  return unwrap(res);
+}
+
+export function useCancelClsOrder(options = {}) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: cancelClsOrder,
+    onSuccess: (data, vars, ctx) => {
+      qc.invalidateQueries({ queryKey: ["queue"] });
+      qc.invalidateQueries({ queryKey: ["visits"] });
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      if (typeof options.onSuccess === "function") {
+        options.onSuccess(data, vars, ctx);
+      }
+    },
+    ...options,
+  });
+}

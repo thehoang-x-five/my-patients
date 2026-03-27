@@ -2,7 +2,7 @@
 // API & hooks cho trang Nhà thuốc (Kho thuốc + Đơn thuốc)
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { get, post } from "./http.js";
+import { get, post, put } from "./http.js";
 import { on } from "./realtime.js";
 
 /** ================== HELPERS ================== */
@@ -149,23 +149,23 @@ function normalizePrescriptionItem(d = {}) {
     d.GiaNiemYet
   );
   const amount = toNumber(
-        d.amount,
-        d.thanhTien,
-        d.ThanhTien,
-        price * qty
-      );
-    
-      const dose =
-        d.dose ??
-        d.chiDinhSuDung ??
+    d.amount,
+    d.thanhTien,
+    d.ThanhTien,
+    price * qty
+  );
+
+  const dose =
+    d.dose ??
+    d.chiDinhSuDung ??
     d.ChiDinhSuDung ??
-        d.lieuDung ??
-        d.LieuDung ??
-        d.huongDan ??
-        d.HuongDan ??
-        d.cachDung ??
-        d.CachDung ??
-        "";
+    d.lieuDung ??
+    d.LieuDung ??
+    d.huongDan ??
+    d.HuongDan ??
+    d.cachDung ??
+    d.CachDung ??
+    "";
 
   const usage =
     d.usage ??
@@ -231,25 +231,25 @@ function normalizePrescription(dto = {}) {
     dto.PhieuChanDoanCuoi?.ChanDoanCuoi ??
     "";
 
-    const atRaw =
-        dto.at ??
-        dto.thoiGianKeDon ??
-        dto.ThoiGianKeDon ??
-        dto.createdAt ??
-        dto.CreatedAt ??
-        null;
-    
-      const rawStatus =
-        dto.status ??
-        dto.trangThai ??
-        dto.TrangThai ??
-        "";
+  const atRaw =
+    dto.at ??
+    dto.thoiGianKeDon ??
+    dto.ThoiGianKeDon ??
+    dto.createdAt ??
+    dto.CreatedAt ??
+    null;
 
-        const total = toNumber(
-              dto.total,
-              dto.tongTienDon,
-              dto.TongTienDon
-            );
+  const rawStatus =
+    dto.status ??
+    dto.trangThai ??
+    dto.TrangThai ??
+    "";
+
+  const total = toNumber(
+    dto.total,
+    dto.tongTienDon,
+    dto.TongTienDon
+  );
 
   const itemsRaw =
     dto.items ??
@@ -265,22 +265,22 @@ function normalizePrescription(dto = {}) {
     id: code || dto.id,
     code,
     rawStatus,
-        status: rawStatus,
-        at: atRaw,
-        total,
-        // alias cho bệnh nhân
-        patientId: ptId,
-        patientName: ptName,
-        ptId,
-        ptName,
-        // alias cho bác sĩ
-        doctorId,
-        doctorName,
-        doctor: doctorName,
-        // alias cho chẩn đoán
-        diagnosisId,
-        diagnosis,
-        diag: diagnosis,
+    status: rawStatus,
+    at: atRaw,
+    total,
+    // alias cho bệnh nhân
+    patientId: ptId,
+    patientName: ptName,
+    ptId,
+    ptName,
+    // alias cho bác sĩ
+    doctorId,
+    doctorName,
+    doctor: doctorName,
+    // alias cho chẩn đoán
+    diagnosisId,
+    diagnosis,
+    diag: diagnosis,
     items,
     raw: dto,
   };
@@ -320,6 +320,7 @@ export async function searchRxOrders({ keyword, status, fromDate, toDate, page =
       "Đã kê": "da_ke",
       "Chờ phát": "cho_phat",
       "Đã phát": "da_phat",
+      "Đã hủy": "da_huy",
     };
     params.append("trangThai", statusMap[status] || status);
   }
@@ -329,7 +330,7 @@ export async function searchRxOrders({ keyword, status, fromDate, toDate, page =
   params.append("pageSize", pageSize);
 
   const data = await get(`/pharmacy/prescriptions?${params.toString()}`);
-  
+
   // ✅ Trả về PagedResult đầy đủ
   const list = extractItems(data);
   return {
@@ -369,7 +370,7 @@ export async function searchStock({ keyword, status, expFrom, expTo, tonMin, ton
   };
 
   const data = await post("/pharmacy/stock/search", payload);
-  
+
   // ✅ Trả về PagedResult đầy đủ
   if (data && typeof data === "object" && ("TotalItems" in data || "totalItems" in data)) {
     return {
@@ -379,7 +380,7 @@ export async function searchStock({ keyword, status, expFrom, expTo, tonMin, ton
       PageSize: data.PageSize ?? data.pageSize ?? pageSize,
     };
   }
-  
+
   // Fallback: nếu không phải PagedResult
   const list = extractItems(data);
   return {
@@ -491,6 +492,27 @@ export function useUpsertStockItem(options = {}) {
     onSuccess: (data, variables, context) => {
       qc.invalidateQueries({ queryKey: ["pharmacy", "stock"] });
       qc.invalidateQueries({ queryKey: ["pharmacy", "rxOrders"] });
+      if (typeof onSuccess === "function") {
+        onSuccess(data, variables, context);
+      }
+    },
+    ...rest,
+  });
+}
+
+/** ================== CANCEL ĐƠN THUỐC ================== */
+
+export const cancelPrescription = (maDonThuoc) =>
+  put(`/pharmacy/prescriptions/${maDonThuoc}/cancel`);
+
+export function useCancelPrescription(opts = {}) {
+  const qc = useQueryClient();
+  const { onSuccess, ...rest } = opts;
+  return useMutation({
+    mutationFn: cancelPrescription,
+    onSuccess: (data, variables, context) => {
+      qc.invalidateQueries({ queryKey: ["pharmacy", "rxOrders"] });
+      qc.invalidateQueries({ queryKey: ["pharmacy", "stock"] });
       if (typeof onSuccess === "function") {
         onSuccess(data, variables, context);
       }

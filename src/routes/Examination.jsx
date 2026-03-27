@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import ExamToolbar from "../components/exam/ExamToolbar.jsx";
@@ -23,6 +23,8 @@ import { on } from "../api/realtime.js";
 import {
   useCreateExamOrder,
   useCreateDiagnosis,
+  useCancelVisit,
+  useCancelClsOrder,
 } from "../api/examination.js";
 import { useCreateHistoryVisit } from "../api/history.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -190,6 +192,18 @@ export default function Examination() {
     const orderMut = useCreateExamOrder();
     const dxMut = useCreateDiagnosis({ skipInvalidate: true });
   const createVisitMut = useCreateHistoryVisit();
+
+  // === Cancel visit mutation ===
+  const cancelVisitMut = useCancelVisit({
+    onSuccess: () => toast.success("Đã hủy lượt khám thành công"),
+    onError: (err) => toast.error(err?.response?.data?.Message || err?.message || "Không thể hủy lượt khám"),
+  });
+
+  // === Cancel CLS mutation ===
+  const cancelClsMut = useCancelClsOrder({
+    onSuccess: () => toast.success("Đã hủy phiếu Cận lâm sàng thành công"),
+    onError: (err) => toast.error(err?.response?.data?.Message || err?.message || "Không thể hủy phiếu CLS"),
+  });
 
   const [active, setActive] = useState(null);
   const [inProgress, setInProgress] = useState(() => new Set());
@@ -790,6 +804,8 @@ export default function Examination() {
                     <PatientTable
                       items={filtered}
                       onStart={canCall ? handleStart : undefined}
+                      onCancelVisit={(maLuot) => cancelVisitMut.mutate(maLuot)}
+                      onCancelClsOrder={(maPhieuCls) => cancelClsMut.mutate(maPhieuCls)}
                       inProgress={inProgress}
                       stretch
                     />

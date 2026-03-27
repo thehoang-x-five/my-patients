@@ -85,7 +85,7 @@ function Row({ i, children }) {
       exit={{ opacity: 0, y: -6 }}
       transition={{ delay: i * 0.02 }}
       whileHover={{ y: -2 }}
-      className="group odd:bg-teal-50/35 hover:bg-teal-100/45 focus-within:bg-teal-50/60 transition shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)]"
+      className="group relative odd:bg-teal-50/35 hover:bg-teal-100/45 focus-within:bg-teal-50/60 transition shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)] hover:z-30"
     >
       {children}
     </motion.tr>
@@ -232,249 +232,324 @@ function getKey(p) {
   );
 }
 
-export default function PatientTable({ items = [], onStart, onCancelVisit, inProgress = new Set(), stretch = false }) {
-  const [confirmCancel, setConfirmCancel] = useState({ open: false, name: "", maLuot: null });
+export default function PatientTable({ items = [], onStart, onCancelVisit, onCancelClsOrder, inProgress = new Set(), stretch = false }) {
+  const [confirmCancel, setConfirmCancel] = useState({ open: false, type: null, name: "", targetId: null });
 
   return (
     <>
-    <section
-      className={`pt-2 bg-white overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
-      role="region"
-      aria-label="Danh sách chờ khám"
-    >
-      <div className={`${stretch ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"} p-4 pb-0 pt-0`}>
-        <table className="min-w-full table-fixed">
-          <colgroup>
-            <col style={{ width: "2%" }} />
-            <col style={{ width: "5%" }} />
-            <col style={{ width: "8%" }} />
-            <col style={{ width: "16%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "6%" }} />
-            <col style={{ width: "6%" }} />
-            <col style={{ width: "8%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "8%" }} />
-          </colgroup>
+      <section
+        className={`pt-2 bg-white overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
+        role="region"
+        aria-label="Danh sách chờ khám"
+      >
+        <div className={`${stretch ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"} p-4 pb-0 pt-0`}>
+          <table className="min-w-full table-fixed">
+            <colgroup>
+              <col style={{ width: "2%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "8%" }} />
+            </colgroup>
 
-          <Thead>
-            <Th first />
-            <Th>STT</Th>
-            <Th>Mã BN</Th>
-            <Th>Họ tên</Th>
-            <Th>Khoa</Th>
-            <Th>Nhân sự</Th>
-            <Th>Giờ hẹn</Th>
-            <Th>Đến lúc</Th>
-            <Th>Nguồn</Th>
-            <Th>Trạng thái</Th>
-            <Th>Ghi chú</Th>
-            <Th last right>Thao tác</Th>
-          </Thead>
+            <Thead>
+              <Th first />
+              <Th>STT</Th>
+              <Th>Mã BN</Th>
+              <Th>Họ tên</Th>
+              <Th>Khoa</Th>
+              <Th>Nhân sự</Th>
+              <Th>Giờ hẹn</Th>
+              <Th>Đến lúc</Th>
+              <Th>Nguồn</Th>
+              <Th>Trạng thái</Th>
+              <Th>Ghi chú</Th>
+              <Th last right>Thao tác</Th>
+            </Thead>
 
-          <motion.tbody layout>
-            <AnimatePresence initial={false}>
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={12} className="px-3 py-10 text-center text-slate-500">
-                    Không có bệnh nhân chờ.
-                  </td>
-                </tr>
-              ) : (
-                items.map((p, i) => {
-                  const key = getKey(p);
-                  const active = inProgress.has(key);
-                  const t = tone(p, active);
-                  const queueType = p.LoaiHangDoi || p.loaiHangDoi || p.queueType || p.visitType;
-                  const isClsQueue = /can_lam_sang|cls/i.test(queueType || "");
-                  const sourceVal = isClsQueue
-                    ? null
-                    : fld(
-                      p,
-                      "Nguon",
-                      "nguon",
-                      "source",
-                      "HinhThucTiepNhan",
-                      "hinhThucTiepNhan",
-                      "LoaiHen",
-                      "loaiHen"
-                    );
+            <motion.tbody layout>
+              <AnimatePresence initial={false}>
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="px-3 py-10 text-center text-slate-500">
+                      Không có bệnh nhân chờ.
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((p, i) => {
+                    const key = getKey(p);
+                    const active = inProgress.has(key);
+                    const t = tone(p, active);
+                    const queueType = p.LoaiHangDoi || p.loaiHangDoi || p.queueType || p.visitType;
+                    const isClsQueue = /can_lam_sang|cls/i.test(queueType || "");
+                    const sourceVal = isClsQueue
+                      ? null
+                      : fld(
+                        p,
+                        "Nguon",
+                        "nguon",
+                        "source",
+                        "HinhThucTiepNhan",
+                        "hinhThucTiepNhan",
+                        "LoaiHen",
+                        "loaiHen"
+                      );
 
-                  // Resolve patient display values depending on queue type (LS vs CLS)
-                  const patientId = fld(p, "MaBenhNhan", "maBenhNhan", "pid", "id");
-                  const patientName =
-                    fld(
-                      p,
-                      "TenBenhNhan",
-                      "PhieuKhamLsFull.TenBenhNhan",
-                      "PhieuKhamLsFull.HoTen",
-                      "PhieuKhamLs.TenBenhNhan",
-                      "PhieuKhamClsFull.TenBenhNhan",
-                      "PhieuKhamClsFull.HoTen",
-                      "PhieuKhamCls.TenBenhNhan",
-                      "HoTen",
-                      "name"
-                    ) || "";
-
-                  const deptName = fld(
-                    p,
-                    "TenKhoa",
-                    "PhieuKhamLsFull.TenKhoa",
-                    "PhieuKhamClsFull.TenKhoa",
-                    "dept",
-                    "department"
-                  );
-
-                  let doctorName;
-                  if (isClsQueue) {
-                    doctorName =
+                    // Resolve patient display values depending on queue type (LS vs CLS)
+                    const patientId = fld(p, "MaBenhNhan", "maBenhNhan", "pid", "id");
+                    const patientName =
                       fld(
                         p,
-                        "TenYTaThucHien",
-                        "PhieuKhamClsItem.TenYTaThucHien",
-                        "PhieuKhamClsFull.TenYTaThucHien",
-                        "PhieuKhamClsFull.TenNguoiLap",
-                        "PhieuKhamCls.TenNguoiLap"
-                      ) ||
-                      (() => {
-                        const list = p?.PhieuKhamClsFull?.ListItemDV || p?.PhieuKhamCls?.ListItemDV || [];
-                        if (Array.isArray(list) && list.length) {
-                          return (
-                            list[0]?.TenYTaThucHien ||
-                            list[0]?.TenNguoiLap ||
-                            list[0]?.NguoiLap ||
-                            ""
-                          );
-                        }
-                        return "";
-                      })();
-                  } else {
-                    doctorName = fld(
-                      p,
-                      "TenBacSiKham",
-                      "PhieuKhamLsFull.TenBacSiKham",
-                      "PhieuKhamLs.TenBacSiKham",
-                      "PhieuKhamLs.TenBacSi",
-                      "TenBacSi",
-                      "doctor"
-                    );
-                  }
+                        "TenBenhNhan",
+                        "PhieuKhamLsFull.TenBenhNhan",
+                        "PhieuKhamLsFull.HoTen",
+                        "PhieuKhamLs.TenBenhNhan",
+                        "PhieuKhamClsFull.TenBenhNhan",
+                        "PhieuKhamClsFull.HoTen",
+                        "PhieuKhamCls.TenBenhNhan",
+                        "HoTen",
+                        "name"
+                      ) || "";
 
-                  // Appointment time: prefer explicit timestamp fields, otherwise combine NgayLap+GioLap when present
-                  let apptTimeRaw = null;
-                  if (!isClsQueue) {
-                    apptTimeRaw = fld(p, "ThoiGianLichHen", "thoiGianLichHen", "time");
-                    if (!apptTimeRaw) {
-                      const ngayLap = fld(p, "PhieuKhamLs.NgayLap", "PhieuKhamLsFull.NgayLap");
-                      const gioLap = fld(p, "PhieuKhamLs.GioLap", "PhieuKhamLsFull.GioLap");
-                      if (ngayLap && gioLap) {
-                        const datePart = new Date(ngayLap).toISOString().slice(0, 10);
-                        apptTimeRaw = `${datePart}T${gioLap}`;
-                      } else if (ngayLap) {
-                        apptTimeRaw = ngayLap;
+                    const deptName = fld(
+                      p,
+                      "TenKhoa",
+                      "PhieuKhamLsFull.TenKhoa",
+                      "PhieuKhamClsFull.TenKhoa",
+                      "dept",
+                      "department"
+                    );
+
+                    let doctorName;
+                    if (isClsQueue) {
+                      doctorName =
+                        fld(
+                          p,
+                          "TenYTaThucHien",
+                          "PhieuKhamClsItem.TenYTaThucHien",
+                          "PhieuKhamClsFull.TenYTaThucHien",
+                          "PhieuKhamClsFull.TenNguoiLap",
+                          "PhieuKhamCls.TenNguoiLap"
+                        ) ||
+                        (() => {
+                          const list = p?.PhieuKhamClsFull?.ListItemDV || p?.PhieuKhamCls?.ListItemDV || [];
+                          if (Array.isArray(list) && list.length) {
+                            return (
+                              list[0]?.TenYTaThucHien ||
+                              list[0]?.TenNguoiLap ||
+                              list[0]?.NguoiLap ||
+                              ""
+                            );
+                          }
+                          return "";
+                        })();
+                    } else {
+                      doctorName = fld(
+                        p,
+                        "TenBacSiKham",
+                        "PhieuKhamLsFull.TenBacSiKham",
+                        "PhieuKhamLs.TenBacSiKham",
+                        "PhieuKhamLs.TenBacSi",
+                        "TenBacSi",
+                        "doctor"
+                      );
+                    }
+
+                    // Appointment time: prefer explicit timestamp fields, otherwise combine NgayLap+GioLap when present
+                    let apptTimeRaw = null;
+                    if (!isClsQueue) {
+                      apptTimeRaw = fld(p, "ThoiGianLichHen", "thoiGianLichHen", "time");
+                      if (!apptTimeRaw) {
+                        const ngayLap = fld(p, "PhieuKhamLs.NgayLap", "PhieuKhamLsFull.NgayLap");
+                        const gioLap = fld(p, "PhieuKhamLs.GioLap", "PhieuKhamLsFull.GioLap");
+                        if (ngayLap && gioLap) {
+                          const datePart = new Date(ngayLap).toISOString().slice(0, 10);
+                          apptTimeRaw = `${datePart}T${gioLap}`;
+                        } else if (ngayLap) {
+                          apptTimeRaw = ngayLap;
+                        }
                       }
                     }
-                  }
 
-                  const checkinRaw = fld(p, "ThoiGianCheckin", "thoiGianCheckin", "checkIn");
-                  const noteText = fld(p, "Nhan", "nhan", "GhiChu", "note", "symptoms");
+                    const checkinRaw = fld(p, "ThoiGianCheckin", "thoiGianCheckin", "checkIn");
+                    const noteText = fld(p, "Nhan", "nhan", "GhiChu", "note", "symptoms");
 
-                  // ✅ Queue status for cancel button visibility
-                  const queueStatus = (p.TrangThai || p.trangThai || p.status || "").toLowerCase();
+                    // ✅ Queue status for cancel button visibility
+                    const queueStatus = (p.TrangThai || p.trangThai || p.status || "").toLowerCase();
 
-                  return (
-                    <Row key={key ?? i} i={i}>
-                      <Td first>
-                        <i className={`inline-block w-2 h-2 rounded-full ${pillTone[t].dot}`} title={t} />
-                      </Td>
-                      <Td>{i + 1}</Td>
-                      <Td>
-                        <span className="font-mono font-semibold truncate block">{patientId || "--"}</span>
-                      </Td>
-                      <Td>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <InitialAvatar name={patientName || ""} id={patientId || ""} />
-                          <div className="min-w-0">
-                            <div className="font-semibold truncate text-slate-900">{patientName || "--"}</div>
-                            {sourceVal === "walkin" && (
-                              <div className="text-[11px] text-slate-500 truncate">Khách đến trực tiếp</div>
+                    return (
+                      <Row key={key ?? i} i={i}>
+                        <Td first>
+                          <div className="relative flex items-center justify-center w-8 h-8 mx-auto">
+                            {/* Dot: hidden on hover if cancelable */}
+                            <i
+                              className={`inline-block w-2.5 h-2.5 rounded-full ${pillTone[t].dot} ${(onCancelVisit || onCancelClsOrder) && (queueStatus === "cho_goi" || queueStatus === "dang_goi")
+                                ? "group-hover:hidden"
+                                : ""
+                                } transition-all duration-200`}
+                            />
+
+                            {/* X Button: shown on hover if cancelable */}
+                            {(onCancelVisit || onCancelClsOrder) && (queueStatus === "cho_goi" || queueStatus === "dang_goi") && (
+                              <div className="absolute inset-0 hidden group-hover:flex items-center justify-center translate-x-[-2px]">
+                                <motion.button
+                                  initial={{ opacity: 0, scale: 0.5 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  whileHover={{ scale: 1.2, backgroundColor: "#fee2e2" }}
+                                  whileTap={{ scale: 0.9 }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const patientName =
+                                      fld(
+                                        p,
+                                        "TenBenhNhan",
+                                        "PhieuKhamLsFull.TenBenhNhan",
+                                        "PhieuKhamClsFull.TenBenhNhan",
+                                        "HoTen",
+                                        "name"
+                                      ) || "";
+
+                                    if (isClsQueue) {
+                                      const maPhieuCls = fld(
+                                        p,
+                                        "MaPhieuKhamCls",
+                                        "maPhieuKhamCls",
+                                        "PhieuKhamCls.MaPhieuKhamCls",
+                                        "PhieuKhamClsFull.MaPhieuKhamCls",
+                                        "PhieuKhamClsFull.MaPhieuKham",
+                                        "MaPhieuKham",
+                                        "maPhieuKham",
+                                        "id"
+                                      );
+                                      if (maPhieuCls) {
+                                        setConfirmCancel({ open: true, type: "cls", name: patientName, targetId: maPhieuCls });
+                                      } else {
+                                        console.warn("[PatientTable] Missing CLS ID for", p);
+                                      }
+                                    } else {
+                                      const maLuot = fld(
+                                        p,
+                                        "MaLuotKham",
+                                        "maLuotKham",
+                                        "MaLuot",
+                                        "maLuot",
+                                        "visitId",
+                                        "MaPhieuKham",
+                                        "maPhieuKham",
+                                        "MaPhieuKhamLs",
+                                        "maPhieuKhamLs",
+                                        "PhieuKhamLsFull.MaPhieuKham",
+                                        "PhieuKhamLsFull.MaLuotKham",
+                                        "id"
+                                      );
+                                      if (maLuot) {
+                                        setConfirmCancel({ open: true, type: "visit", name: patientName, targetId: maLuot });
+                                      } else {
+                                        console.warn("[PatientTable] Missing Visit ID for", p);
+                                      }
+                                    }
+                                  }}
+                                  className="relative group/x h-7 w-7 flex items-center justify-center bg-rose-100 text-rose-600 rounded-lg shadow-sm border border-rose-200 transition-all z-10"
+                                >
+                                  <span className="text-[14px] font-bold leading-none">✕</span>
+
+                                  {/* Custom Tooltip (Bong bóng) */}
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/x:block z-[100]">
+                                    <div className="bg-slate-800 text-white text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap relative border border-slate-700">
+                                      Hủy
+                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800" />
+                                    </div>
+                                  </div>
+                                </motion.button>
+                              </div>
                             )}
                           </div>
-                        </div>
-                      </Td>
-                      <Td>
-                        <span className="truncate block">{deptName || "--"}</span>
-                      </Td>
-                      <Td>
-                        <span className="truncate block">{doctorName || "--"}</span>
-                      </Td>
-                      <Td>
-                        <span className="truncate block">
-                          {apptTimeRaw
-                            ? new Date(apptTimeRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
-                            : "--"}
-                        </span>
-                      </Td>
-                      <Td title={checkinRaw ? new Date(checkinRaw).toLocaleString() : ""}>
-                        <span className="truncate block">
-                          {checkinRaw
-                            ? new Date(checkinRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
-                            : "--"}
-                        </span>
-                      </Td>
-                      <Td>
-                        <SourcePills item={p} />
-                      </Td>
-                      <Td>
-                        <StatusBadge item={p} />
-                      </Td>
-                      <Td>
-                        <div className="truncate text-slate-700 max-w-[8rem] break-words">{noteText || "--"}</div>
-                      </Td>
-                      <Td last right>
-                        <div className="flex items-center justify-end gap-2">
-                          <ActionButton active={active} onClick={() => onStart?.(p)} />
-                          {onCancelVisit && (queueStatus === "cho_goi" || queueStatus === "dang_goi") && (
-                            <motion.button
-                              whileHover={{ y: -2 }}
-                              whileTap={{ scale: 0.98 }}
-                              onClick={() => {
-                                const maLuot = p.MaLuotKham || p.maLuotKham || p.visitId;
-                                if (maLuot) {
-                                  setConfirmCancel({ open: true, name: patientName, maLuot });
-                                }
-                              }}
-                              className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition"
-                              title="Hủy lượt khám"
-                            >
-                              ✕ Hủy
-                            </motion.button>
-                          )}
-                        </div>
-                      </Td>
-                    </Row>
-                  );
-                })
-              )}
-            </AnimatePresence>
-          </motion.tbody>
-        </table>
-      </div>
-    </section>
+                        </Td>
+                        <Td>{i + 1}</Td>
+                        <Td>
+                          <span className="font-mono font-semibold truncate block">{patientId || "--"}</span>
+                        </Td>
+                        <Td>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <InitialAvatar name={patientName || ""} id={patientId || ""} />
+                            <div className="min-w-0">
+                              <div className="font-semibold truncate text-slate-900">{patientName || "--"}</div>
+                              {sourceVal === "walkin" && (
+                                <div className="text-[11px] text-slate-500 truncate">Khách đến trực tiếp</div>
+                              )}
+                            </div>
+                          </div>
+                        </Td>
+                        <Td>
+                          <span className="truncate block">{deptName || "--"}</span>
+                        </Td>
+                        <Td>
+                          <span className="truncate block">{doctorName || "--"}</span>
+                        </Td>
+                        <Td>
+                          <span className="truncate block">
+                            {apptTimeRaw
+                              ? new Date(apptTimeRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+                              : "--"}
+                          </span>
+                        </Td>
+                        <Td title={checkinRaw ? new Date(checkinRaw).toLocaleString() : ""}>
+                          <span className="truncate block">
+                            {checkinRaw
+                              ? new Date(checkinRaw).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+                              : "--"}
+                          </span>
+                        </Td>
+                        <Td>
+                          <SourcePills item={p} />
+                        </Td>
+                        <Td>
+                          <StatusBadge item={p} />
+                        </Td>
+                        <Td>
+                          <div className="truncate text-slate-700 max-w-[8rem] break-words">{noteText || "--"}</div>
+                        </Td>
+                        <Td last right>
+                          <div className="flex items-center justify-end gap-2">
+                            <ActionButton active={active} onClick={() => onStart?.(p)} />
+                          </div>
+                        </Td>
+                      </Row>
+                    );
+                  })
+                )}
+              </AnimatePresence>
+            </motion.tbody>
+          </table>
+        </div>
+      </section>
 
       <ConfirmModal
         open={confirmCancel.open}
-        onClose={() => setConfirmCancel({ open: false, name: "", maLuot: null })}
+        onClose={() => setConfirmCancel({ open: false, type: null, name: "", targetId: null })}
         onConfirm={() => {
-          if (confirmCancel.maLuot) {
-            onCancelVisit(confirmCancel.maLuot);
+          if (confirmCancel.targetId) {
+            if (confirmCancel.type === "visit") {
+              onCancelVisit(confirmCancel.targetId);
+            } else if (confirmCancel.type === "cls") {
+              onCancelClsOrder(confirmCancel.targetId);
+            }
           }
         }}
-        title="Hủy lượt khám"
-        message={`Lượt khám của bênh nhân "${confirmCancel.name}" sẽ bị hủy bỏ. Bạn có chắc chắn?`}
-        confirmText="Hủy lượt"
+        title={confirmCancel.type === "visit" ? "Hủy lượt khám" : "Hủy phiếu Cận lâm sàng"}
+        message={
+          confirmCancel.type === "visit"
+            ? `Lượt khám của bệnh nhân "${confirmCancel.name}" sẽ bị hủy bỏ. Bạn có chắc chắn?`
+            : `Phiếu CLS của bệnh nhân "${confirmCancel.name}" sẽ bị hủy bỏ. Bạn có chắc chắn?`
+        }
+        confirmText="Đồng ý hủy"
         cancelText="Để sau"
         tone="warning"
       />

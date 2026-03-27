@@ -21,13 +21,44 @@ export default function ReportToolbar({
 
   return (
     <header className="flex top-0 z-9 -mx-4 px-4">
-      <div className="relative flex w-full items-center gap-3 justify-end">
-        {/* View switch: Chart / Table */}
-        <div
-          className="relative inline-flex p-1s overflow-hidden rounded-xl ring-1 ring-slate-200/80 bg-white ml-0 mr-auto"
-          role="tablist"
-          aria-label="Chế độ xem"
-        >
+      <div className="relative flex w-full items-center gap-3 justify-between">
+        {/* LÊN ĐẦU: Tab switcher (Tổng quan | Phân tích Y khoa) */}
+        <div className="relative inline-flex p-0.5 overflow-hidden rounded-xl ring-1 ring-slate-200/80 bg-white">
+          {[
+            { key: "overview", label: "📊 Tổng quan" },
+            { key: "analytics", label: "🔬 Phân tích Y khoa" },
+          ].map(({ key, label }) => {
+            const active = tab === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                className={`relative z-10 px-3 py-1.5 text-xs sm:text-sm font-semibold transition ${
+                  active ? "text-cyan-700" : "text-slate-600 hover:text-slate-800"
+                }`}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="reportsTabPill"
+                    className="absolute inset-0 rounded-lg bg-cyan-50"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className="relative">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* View switch: Chart / Table */}
+          {tab === "overview" && (
+            <div
+              className="relative inline-flex p-0.5 overflow-hidden rounded-xl ring-1 ring-slate-200/80 bg-white"
+              role="tablist"
+              aria-label="Chế độ xem"
+            >
           {["chart", "table"].map((mode) => {
             const label =
               mode === "chart" ? "Xem biểu đồ" : "Xem bảng số liệu";
@@ -59,8 +90,7 @@ export default function ReportToolbar({
             );
           })}
         </div>
-
-        
+        )}
 
         {/* Reset – ngoài popover */}
         <button
@@ -102,6 +132,7 @@ export default function ReportToolbar({
             onClose={() => setOpenFilter(false)}
           />
         )}
+        </div>
       </div>
     </header>
   );

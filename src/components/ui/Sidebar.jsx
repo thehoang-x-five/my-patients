@@ -18,6 +18,7 @@ const allLinks = [
   ["/examination", "Khám bệnh", "examinations", (u) => !isAdmin(u)],
   ["/departments", "Khoa phòng", "departments", () => true],
   ["/staff", "Nhân sự", "staff", (u) => isAdmin(u)],
+  ["/admin/users", "QL Nhân viên", "admin_users", (u) => isAdmin(u)],
   ["/prescriptions", "Đơn thuốc", "prescriptions", (u) => canManageReception(u) || isDoctor(u)],
   ["/history", "Lịch sử", "history", (u) => canManageReception(u) || isDoctor(u)],
   ["/notifications", "Thông báo", "notifications", () => true],
@@ -122,6 +123,24 @@ const iconMap = {
         stroke="currentColor"
         strokeWidth="1.6"
         strokeLinecap="round"
+      />
+    </svg>
+  ),
+  admin_users: () => (
+    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+      <circle cx="12" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M5 19c1-3 3.5-5 7-5s6 2 7 5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M19 14l1.5 1.5L19 17"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   ),

@@ -6,6 +6,7 @@ import ReportToolbar from "../components/reports/ReportToolbar.jsx";
 import KpiCard from "../components/reports/KpiCard.jsx";
 import OverviewChart from "../components/reports/OverviewChart.jsx";
 import ReportsTable from "../components/reports/ReportsTable.jsx";
+import ClinicalAnalytics from "../components/reports/ClinicalAnalytics.jsx";
 
 import { useReportsOverview } from "../api/reports.js";
 import useViewportVH from "../hooks/useViewportVH";
@@ -120,58 +121,75 @@ export default function Reports() {
           onReset={onReset}
         />
 
-        {/* KPI rail – đồng bộ tone đỏ nhẹ + nâu nhẹ */}
-        <section className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard
-            title="Doanh thu"
-            value={kpi.revenue.value}
-            trend={kpi.revenue.trend}
-            data={sparkRev}
-            color="#b91c1c" // đỏ trầm
-            formatter={VND}
-          />
-          <KpiCard
-            title="Bệnh nhân mới"
-            value={kpi.newPatients.value}
-            trend={kpi.newPatients.trend}
-            data={sparkNew}
-            color="#0ea5e9" // cyan/sky
-          />
-          <KpiCard
-            title="Tái khám"
-            value={kpi.revisits.value}
-            trend={kpi.revisits.trend}
-            data={sparkRevisit}
-            color="#c2410c" // nâu cam nhẹ
-          />
-          <KpiCard
-            title="Tỷ lệ huỷ (%)"
-            value={kpi.cancelRate.value}
-            trend={kpi.cancelRate.trend}
-            data={sparkCancel}
-            color="#fb7185" // rose sáng
-          />
-        </section>
 
-        {/* Content */}
         <AnimatePresence mode="wait">
-          <motion.div
-            key={`${tab}-${view}`}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            className="mt-2.5 flex-1 min-h-0 p-1 overflow-hidden"
-          >
-            {isLoading || loadingView ? (
-              <section className="rounded-2xl bg-white ring-1 ring-slate-200/80 p-3 h-full">
-                <div className="skel h-full" />
+          {tab === "analytics" ? (
+            <motion.div
+              key="analytics"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="mt-2.5 flex-1 min-h-0 p-1 overflow-y-auto scrollbar-none"
+            >
+              <ClinicalAnalytics period={period} from={from} to={to} />
+            </motion.div>
+          ) : (
+            <>
+              {/* KPI rail – đồng bộ tone đỏ nhẹ + nâu nhẹ */}
+              <section className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <KpiCard
+                  title="Doanh thu"
+                  value={kpi.revenue.value}
+                  trend={kpi.revenue.trend}
+                  data={sparkRev}
+                  color="#b91c1c"
+                  formatter={VND}
+                />
+                <KpiCard
+                  title="Bệnh nhân mới"
+                  value={kpi.newPatients.value}
+                  trend={kpi.newPatients.trend}
+                  data={sparkNew}
+                  color="#0ea5e9"
+                />
+                <KpiCard
+                  title="Tái khám"
+                  value={kpi.revisits.value}
+                  trend={kpi.revisits.trend}
+                  data={sparkRevisit}
+                  color="#c2410c"
+                />
+                <KpiCard
+                  title="Tỷ lệ huỷ (%)"
+                  value={kpi.cancelRate.value}
+                  trend={kpi.cancelRate.trend}
+                  data={sparkCancel}
+                  color="#fb7185"
+                />
               </section>
-            ) : view === "chart" ? (
-              <OverviewChart rows={rows} stretch />
-            ) : (
-              <ReportsTable rows={rows} stretch />
-            )}
-          </motion.div>
+
+              {/* Content */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={`overview-${view}`}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="mt-2.5 flex-1 min-h-0 p-1 overflow-hidden"
+                >
+                  {isLoading || loadingView ? (
+                    <section className="rounded-2xl bg-white ring-1 ring-slate-200/80 p-3 h-full">
+                      <div className="skel h-full" />
+                    </section>
+                  ) : view === "chart" ? (
+                    <OverviewChart rows={rows} stretch />
+                  ) : (
+                    <ReportsTable rows={rows} stretch />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </>
+          )}
         </AnimatePresence>
       </div>
     </motion.main>
