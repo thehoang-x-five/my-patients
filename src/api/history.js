@@ -471,6 +471,36 @@ export function useHistoryTransactions(params = {}, options = {}) {
 }
 
 
+/* ===================== MONGODB MEDICAL HISTORY (W2) ===================== */
+
+// Lấy timeline lịch sử y tế từ MongoDB
+// BE: GET /api/patients/{maBenhNhan}/medical-history?eventType=&fromDate=&toDate=&limit=100
+export async function getMedicalHistory(maBenhNhan, params = {}) {
+  if (!maBenhNhan) throw new Error("Thiếu mã bệnh nhân");
+
+  const query = {};
+  if (params.eventType) query.eventType = params.eventType;
+  if (params.fromDate) query.fromDate = params.fromDate;
+  if (params.toDate) query.toDate = params.toDate;
+  if (params.limit) query.limit = params.limit;
+
+  const res = await http.get(`/patients/${maBenhNhan}/medical-history`, {
+    params: query,
+  });
+  return res?.data || { MaBenhNhan: maBenhNhan, TotalEvents: 0, Events: [] };
+}
+
+export function useMedicalHistory(maBenhNhan, params = {}, options = {}) {
+  return useQuery({
+    queryKey: ["medical-history", maBenhNhan, params],
+    queryFn: () => getMedicalHistory(maBenhNhan, params),
+    enabled: !!maBenhNhan,
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
+
 /* ===================== REALTIME (SignalR) ===================== */
 
 // Server emit: "history.updated" khi có giao dịch mới/cập nhật

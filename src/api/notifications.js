@@ -116,15 +116,24 @@ export function inferRecipientFromToken() {
 
   // ====== 4. Loại người nhận notification ======
   // - Ưu tiên claim LoaiNguoiNhan trong token
-  // - Nếu không có, mà là NVYT (bac_si / y_ta / ...) => default "nhan_vien_y_te"
+  // - Nếu không có, mà là NVYT (bac_si / y_ta / ...) => dùng vai trò cụ thể
   let loaiNguoiNhan =
     payload.LoaiNguoiNhan ||
     payload.loaiNguoiNhan ||
     null;
 
+  // ====== 5. Loại y tá cụ thể (hanhchinh / cls / phong_kham) ======
+  const loaiYTa =
+    payload.loai_y_ta ||
+    payload.LoaiYTa ||
+    payload.loaiYTa ||
+    null;
+
   if (!loaiNguoiNhan) {
-    if (vaiTro === "bac_si" || vaiTro === "y_ta") {
-      loaiNguoiNhan = "nhan_vien_y_te";
+    if (vaiTro === "bac_si") {
+      loaiNguoiNhan = "bac_si";
+    } else if (vaiTro === "y_ta") {
+      loaiNguoiNhan = "y_ta";
     }
   }
 
@@ -137,12 +146,14 @@ export function inferRecipientFromToken() {
   if (!maNguoiNhan) {
     return {
       LoaiNguoiNhan: loaiNguoiNhan,
+      LoaiYTa: loaiYTa,
       VaiTro: vaiTro,
     };
   }
 
   return {
     LoaiNguoiNhan: loaiNguoiNhan, // cho notification
+    LoaiYTa: loaiYTa,             // cho inbox filter đúng sub-type
     MaNguoiNhan: maNguoiNhan,
     TenNguoiNhan: tenNguoiNhan,
     VaiTro: vaiTro,               // FE dùng cho sidebar/quyền

@@ -1,66 +1,63 @@
 // src/api/analytics.js
-// API & hooks cho MongoDB Aggregation Analytics (Dev 1 cung cấp endpoints)
-// Các endpoint dưới đây là stub — sẽ hoạt động khi Dev 1 hoàn thành BE.
+// API & hooks cho MongoDB Aggregation Analytics
+// Endpoints chuẩn theo AnalyticsController.cs
 
 import { useQuery } from "@tanstack/react-query";
 import { get } from "./http.js";
 
 /** ===== API CALLS ===== */
 
-// Top bệnh lý phổ biến (ICD10 codes, từ medical_histories collection)
-export const fetchTopDiseases = (params = {}) =>
-  get("/analytics/top-diseases", { params });
+// Thống kê tần suất chỉ số bất thường
+// BE: GET /api/analytics/abnormal-stats?fromDate=&toDate=
+export const fetchAbnormalStats = (params = {}) =>
+  get("/analytics/abnormal-stats", { params });
 
-// Top thuốc được kê nhiều nhất
-export const fetchTopDrugs = (params = {}) =>
-  get("/analytics/top-drugs", { params });
+// Xu hướng bệnh tật theo ICD-10
+// BE: GET /api/analytics/disease-trends?fromDate=&toDate=&topN=10
+export const fetchDiseaseTrends = (params = {}) =>
+  get("/analytics/disease-trends", { params });
 
-// Tần suất sinh hiệu bất thường
-export const fetchVitalAnomalies = (params = {}) =>
-  get("/analytics/vital-anomalies", { params });
-
-// Thống kê tổng quát (overview cho analytics tab)
-export const fetchAnalyticsOverview = (params = {}) =>
-  get("/analytics/overview", { params });
+// Top thuốc tiêu thụ nhiều nhất
+// BE: GET /api/analytics/popular-drugs?fromDate=&toDate=&topN=10
+export const fetchPopularDrugs = (params = {}) =>
+  get("/analytics/popular-drugs", { params });
 
 /** ===== HOOKS ===== */
 
-export function useTopDiseases(params = {}, options = {}) {
+export function useAbnormalStats(params = {}, options = {}) {
   return useQuery({
-    queryKey: ["analytics", "top-diseases", params],
-    queryFn: () => fetchTopDiseases(params),
+    queryKey: ["analytics", "abnormal-stats", params],
+    queryFn: () => fetchAbnormalStats(params),
     staleTime: 5 * 60_000,
     retry: 1,
     ...options,
   });
 }
 
-export function useTopDrugs(params = {}, options = {}) {
+export function useDiseaseTrends(params = {}, options = {}) {
   return useQuery({
-    queryKey: ["analytics", "top-drugs", params],
-    queryFn: () => fetchTopDrugs(params),
+    queryKey: ["analytics", "disease-trends", params],
+    queryFn: () => fetchDiseaseTrends(params),
     staleTime: 5 * 60_000,
     retry: 1,
     ...options,
   });
 }
 
-export function useVitalAnomalies(params = {}, options = {}) {
+export function usePopularDrugs(params = {}, options = {}) {
   return useQuery({
-    queryKey: ["analytics", "vital-anomalies", params],
-    queryFn: () => fetchVitalAnomalies(params),
+    queryKey: ["analytics", "popular-drugs", params],
+    queryFn: () => fetchPopularDrugs(params),
     staleTime: 5 * 60_000,
     retry: 1,
     ...options,
   });
 }
 
-export function useAnalyticsOverview(params = {}, options = {}) {
-  return useQuery({
-    queryKey: ["analytics", "overview", params],
-    queryFn: () => fetchAnalyticsOverview(params),
-    staleTime: 5 * 60_000,
-    retry: 1,
-    ...options,
-  });
-}
+/** ===== BACKWARD-COMPATIBLE ALIASES ===== */
+// ClinicalAnalytics.jsx imports these old names — map to correct new hooks
+
+export const useTopDiseases = useDiseaseTrends;
+export const useTopDrugs = usePopularDrugs;
+export const useVitalAnomalies = useAbnormalStats;
+

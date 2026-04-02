@@ -121,3 +121,35 @@ export function useUpdateInvoiceStatus() {
     },
   });
 }
+
+/* =========================================================
+ * 3. HỦY HÓA ĐƠN
+ * Backend: PUT /api/billing/invoices/{maHoaDon}/cancel
+ * =======================================================*/
+
+// Hủy hóa đơn (CancelInvoice)
+export async function cancelInvoice(maHoaDon, payload = {}) {
+  if (!maHoaDon) throw new Error("Thiếu mã hóa đơn");
+  // payload: { LyDoHuy? } — optional
+  const body = {
+    LyDoHuy: payload.LyDoHuy ?? payload.lyDoHuy ?? payload.reason ?? null,
+  };
+  const res = await http.put(`${BASE}/invoices/${maHoaDon}/cancel`, body);
+  return res.data;
+}
+
+export function useCancelInvoice(options = {}) {
+  const qc = useQueryClient();
+  const { onSuccess, ...rest } = options;
+  return useMutation({
+    mutationFn: ({ maHoaDon, ...payload }) => cancelInvoice(maHoaDon, payload),
+    onSuccess: (data, vars, ctx) => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["history", "transactions"] });
+      if (typeof onSuccess === "function") {
+        onSuccess(data, vars, ctx);
+      }
+    },
+    ...rest,
+  });
+}
