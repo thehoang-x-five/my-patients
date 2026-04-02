@@ -2,6 +2,8 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
+import { useCancelPrescription } from "../../api/pharmacy.js";
+import { toast } from "sonner";
 
 function StatusBadge({ s }) {
     const raw = (s || "").toLowerCase().trim();
@@ -109,6 +111,11 @@ export default function OrdersTable({
   onView,
   loading = false,
 }) {
+  const cancelMut = useCancelPrescription({
+    onSuccess: () => toast.success("Đã hủy đơn thuốc"),
+    onError: (err) => toast.error(err.message || "Hủy thất bại"),
+  });
+
   return (
     <section
       className="pt-2 bg-white rounded-2xl overflow-hidden shadow-soft h-full flex flex-col min-h-0"
@@ -241,14 +248,29 @@ export default function OrdersTable({
 
                     {/* Thao tác */}
                     <Td last right classNameOverride="whitespace-nowrap">
-                      <Button
-                        type="button"
-                        className="!px-2"
-                        onClick={() => onView?.(o)}
-                        title="Xem chi tiết đơn"
-                      >
-                        👁️
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        {status === "cho_phat" && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm("Hủy đơn thuốc này?")) {
+                                cancelMut.mutate(o.id || o.code);
+                              }
+                            }}
+                            className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+                          >
+                            Hủy
+                          </button>
+                        )}
+                        <Button
+                          type="button"
+                          className="!px-2"
+                          onClick={() => onView?.(o)}
+                          title="Xem chi tiết đơn"
+                        >
+                          👁️
+                        </Button>
+                      </div>
                     </Td>
                   </Row>
                 );

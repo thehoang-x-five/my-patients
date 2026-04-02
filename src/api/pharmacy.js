@@ -499,6 +499,24 @@ export function useUpsertStockItem(options = {}) {
   });
 }
 
+export async function cancelPrescription(maDonThuoc) {
+  if (!maDonThuoc) throw new Error("Missing maDonThuoc");
+  const res = await http.put(`/pharmacy/prescriptions/${maDonThuoc}/cancel`);
+  return res?.data ?? res;
+}
+
+export function useCancelPrescription(options = {}) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: cancelPrescription,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pharmacy", "rxOrders"] });
+      qc.invalidateQueries({ queryKey: ["pharmacy", "rxOrders", "search"] });
+    },
+    ...options,
+  });
+}
+
 /** ================== REALTIME (SignalR / WS) ================== */
 // Server emit: { type: "rx_order_updated" | "stock_upserted" | "stock_deleted", ... }
 export function subscribePharmacy(handler) {

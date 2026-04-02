@@ -155,10 +155,9 @@ export default function Prescriptions() {
 
   const { fromDate, toDate } = getOrderDateRange();
 
-  // ✅ Dùng searchRxOrders với filtering và pagination
   const ordersQuery = useSearchRxOrders({
     keyword: qOrdersDef || "",
-    status: orderStatus,
+    status: tab === "cancelled" ? "huy" : orderStatus,
     fromDate,
     toDate,
     page: orderPage,

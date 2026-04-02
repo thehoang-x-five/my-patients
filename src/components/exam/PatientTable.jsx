@@ -1,5 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useCancelQueue } from "../../api/queue.js";
+import { toast } from "sonner";
 
 // Resolve fields that may be PascalCase, camelCase, or nested (supports dotted paths)
 function fld(obj, ...paths) {
@@ -235,6 +237,11 @@ function getKey(p) {
 }
 
 export default function PatientTable({ items = [], onStart, inProgress = new Set(), stretch = false }) {
+  const cancelMut = useCancelQueue({
+    onSuccess: () => toast.success("Đã hủy phiếu"),
+    onError: (err) => toast.error(err.message || "Hủy thất bại"),
+  });
+
   return (
     <section
       className={`pt-2 bg-white overflow-hidden shadow-soft ${stretch ? "h-full flex flex-col min-h-0" : "mt-3"}`}
@@ -431,6 +438,19 @@ export default function PatientTable({ items = [], onStart, inProgress = new Set
                       </Td>
                       <Td last right>
                         <div className="flex items-center justify-end gap-3">
+                          {(p.TrangThai || p.trangThai || p.status) === "cho_goi" && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm("Hủy phiếu này?")) {
+                                  cancelMut.mutate(key);
+                                }
+                              }}
+                              className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+                            >
+                              Hủy
+                            </button>
+                          )}
                           <ActionButton active={active} onClick={() => onStart?.(p)} />
                         </div>
                       </Td>

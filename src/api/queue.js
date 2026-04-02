@@ -283,6 +283,10 @@ export async function updateStatus(maHangDoi, trangThai) {
   return normalizeQueueItem(res?.data ?? res);
 }
 
+export async function cancelQueue(maHangDoi) {
+  return await updateStatus(maHangDoi, "huy");
+}
+
 // DequeueNext: POST /api/queue/rooms/{maPhong}/next
 export async function dequeueNext(maPhong, loaiHangDoi = null) {
   if (!maPhong) throw new Error("Missing maPhong");
@@ -394,6 +398,11 @@ export function useQueueByRoom(maPhong, params = {}, options = {}) {
 export function useUpdateStatus(options = {}) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: ({ maHangDoi, trangThai }) => updateStatus(maHangDoi, trangThai), onSuccess: () => qc.invalidateQueries({ queryKey: ["queue"], exact: false }), ...options });
+}
+
+export function useCancelQueue(options = {}) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: cancelQueue, onSuccess: () => qc.invalidateQueries({ queryKey: ["queue"], exact: false }), ...options });
 }
 
 export function useDequeueNext(options = {}) {

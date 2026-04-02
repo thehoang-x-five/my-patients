@@ -6,6 +6,7 @@ import Chip from "../ui/Chip.jsx";
 
 const tabs = [
   { key: "orders", label: "Đơn đã kê" },
+  { key: "cancelled", label: "Đã hủy" },
   { key: "stock", label: "Kho thuốc" },
 ];
 

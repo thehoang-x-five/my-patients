@@ -13,6 +13,8 @@ const links = [
   ["/staff", "Nhân sự", "staff"],
   ["/prescriptions", "Đơn thuốc", "prescriptions"],
   ["/history", "Lịch sử", "history"],
+  ["/dashboard", "Analytics", "dashboard"],
+  ["/admin/users", "Quản trị", "admin"],
   ["/notifications", "Thông báo", "notifications"],
   ["/reports", "Báo cáo", "reports"],
 ];
@@ -189,6 +191,42 @@ const iconMap = {
         strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  dashboard: () => (
+    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+      <rect
+        x="3"
+        y="3"
+        width="18"
+        height="18"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M8 10h8M8 14h5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+  admin: () => (
+    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M12 8v4M12 16h.01"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
       />
     </svg>
   ),

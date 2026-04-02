@@ -2,8 +2,15 @@
 import React from 'react';
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
+import { useUpdateInvoiceStatus } from "../../api/billing.js";
+import { toast } from "sonner";
 
 export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
+  const updateInvoiceMut = useUpdateInvoiceStatus({
+    onSuccess: () => toast.success("Cập nhật thành công"),
+    onError: (err) => toast.error(err.message || "Cập nhật thất bại"),
+  });
+
   const wrapperCls = stretch
     ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none p-4 pt-0 pb-0 mt-2"
     : "overflow-x-auto overflow-y-auto scrollbar-none p-4";
@@ -267,14 +274,42 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true }) {
                 <Td>{renderStatusChip(r.status)}</Td>
                 <Td>{r.invoiceId || "—"}</Td>
                 <Td last>
-                  <Button
-                    className="!px-2 hover:-translate-y-px transition"
-                    aria-label="Chi tiết"
-                    onClick={() => onEye(r, "txn")}
-                    title="Xem chi tiết"
-                  >
-                    👁
-                  </Button>
+                  <div className="flex items-center justify-end gap-2">
+                    {r.status === "chua_thu" && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Thu tiền hóa đơn này?")) {
+                              updateInvoiceMut.mutate({ id: r.invoiceId, status: "da_thu" });
+                            }
+                          }}
+                          className="px-2 py-1 text-xs text-green-600 hover:bg-green-50 rounded"
+                        >
+                          Thu tiền
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Hủy hóa đơn này?")) {
+                              updateInvoiceMut.mutate({ id: r.invoiceId, status: "da_huy" });
+                            }
+                          }}
+                          className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+                        >
+                          Hủy
+                        </button>
+                      </>
+                    )}
+                    <Button
+                      className="!px-2 hover:-translate-y-px transition"
+                      aria-label="Chi tiết"
+                      onClick={() => onEye(r, "txn")}
+                      title="Xem chi tiết"
+                    >
+                      👁
+                    </Button>
+                  </div>
                 </Td>
               </Row>
             ))}
