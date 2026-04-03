@@ -1,6 +1,7 @@
 // src/api/billing.js
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "./http.js";
+import { PHUONG_THUC_THANH_TOAN } from "../constants/enums.js";
 
 /**
  * BILLING API
@@ -23,7 +24,7 @@ export async function createInvoice(payload = {}) {
     MaNhanSuThu: payload.MaNhanSuThu ?? payload.maNhanSuThu ?? payload.staffId ?? "admin", // Tạm thời hardcode hoặc lấy từ AuthStore
     LoaiDotThu: payload.LoaiDotThu ?? payload.loaiDotThu ?? payload.type ?? "kham_lam_sang",
     SoTien: payload.SoTien ?? payload.soTien ?? payload.amount ?? 0,
-    PhuongThucThanhToan: payload.PhuongThucThanhToan ?? payload.phuongThucThanhToan ?? payload.paymentMethod ?? "tien_mat",
+    PhuongThucThanhToan: payload.PhuongThucThanhToan ?? payload.phuongThucThanhToan ?? payload.paymentMethod ?? PHUONG_THUC_THANH_TOAN.TIEN_MAT,
     NoiDung: payload.NoiDung ?? payload.noiDung ?? payload.content ?? payload.item ?? "",
     
     // Các trường optional 
@@ -143,6 +144,43 @@ export function useCancelInvoice(options = {}) {
   const { onSuccess, ...rest } = options;
   return useMutation({
     mutationFn: ({ maHoaDon, ...payload }) => cancelInvoice(maHoaDon, payload),
+    onSuccess: (data, vars, ctx) => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["history", "transactions"] });
+      if (typeof onSuccess === "function") {
+        onSuccess(data, vars, ctx);
+      }
+    },
+    ...rest,
+  });
+}
+
+/* =========================================================
+ * 4. XÁC NHẬN THANH TOÁN (Week 4 — chờ Dev1 endpoint)
+ * Backend: PUT /api/billing/invoices/{maHoaDon}/confirm
+ * =======================================================*/
+
+// Xác nhận hóa đơn đã thanh toán
+export async function confirmInvoice(maHoaDon, payload = {}) {
+  if (!maHoaDon) throw new Error("Thiếu mã hóa đơn");
+  const body = {
+    PhuongThucThanhToan:
+      payload.PhuongThucThanhToan ??
+      payload.phuongThucThanhToan ??
+      payload.method ??
+      PHUONG_THUC_THANH_TOAN.TIEN_MAT,
+    GhiChu: payload.GhiChu ?? payload.ghiChu ?? payload.note ?? null,
+  };
+  const res = await http.put(`${BASE}/invoices/${maHoaDon}/confirm`, body);
+  return res.data;
+}
+
+export function useConfirmInvoice(options = {}) {
+  const qc = useQueryClient();
+  const { onSuccess, ...rest } = options;
+  return useMutation({
+    mutationFn: ({ maHoaDon, ...payload }) =>
+      confirmInvoice(maHoaDon, payload),
     onSuccess: (data, vars, ctx) => {
       qc.invalidateQueries({ queryKey: ["invoices"] });
       qc.invalidateQueries({ queryKey: ["history", "transactions"] });

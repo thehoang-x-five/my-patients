@@ -9,6 +9,15 @@ import ReportsTable from "../components/reports/ReportsTable.jsx";
 import ClinicalAnalytics from "../components/reports/ClinicalAnalytics.jsx";
 
 import { useReportsOverview } from "../api/reports.js";
+import { useAuthStore } from "../components/stores/appStore.js";
+import {
+  canViewRevenueReport,
+  canViewVisitReport,
+  canViewStaffReport,
+  isAdmin,
+  hasGlobalScope,
+  getScopeLabel,
+} from "../utils/permissions.js";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
@@ -26,6 +35,12 @@ export default function Reports() {
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
+
+  // ✅ RBAC: Permission checks
+  const user = useAuthStore((s) => s.user);
+  const showRevenue = canViewRevenueReport(user);
+  const showVisit = canViewVisitReport(user);
+  const scopeLabel = !hasGlobalScope(user) ? getScopeLabel(user) : null;
 
   const [period, setPeriod] = useState("mtd");
   const [from, setFrom] = useState("");
@@ -136,7 +151,19 @@ export default function Reports() {
           ) : (
             <>
               {/* KPI rail – đồng bộ tone đỏ nhẹ + nâu nhẹ */}
+              {/* Scope badge — hiện phạm vi dữ liệu cho user non-global */}
+              {scopeLabel && (
+                <div className="mb-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200/70 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-600/40">
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 9v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {scopeLabel}
+                  </span>
+                </div>
+              )}
               <section className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {showRevenue && (
                 <KpiCard
                   title="Doanh thu"
                   value={kpi.revenue.value}
@@ -145,6 +172,7 @@ export default function Reports() {
                   color="#b91c1c"
                   formatter={VND}
                 />
+                )}
                 <KpiCard
                   title="Bệnh nhân mới"
                   value={kpi.newPatients.value}

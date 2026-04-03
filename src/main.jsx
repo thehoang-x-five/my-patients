@@ -7,6 +7,7 @@ import { UIProvider } from "./context/UIContext.jsx";
 import App from "./App.jsx";
 import AppProviders from "./providers/AppProviders.jsx";
 import Login from "./routes/Login.jsx";
+import ProtectedRoute from "./components/common/ProtectedRoute.jsx";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 const Overview = React.lazy(() => import("./routes/Overview.jsx"));
@@ -32,12 +33,26 @@ const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <Overview /> },
-      { path: "/appointments", element: <Appointments /> },
+      {
+        path: "/appointments",
+        element: (
+          <ProtectedRoute permKey="appointments">
+            <Appointments />
+          </ProtectedRoute>
+        ),
+      },
       { path: "/examination", element: <Examination /> },
       { path: "/patients", element: <Patients /> },
       { path: "/departments", element: <Departments /> },
       { path: "/staff", element: <Staff /> },
-      { path: "/admin/users", element: <AdminUsers /> },
+      {
+        path: "/admin/users",
+        element: (
+          <ProtectedRoute permKey="userManagement">
+            <AdminUsers />
+          </ProtectedRoute>
+        ),
+      },
       { path: "/prescriptions", element: <Prescriptions /> },
       { path: "/history", element: <History /> },
       { path: "/notifications", element: <Notifications /> },

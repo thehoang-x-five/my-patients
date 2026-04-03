@@ -4,25 +4,21 @@ import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import { useUI } from "../../context/UIContext.jsx";
 import { useAuthStore } from "../stores/appStore.js";
-import {
-  isAdmin,
-  isDoctor,
-  canManageReception,
-} from "../../utils/permissions.js";
+import { TAB_VISIBILITY } from "../../utils/permissions.js";
 
-// Định nghĩa tất cả links + điều kiện hiển thị theo UC_00
+// Định nghĩa tất cả links + key phân quyền theo TAB_VISIBILITY (Week 4 RBAC)
 const allLinks = [
-  ["/", "Tổng quan", "index", () => true],
-  ["/appointments", "Lịch hẹn", "appointments", (u) => canManageReception(u)],
-  ["/patients", "Bệnh nhân", "patients", (u) => canManageReception(u) || isDoctor(u)],
-  ["/examination", "Khám bệnh", "examinations", (u) => !isAdmin(u)],
-  ["/departments", "Khoa phòng", "departments", () => true],
-  ["/staff", "Nhân sự", "staff", (u) => isAdmin(u)],
-  ["/admin/users", "QL Nhân viên", "admin_users", (u) => isAdmin(u)],
-  ["/prescriptions", "Đơn thuốc", "prescriptions", (u) => canManageReception(u) || isDoctor(u)],
-  ["/history", "Lịch sử", "history", (u) => canManageReception(u) || isDoctor(u)],
-  ["/notifications", "Thông báo", "notifications", () => true],
-  ["/reports", "Báo cáo", "reports", (u) => isAdmin(u) || canManageReception(u) || isDoctor(u)],
+  ["/", "Tổng quan", "index", "overview"],
+  ["/appointments", "Lịch hẹn", "appointments", "appointments"],
+  ["/patients", "Bệnh nhân", "patients", "patients"],
+  ["/examination", "Khám bệnh", "examinations", "examination"],
+  ["/departments", "Khoa phòng", "departments", "departments"],
+  ["/staff", "Nhân sự", "staff", "staff"],
+  ["/admin/users", "QL Nhân viên", "admin_users", "userManagement"],
+  ["/prescriptions", "Đơn thuốc", "prescriptions", "prescriptions"],
+  ["/history", "Lịch sử", "history", "history"],
+  ["/notifications", "Thông báo", "notifications", "notifications"],
+  ["/reports", "Báo cáo", "reports", "reports"],
 ];
 
 const iconMap = {
@@ -228,9 +224,12 @@ export default function Sidebar() {
   const [hovered, setHovered] = useState(null);
   const user = useAuthStore((s) => s.user);
 
-  // Lọc menu theo vai trò user đang đăng nhập
+  // Lọc menu theo vai trò user đang đăng nhập (TAB_VISIBILITY)
   const links = useMemo(
-    () => allLinks.filter(([, , , show]) => show(user)),
+    () => allLinks.filter(([, , , permKey]) => {
+      const checker = TAB_VISIBILITY[permKey];
+      return checker ? checker(user) : true;
+    }),
     [user]
   );
 
