@@ -46,12 +46,15 @@ import {
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments";
 
 import PrintExamTicket from "../print/PrintExamTicket.jsx";
+import PaymentWizard from "../billing/PaymentWizard.jsx";
 
 // Follow-up context utilities
 import { saveFollowupContext } from "../../utils/followupContext.js";
 
 // Permission helpers
-import { canManageReception } from "../../utils/permissions.js";
+import {
+  canCreateAppointment,
+} from "../../utils/permissions.js";
 
 // (giả sử các helper addVisit, addTransaction, listAppointmentHolds, getLastVisit,
 //  createFollowupHold, markAppointmentDoneForPid, markServiceDispatched,
@@ -72,7 +75,7 @@ export default function PatientModal({
 
   // ✅ Check permissions
   const user = useAuthStore((s) => s.user);
-  const hasReceptionPermission = canManageReception(user);
+  const canCreateAppt = canCreateAppointment(user);
 
   
  
@@ -691,7 +694,7 @@ export default function PatientModal({
             
             if (!clinicalExam) {
               console.warn(`[PatientModal] Phiếu khám ${maPhieuKham} không tồn tại`);
-              toast.warn("Phiếu khám không tồn tại.");
+              toast.error("Phiếu khám không tồn tại.");
               isValidatingPhieuKhamRef.current = null; // ✅ Clear validation flag
               return;
             }
@@ -1344,6 +1347,14 @@ const transactions = useMemo(() => {
   /* ==================== PRINT OVERLAY STATE ==================== */
   const [print, setPrint] = useState({ show: false, payload: null });
   const [clsSummaryPrint, setClsSummaryPrint] = useState(null);
+  const [paymentFlow, setPaymentFlow] = useState({
+    open: false,
+    examId: null,
+    clsId: null,
+    rxId: null,
+    items: [],
+    printPayload: null,
+  });
 
   const openPrint = (payload = {}) => {
     if (payload.booking) {
@@ -1377,6 +1388,66 @@ const transactions = useMemo(() => {
   const closePrint = () => {
     setPrint({ show: false, payload: null });
     onClose?.();
+  };
+
+  const openPaymentFlow = ({
+    examId = null,
+    clsId = null,
+    rxId = null,
+    items = [],
+    printPayload = null,
+  } = {}) => {
+    const hasCharge = (items || []).some((it) => Number(it?.amount || 0) > 0);
+
+    if (!hasCharge) {
+      openPrint(printPayload || {});
+      return;
+    }
+
+    setPaymentFlow({
+      open: true,
+      examId,
+      clsId,
+      rxId,
+      items,
+      printPayload,
+    });
+  };
+
+  const closePaymentFlow = ({ closeModal = false } = {}) => {
+    setPaymentFlow({
+      open: false,
+      examId: null,
+      clsId: null,
+      rxId: null,
+      items: [],
+      printPayload: null,
+    });
+
+    if (closeModal) {
+      onClose?.();
+    }
+  };
+
+  const handlePaymentComplete = (result) => {
+    const nextPrintPayload = paymentFlow.printPayload
+      ? {
+          ...paymentFlow.printPayload,
+          feePaid: result?.status === "paid",
+        }
+      : null;
+
+    closePaymentFlow();
+
+    toast.success(
+      result?.status === "deferred"
+        ? "Đã lưu hóa đơn ở trạng thái chưa thu."
+        : "Thanh toán thành công."
+    );
+
+    if (nextPrintPayload) {
+      openPrint(nextPrintPayload);
+    }
   };
 
   // Helpers to resolve current user (for MaNguoiLap + display)
@@ -1579,7 +1650,7 @@ const transactions = useMemo(() => {
         `patient.MaPhieuKham=${patient?.MaPhieuKham}, ` +
         `form.MaPhieuKham=${form?.MaPhieuKham}`
       );
-      toast.warn("Chưa có phiếu khám để tải chẩn đoán.");
+      toast.error("Chưa có phiếu khám để tải chẩn đoán.");
       return;
     }
     
@@ -1620,7 +1691,7 @@ const transactions = useMemo(() => {
       
       if (!dxRes) {
         console.log("[fetchFinalDiagnosis] API returned null/undefined");
-        toast.warn("Chưa có chẩn đoán cuối cho bệnh nhân này.");
+        toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
       
@@ -1641,7 +1712,7 @@ const transactions = useMemo(() => {
       if (!diagnosisPatientId) {
         console.warn("[fetchFinalDiagnosis] Phiếu chẩn đoán không có mã bệnh nhân");
         console.warn("[fetchFinalDiagnosis] Response keys:", Object.keys(dxRes));
-        toast.warn("Chưa có chẩn đoán cuối cho bệnh nhân này.");
+        toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
       
@@ -1651,7 +1722,7 @@ const transactions = useMemo(() => {
           `current=${currentPatientId}, diagnosis=${diagnosisPatientId}. ` +
           `Bỏ qua kết quả này để tránh hiển thị sai dữ liệu.`
         );
-        toast.warn("Chưa có chẩn đoán cuối cho bệnh nhân này.");
+        toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
       
@@ -1747,40 +1818,50 @@ const transactions = useMemo(() => {
         }
         
         setClsSummaryPrint(null);
-        openPrint({
-          type: "service",
-          creatorName: currentUser,
-          patient: {
-            id: pid,
-            name,
-            gender: form?.gender,
-            dob: form?.dob,
-            phone: form?.phone,
-            address: form?.address,
+
+        const paymentItems = (serviceItems || []).map((sv, i) => ({
+          name: sv,
+          amount: priceOfService(sv),
+        }));
+
+        openPaymentFlow({
+          clsId: clsOrderId || null,
+          items: paymentItems,
+          printPayload: {
+            type: "service",
+            creatorName: currentUser,
+            patient: {
+              id: pid,
+              name,
+              gender: form?.gender,
+              dob: form?.dob,
+              phone: form?.phone,
+              address: form?.address,
+            },
+            exam: {
+              type: exam.type,
+              dept: exam.dept,
+              room: exam.room,
+              symptoms: exam.symptoms,
+              note: exam.note,
+            },
+            booking: {
+              date: booking.date,
+              time: booking.time,
+              price: totalServiceFee,
+              doctor: booking.doctor || "",
+              dept: exam.dept || booking.dept || "",
+            },
+            isServiceIntake: true,
+            totalServiceFee,
+            feePaid: totalServiceFee > 0,
+            services: (serviceItems || []).map((sv, i) => ({
+              name: sv,
+              room: serviceRooms[i] || `Phòng ${sv}`,
+              price: priceOfService(sv),
+              note: serviceNotes[i] || "",
+            })),
           },
-          exam: {
-            type: exam.type,
-            dept: exam.dept,
-            room: exam.room,
-            symptoms: exam.symptoms,
-            note: exam.note,
-          },
-          booking: {
-            date: booking.date,
-            time: booking.time,
-            price: totalServiceFee,
-            doctor: booking.doctor || "",
-            dept: exam.dept || booking.dept || "",
-          },
-          isServiceIntake: true,
-          totalServiceFee,
-          feePaid: totalServiceFee > 0,
-          services: (serviceItems || []).map((sv, i) => ({
-            name: sv,
-            room: serviceRooms[i] || `Phòng ${sv}`,
-            price: priceOfService(sv),
-            note: serviceNotes[i] || "",
-          })),
         });
       } catch (err) {
         console.error("Cập nhật trạng thái CLS thất bại:", err);
@@ -1971,30 +2052,38 @@ const transactions = useMemo(() => {
       })
     );
 
-    // In phiếu khám thường
-    openPrint({
-      type: "walkin",
-      patient: {
-        id: pid,
-        name,
-        gender: form?.gender,
-        dob: form?.dob,
-        phone: form?.phone,
-        address: form?.address,
+    openPaymentFlow({
+      examId: maPhieuKham,
+      items: [
+        {
+          name: exam.type || tpl?.title || "Khám lâm sàng",
+          amount: Number(fee) || 0,
+        },
+      ],
+      printPayload: {
+        type: "walkin",
+        patient: {
+          id: pid,
+          name,
+          gender: form?.gender,
+          dob: form?.dob,
+          phone: form?.phone,
+          address: form?.address,
+        },
+        creatorName: tenNguoiLapPhieu || currentUser,
+        booking: {
+          date: booking.date,
+          time: booking.time,
+          price: fee,
+          doctor,
+          dept,
+        },
+        examInfo: { type: exam.type || tpl?.title || "Khám", dept, room },
+        isServiceIntake: false,
+        totalServiceFee: 0,
+        feePaid: fee > 0,
+        clsSummary: summaryForPrint,
       },
-      creatorName: tenNguoiLapPhieu || currentUser,
-      booking: {
-        date: booking.date,
-        time: booking.time,
-        price: fee,
-        doctor,
-        dept,
-      },
-      examInfo: { type: exam.type || tpl?.title || "Khám", dept, room },
-      isServiceIntake: false,
-      totalServiceFee: 0,
-      feePaid: fee > 0,
-      clsSummary: summaryForPrint,
     });
   }
 
@@ -2012,7 +2101,7 @@ const transactions = useMemo(() => {
     );
 
     if (!fup) {
-      toast.warn("Không tìm thấy lịch hẹn tái khám.");
+      toast.error("Không tìm thấy lịch hẹn tái khám.");
       return;
     }
 
@@ -2064,33 +2153,41 @@ const transactions = useMemo(() => {
       })
     );
 
-    openPrint({
-      type: "walkin",
-      printedBy: currentUser,
-      creatorName: currentUser,
-      patient: {
-        id: pid,
-        name,
-        gender: form?.gender,
-        dob: form?.dob,
-        phone: form?.phone,
-        address: form?.address,
+    openPaymentFlow({
+      items: [
+        {
+          name: "Phí tái khám",
+          amount: Number(lateFee) || 0,
+        },
+      ],
+      printPayload: {
+        type: "walkin",
+        printedBy: currentUser,
+        creatorName: currentUser,
+        patient: {
+          id: pid,
+          name,
+          gender: form?.gender,
+          dob: form?.dob,
+          phone: form?.phone,
+          address: form?.address,
+        },
+        booking: {
+          date: fup.date || booking.date,
+          time: fup.time || booking.time,
+          price: lateFee,
+          doctor,
+          dept,
+        },
+        examInfo: {
+          type: "Tái khám",
+          dept,
+          room,
+          symptoms: exam.symptoms,
+          note: exam.note,
+        },
+        feeInfo: { total: lateFee, paid: isLate, showFee: isLate },
       },
-      booking: {
-        date: fup.date || booking.date,
-        time: fup.time || booking.time,
-        price: lateFee,
-        doctor,
-        dept,
-      },
-      examInfo: {
-        type: "Tái khám",
-        dept,
-        room,
-        symptoms: exam.symptoms,
-        note: exam.note,
-      },
-      feeInfo: { total: lateFee, paid: isLate, showFee: isLate },
     });
   }
 
@@ -2153,7 +2250,7 @@ const transactions = useMemo(() => {
           console.log("[Follow-up] Context saved to localStorage");
         } catch (err) {
           console.error("[Follow-up] Failed to save context:", err);
-          toast.warn("Không thể lưu thông tin tái khám");
+          toast.error("Không thể lưu thông tin tái khám");
         }
 
         // ✅ 3.2 Process medication payment if needed
@@ -2421,7 +2518,7 @@ const transactions = useMemo(() => {
                     visits={visits}
                     transactions={transactions}
                     patientExtras={patientExtras}
-                    handleCreateAppointmentFromView={hasReceptionPermission ? handleCreateAppointmentFromView : undefined}
+                    handleCreateAppointmentFromView={canCreateAppt ? handleCreateAppointmentFromView : undefined}
                   />
                 )}
 
@@ -2718,6 +2815,22 @@ const transactions = useMemo(() => {
               </AnimatePresence>
             )}
           </motion.div>
+
+          <PaymentWizard
+            open={paymentFlow.open}
+            patient={{
+              id: form?.id,
+              name: form?.name,
+              HoTen: form?.name,
+              MaBenhNhan: form?.id,
+            }}
+            items={paymentFlow.items}
+            examId={paymentFlow.examId}
+            clsId={paymentFlow.clsId}
+            rxId={paymentFlow.rxId}
+            onClose={() => closePaymentFlow({ closeModal: true })}
+            onComplete={handlePaymentComplete}
+          />
 
           {/* PRINT OVERLAY */}
           <PrintExamTicket

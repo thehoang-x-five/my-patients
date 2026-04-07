@@ -1,4 +1,3 @@
-// src/components/reports/OverviewChart.jsx
 import { motion } from "framer-motion";
 import React from "react";
 import {
@@ -19,7 +18,11 @@ const fmtVN = (iso) =>
     month: "2-digit",
   });
 
-export default function OverviewChart({ rows = [], stretch = false }) {
+export default function OverviewChart({
+  rows = [],
+  stretch = false,
+  showRevenue = true,
+}) {
   return (
     <motion.section
       initial={{ opacity: 0, y: 8 }}
@@ -51,16 +54,18 @@ export default function OverviewChart({ rows = [], stretch = false }) {
               tickFormatter={fmtVN}
               axisLine={{ stroke: "#e5e7eb" }}
             />
-            <YAxis
-              yAxisId="left"
-              tick={{ fontSize: 12, fill: "#64748b" }}
-              tickFormatter={(v) =>
-                v >= 1_000_000_000
-                  ? `${v / 1_000_000_000}B`
-                  : `${v / 1_000_000}M`
-              }
-              axisLine={{ stroke: "#e5e7eb" }}
-            />
+            {showRevenue && (
+              <YAxis
+                yAxisId="left"
+                tick={{ fontSize: 12, fill: "#64748b" }}
+                tickFormatter={(v) =>
+                  v >= 1_000_000_000
+                    ? `${v / 1_000_000_000}B`
+                    : `${v / 1_000_000}M`
+                }
+                axisLine={{ stroke: "#e5e7eb" }}
+              />
+            )}
             <YAxis
               yAxisId="right"
               orientation="right"
@@ -91,46 +96,44 @@ export default function OverviewChart({ rows = [], stretch = false }) {
               }}
             />
 
-            {/* Doanh thu: cột cyan sáng */}
-            <Bar
-              yAxisId="left"
-              dataKey="revenue"
-              name="Doanh thu"
-              fill="#67e8f9" // cyan 300 sáng hơn
-              radius={[6, 6, 0, 0]}
-            />
+            {showRevenue && (
+              <Bar
+                yAxisId="left"
+                dataKey="revenue"
+                name="Doanh thu"
+                fill="#67e8f9"
+                radius={[6, 6, 0, 0]}
+              />
+            )}
 
-            {/* BN mới: line cyan */}
             <Line
               yAxisId="right"
               type="monotone"
               dataKey="newPatients"
               name="BN mới"
-              stroke="#06b6d4" // cyan 500
+              stroke="#06b6d4"
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}
             />
 
-            {/* Tái khám: line amber/nâu nhẹ */}
             <Line
               yAxisId="right"
               type="monotone"
               dataKey="revisits"
               name="Tái khám"
-              stroke="#f59e0b" // amber 500
+              stroke="#f59e0b"
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}
             />
 
-            {/* Tỷ lệ huỷ: line rose sáng */}
             <Line
               yAxisId="right"
               type="monotone"
               dataKey="cancelRate"
-              name="Tỷ lệ huỷ (%)"
-              stroke="#fb7185" // rose 400
+              name="Tỷ lệ hủy (%)"
+              stroke="#fb7185"
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}

@@ -108,6 +108,9 @@ export default function OrdersTable({
   items = [],
   onView,
   onCancel,
+  onDispense,
+  canCancel = false, // ✅ RBAC: chỉ Admin + YTHC + BS mới hủy được đơn
+  canDispense = false, // ✅ RBAC: chỉ Admin + YTHC mới phát thuốc
   loading = false,
 }) {
   return (
@@ -251,7 +254,7 @@ export default function OrdersTable({
                         >
                           👁️
                         </Button>
-                        {onCancel && /^(da_ke|cho_phat)$/i.test(o.status || o.trangThai || "") && (
+                        {canCancel && onCancel && /^(da_ke|cho_phat)$/i.test(o.status || o.trangThai || "") && (
                           <Button
                             type="button"
                             className="!px-2 !text-rose-600 hover:!bg-rose-50"
@@ -259,6 +262,16 @@ export default function OrdersTable({
                             title="Hủy đơn thuốc"
                           >
                             ✕
+                          </Button>
+                        )}
+                        {canDispense && onDispense && /^(cho_phat)$/i.test(o.status || o.trangThai || "") && (
+                          <Button
+                            type="button"
+                            className="!px-2 !text-emerald-700 hover:!bg-emerald-50"
+                            onClick={() => onDispense?.(o)}
+                            title="Phát thuốc"
+                          >
+                            Phát
                           </Button>
                         )}
                       </div>

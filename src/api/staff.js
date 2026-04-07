@@ -329,6 +329,12 @@ export const getStaffDutyWeek = async (id, today) => {
   return normalizeStaffDutyWeek(res.data || res);
 };
 
+export const updateStaffDutyWeek = async ({ id, data }) => {
+  if (!id) throw new Error("Missing staff id");
+  const res = await http.put(`/master-data/staff/${id}/duty-week`, data);
+  return normalizeStaffDutyWeek(res.data || res);
+};
+
 /**
  * Dựa trên duty-week, suy ra phòng làm việc hôm nay + cả tuần.
  * FE dùng cho roomToday + weekRoom trong StaffDetail / StaffSchedule.
@@ -549,6 +555,22 @@ export function useUpdateStaffStatus() {
         qc.invalidateQueries({ queryKey: ["staff-detail", vars.id] });
         qc.invalidateQueries({ queryKey: ["staff-duty-week", vars.id] });
         qc.invalidateQueries({ queryKey: ["staff-duty-room", vars.id] });
+      }
+    },
+  });
+}
+
+export function useUpdateStaffDutyWeek() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => updateStaffDutyWeek({ id, data }),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ["staff-cards"] });
+      qc.invalidateQueries({ queryKey: ["staff-stats"] });
+      if (vars?.id) {
+        qc.invalidateQueries({ queryKey: ["staff-duty-week", vars.id] });
+        qc.invalidateQueries({ queryKey: ["staff-duty-room", vars.id] });
+        qc.invalidateQueries({ queryKey: ["staff-detail", vars.id] });
       }
     },
   });

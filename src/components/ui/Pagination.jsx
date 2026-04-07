@@ -17,12 +17,21 @@ export default function Pagination({
   totalItems = 0,
   pageSize = 50,
   onPageChange,
+  showWhenSinglePage = false,
   className = "",
 }) {
-  if (totalPages <= 1) return null; // Không hiển thị nếu chỉ có 1 trang
+  const totalPagesSafe = Math.max(1, totalPages || 1);
+  if (totalPagesSafe <= 1 && (!showWhenSinglePage || totalItems <= 0)) {
+    return null;
+  }
 
   const handlePageClick = (page) => {
-    if (page >= 1 && page <= totalPages && page !== currentPage && onPageChange) {
+    if (
+      page >= 1 &&
+      page <= totalPagesSafe &&
+      page !== currentPage &&
+      onPageChange
+    ) {
       onPageChange(page);
     }
   };
@@ -32,9 +41,9 @@ export default function Pagination({
     const pages = [];
     const maxVisible = 7; // Số trang tối đa hiển thị
 
-    if (totalPages <= maxVisible) {
+    if (totalPagesSafe <= maxVisible) {
       // Hiển thị tất cả nếu <= maxVisible
-      for (let i = 1; i <= totalPages; i++) {
+      for (let i = 1; i <= totalPagesSafe; i++) {
         pages.push(i);
       }
     } else {
@@ -43,12 +52,12 @@ export default function Pagination({
         // Gần đầu
         for (let i = 1; i <= 5; i++) pages.push(i);
         pages.push("ellipsis");
-        pages.push(totalPages);
-      } else if (currentPage >= totalPages - 3) {
+        pages.push(totalPagesSafe);
+      } else if (currentPage >= totalPagesSafe - 3) {
         // Gần cuối
         pages.push(1);
         pages.push("ellipsis");
-        for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+        for (let i = totalPagesSafe - 4; i <= totalPagesSafe; i++) pages.push(i);
       } else {
         // Ở giữa
         pages.push(1);
@@ -122,7 +131,7 @@ export default function Pagination({
         {/* Nút Next */}
         <button
           onClick={() => handlePageClick(currentPage + 1)}
-          disabled={currentPage === totalPages}
+          disabled={currentPage === totalPagesSafe}
           aria-label="Trang sau"
           className="px-2 py-1 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white transition-colors"
         >

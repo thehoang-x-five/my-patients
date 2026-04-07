@@ -15,6 +15,7 @@ import OrdersTable from "../components/prescriptions/OrdersTable.jsx";
 import StockTable from "../components/prescriptions/StockTable.jsx";
 import OrderViewModal from "../components/prescriptions/OrderViewModal.jsx";
 import PrescFilterPopover from "../components/prescriptions/PrescFilterPopover.jsx";
+import ConfirmModal from "../components/ui/ConfirmModal.jsx";
 
 import {
   getRxOrders,
@@ -25,6 +26,7 @@ import {
   searchStock,
   useSearchStock,
   useCancelPrescription,
+  useUpdatePrescriptionStatus,
 } from "../api/pharmacy.js";
 import { on } from "../api/realtime.js";
 
@@ -35,6 +37,12 @@ import { usePrescStore } from "../components/stores/appStore.js";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
+import { useAuthStore } from "../components/stores/appStore.js";
+import {
+  canCancelPrescription,
+  canDispenseMedicine,
+  canEditStock,
+} from "../utils/permissions.js";
 
 const NEAR_EXPIRY_DAYS = 30;
 const LOW_STOCK_QTY = 10;
@@ -84,10 +92,21 @@ export default function Prescriptions() {
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
 
+  // ✅ RBAC: lấy user để check quyền
+  const user = useAuthStore((s) => s.user);
+  const allowCancel = canCancelPrescription(user); // Admin + YTHC + BS
+  const allowEditStock = canEditStock(user);        // Admin + YTHC
+  const allowDispense = canDispenseMedicine(user);  // Admin + YTHC
+
   // === Cancel Prescription ===
   const cancelRx = useCancelPrescription({
     onSuccess: () => toast.success("Đã hủy đơn thuốc — kho thuốc đã hoàn"),
     onError: (err) => toast.error(err.message || "Không thể hủy đơn thuốc"),
+  });
+  const updateRxStatus = useUpdatePrescriptionStatus({
+    onSuccess: () => toast.success("Đã phát thuốc và trừ tồn kho thành công"),
+    onError: (err) =>
+      toast.error(err?.message || "Không thể cập nhật trạng thái đơn thuốc"),
   });
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -115,6 +134,8 @@ export default function Prescriptions() {
 
   const [filterOpen, setFilterOpen] = useState(false);
   const filterBtnRef = useRef(null);
+  const [cancelOrderTarget, setCancelOrderTarget] = useState(null);
+  const [dispenseOrderTarget, setDispenseOrderTarget] = useState(null);
 
   const qOrdersDef = useDeferredValue(qOrders);
   const qStockDef = useDeferredValue(qStock);
@@ -416,6 +437,12 @@ const stockNearOutCount = filteredStock.filter((r) => {
             filterBtnRef={filterBtnRef}
             onOpenFilter={() => setFilterOpen(true)}
             onResetFilters={handleResetFilters}
+            showStockManageAction={tab === "stock" && allowEditStock}
+            onAddStock={
+              tab === "stock" && allowEditStock
+                ? () => setEdit({ open: true, item: null })
+                : undefined
+            }
           />
         </div>
 
@@ -438,17 +465,17 @@ const stockNearOutCount = filteredStock.filter((r) => {
                       <OrdersTable
                         items={filteredOrders}
                         loading={loadingOrders}
+                        canCancel={allowCancel}
+                        canDispense={allowDispense}
                         onView={(order) =>
                           setView({ open: true, order })
                         }
-                        onCancel={(order) => {
-                          if (!window.confirm(`Bạn có chắc muốn hủy đơn thuốc ${order.id || order.code}? Kho thuốc sẽ được hoàn lại.`)) return;
-                          cancelRx.mutate(order.id || order.code);
-                        }}
+                        onCancel={(order) => setCancelOrderTarget(order)}
+                        onDispense={(order) => setDispenseOrderTarget(order)}
                         stretch
                       />
                     </div>
-                    {ordersTotalPages > 1 && (
+                    {ordersTotalItems > 0 && (
                       <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
                         <Pagination
                           currentPage={orderPage}
@@ -456,6 +483,7 @@ const stockNearOutCount = filteredStock.filter((r) => {
                           totalItems={ordersTotalItems}
                           pageSize={50}
                           onPageChange={setOrderPage}
+                          showWhenSinglePage
                           className="px-4 py-3"
                         />
                       </div>
@@ -473,6 +501,7 @@ const stockNearOutCount = filteredStock.filter((r) => {
                       <StockTable
                         items={filteredStock}
                         loading={loadingStock}
+                        canEdit={allowEditStock}
                         onEdit={(row) =>
                           setEdit({ open: true, item: row })
                         }
@@ -480,7 +509,7 @@ const stockNearOutCount = filteredStock.filter((r) => {
                         stretch
                       />
                     </div>
-                    {stockTotalPages > 1 && (
+                    {stockTotalItems > 0 && (
                       <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
                         <Pagination
                           currentPage={stockPage}
@@ -488,6 +517,7 @@ const stockNearOutCount = filteredStock.filter((r) => {
                           totalItems={stockTotalItems}
                           pageSize={50}
                           onPageChange={setStockPage}
+                          showWhenSinglePage
                           className="px-4 py-3"
                         />
                       </div>
@@ -531,6 +561,54 @@ const stockNearOutCount = filteredStock.filter((r) => {
         open={view.open}
         order={view.order}
         onClose={closeView}
+      />
+
+      <ConfirmModal
+        open={!!cancelOrderTarget}
+        onClose={() => setCancelOrderTarget(null)}
+        onConfirm={() => {
+          if (!cancelOrderTarget) return;
+          cancelRx.mutate(cancelOrderTarget.id || cancelOrderTarget.code, {
+            onSettled: () => setCancelOrderTarget(null),
+          });
+        }}
+        title="Xác nhận hủy đơn thuốc"
+        message={
+          cancelOrderTarget
+            ? `Bạn có chắc muốn hủy đơn thuốc ${cancelOrderTarget.id || cancelOrderTarget.code}? Kho thuốc sẽ được hoàn lại.`
+            : "Bạn có chắc muốn hủy đơn thuốc này?"
+        }
+        confirmText="Hủy đơn"
+        cancelText="Đóng"
+        tone="warning"
+        isPending={cancelRx.isPending}
+      />
+
+      <ConfirmModal
+        open={!!dispenseOrderTarget}
+        onClose={() => setDispenseOrderTarget(null)}
+        onConfirm={() => {
+          if (!dispenseOrderTarget) return;
+          updateRxStatus.mutate(
+            {
+              maDonThuoc: dispenseOrderTarget.id || dispenseOrderTarget.code,
+              trangThai: "da_phat",
+            },
+            {
+              onSettled: () => setDispenseOrderTarget(null),
+            }
+          );
+        }}
+        title="Xác nhận phát thuốc"
+        message={
+          dispenseOrderTarget
+            ? `Xác nhận phát thuốc cho đơn ${dispenseOrderTarget.id || dispenseOrderTarget.code}? Hệ thống sẽ trừ tồn kho ngay sau khi hoàn tất.`
+            : "Xác nhận phát thuốc cho đơn này?"
+        }
+        confirmText="Phát thuốc"
+        cancelText="Đóng"
+        tone="info"
+        isPending={updateRxStatus.isPending}
       />
     </motion.main>
   );

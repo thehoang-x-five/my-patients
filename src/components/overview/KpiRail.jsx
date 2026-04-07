@@ -2,32 +2,126 @@ import React from "react";
 import { FadeIn } from "../ui/Supports.jsx";
 import KpiCard from "./KpiCard.jsx";
 
-/**
- * Dải 4 KPI trên cùng Dashboard.
- * Dùng grid + items-stretch để các card cao bằng nhau.
- *
- * @param {string} role - "clinical" | "cls" | "admin" | "reception" | "default"
- * @param {object} services - KPI dịch vụ CLS (dùng khi role === "cls")
- */
 export default function KpiRail({ kpi, role = "default", services }) {
   const safe = kpi || {};
   const isCls = role === "cls";
+  const isClinical = role === "clinical";
+  const showRevenue = role === "admin" || role === "reception";
+  const hasSpark = (item) => Array.isArray(item?.spark) && item.spark.length > 0;
+  const pickRoleKpi = (preferred, fallback) =>
+    hasSpark(preferred) || !hasSpark(fallback) ? preferred : fallback;
+
+  const patientKpi = isCls
+    ? pickRoleKpi(safe.clsPatients, safe.patientsToday)
+    : isClinical
+      ? pickRoleKpi(safe.lsPatients, safe.patientsToday)
+      : safe.patientsToday;
+  const examKpi = isCls
+    ? pickRoleKpi(safe.clsExams, safe.exams)
+    : isClinical
+      ? pickRoleKpi(safe.lsExams, safe.exams)
+      : safe.exams;
+
+  const examCounts = examKpi?.counts || {};
+  const diagnosisCounts = safe.diagnoses?.counts || {};
+  const resultCounts = safe.results?.counts || {};
+
+  const patientTitle = isCls
+    ? "Bệnh nhân CLS hôm nay"
+    : isClinical
+      ? "Bệnh nhân LS hôm nay"
+      : "Bệnh nhân trong ngày";
+
+  const examMeta = [
+    `${isCls ? "Chờ thực hiện" : "Chờ khám"}: ${examCounts.pending ?? 0}`,
+    `Hoàn tất: ${examCounts.done ?? 0}`,
+    `Hủy: ${examCounts.cancelled ?? 0}`,
+  ].join(" · ");
+
+  const thirdCard = {
+    title: isCls ? "Lượt CLS hôm nay" : isClinical ? "Lượt khám LS hôm nay" : "Lượt khám hôm nay",
+    value: examKpi?.value,
+    delta: examKpi?.delta,
+    deltaTone: "info",
+    meta: examMeta,
+    data24: examKpi?.spark,
+    barColor: "#f97316",
+    link: isCls
+      ? {
+          href: "/examination?tab=cls",
+          label: "Xem lượt CLS",
+        }
+      : {
+          href: "/examination?date=today",
+          label: isClinical ? "Xem lượt khám LS" : "Xem danh sách khám",
+        },
+  };
+
+  const fourthCard = showRevenue
+    ? {
+        title: "Doanh thu hôm nay",
+        value: safe.revenue?.value,
+        delta: safe.revenue?.delta,
+        deltaTone: "ok",
+        meta: safe.revenue?.meta,
+        data24: safe.revenue?.spark,
+        barColor: "#eab308",
+        link: { href: "/history?tab=billing", label: "Xem giao dịch" },
+      }
+    : isCls
+      ? {
+          title: "Kết quả hôm nay",
+          value: safe.results?.value,
+          delta: safe.results?.delta ?? "0.0%",
+          deltaTone: "ok",
+          meta: [
+            `Sớm: ${resultCounts.early ?? 0}`,
+            `Đúng giờ: ${resultCounts.onTime ?? 0}`,
+            `Trễ: ${resultCounts.late ?? 0}`,
+          ].join(" · "),
+          data24: safe.results?.spark,
+          barColor: "#eab308",
+          link: {
+            href: "/examination?tab=cls",
+            label: "Xem kết quả CLS",
+          },
+        }
+      : {
+          title: "Chẩn đoán hôm nay",
+          value: safe.diagnoses?.value,
+          delta: safe.diagnoses?.delta ?? "0.0%",
+          deltaTone: "ok",
+          meta: [
+            `Cho về: ${diagnosisCounts.choVe ?? 0}`,
+            `Tái khám: ${diagnosisCounts.taiKham ?? 0}`,
+            `Cho thuốc: ${diagnosisCounts.choThuoc ?? 0}`,
+          ].join(" · "),
+          data24: safe.diagnoses?.spark,
+          barColor: "#eab308",
+          link: {
+            href: "/examination",
+            label: "Xem chẩn đoán",
+          },
+        };
 
   return (
     <section
-      className="grid gap-3 sm:grid-cols-2 md:grid-cols-4 items-stretch"
+      className="grid items-stretch gap-3 sm:grid-cols-2 md:grid-cols-4"
       aria-label="Chỉ số chính trong ngày"
     >
       <FadeIn>
         <KpiCard
-          title="Bệnh nhân trong ngày"
-          value={safe.patientsToday?.value}
-          delta={safe.patientsToday?.delta}
+          title={patientTitle}
+          value={patientKpi?.value}
+          delta={patientKpi?.delta}
           deltaTone="ok"
-          meta={safe.patientsToday?.meta}
-          data24={safe.patientsToday?.spark}
+          meta={patientKpi?.meta}
+          data24={patientKpi?.spark}
           barColor="#10b981"
-          link={{ href: "/patients?view=today", label: "Xem danh sách" }}
+          link={{
+            href: "/patients?view=today",
+            label: isCls ? "Xem BN CLS" : isClinical ? "Xem BN LS" : "Xem danh sách",
+          }}
         />
       </FadeIn>
 
@@ -64,32 +158,11 @@ export default function KpiRail({ kpi, role = "default", services }) {
       </FadeIn>
 
       <FadeIn>
-        <KpiCard
-          title="Lượt khám hôm nay"
-          value={safe.exams?.value}
-          delta={safe.exams?.delta}
-          deltaTone="info"
-          meta={safe.exams?.meta}
-          data24={safe.exams?.spark}
-          barColor="#f97316"
-          link={{
-            href: "/examination?date=today",
-            label: "Xem danh sách khám",
-          }}
-        />
+        <KpiCard {...thirdCard} />
       </FadeIn>
 
       <FadeIn>
-        <KpiCard
-          title="Doanh thu hôm nay"
-          value={safe.revenue?.value}
-          delta={safe.revenue?.delta}
-          deltaTone="ok"
-          meta={safe.revenue?.meta}
-          data24={safe.revenue?.spark}
-          barColor="#eab308"
-          link={{ href: "/history?tab=billing", label: "Xem giao dịch" }}
-        />
+        <KpiCard {...fourthCard} />
       </FadeIn>
     </section>
   );

@@ -2,7 +2,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import Button from "../ui/Button.jsx";
+import PopoverSelect from "../ui/PopoverSelect.jsx";
 import RxPickerModal from "./RxPickerModal.jsx";
+import PaymentWizard from "../billing/PaymentWizard.jsx";
+import { useAuthStore } from "../stores/appStore.js";
+import {
+  canManageReception,
+  canEnterExamData,
+  canEnterClsResult,
+  canPrescribe,
+} from "../../utils/permissions.js";
 import {
   useExamServices,
   useCreateExamOrder,
@@ -30,6 +39,13 @@ export default function ExamDetail({
   onExportOrder,
 }) {
   // ----- STATE CHUNG -----
+  // ✅ RBAC: kiểm tra quyền action-level
+  const user = useAuthStore((s) => s.user);
+  const allowPayment = canManageReception(user);    // Chỉ YTHC
+  const allowExamData = canEnterExamData(user);     // BS + YtaLS
+  const allowClsResult = canEnterClsResult(user);   // YtaCLS + KTV
+  const allowPrescribe = canPrescribe(user);         // BS only
+
   const [rows, setRows] = useState([emptyRow()]);
   const [dx, setDx] = useState({
     pre: "",
@@ -46,6 +62,8 @@ export default function ExamDetail({
   const [dxFlagError, setDxFlagError] = useState("");
   const [rx, setRx] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [pendingDxPayload, setPendingDxPayload] = useState(null);
 
   // CLS – thêm kết quả & file
   const [clsResult, setClsResult] = useState("");
@@ -407,6 +425,35 @@ const svcMap = useMemo(() => {
         rxRows: payload.rxRows,
         services: payload.services,
       });
+
+      // Sau khi lưu chẩn đoán thành công → mở PaymentWizard
+      // BE đã auto-tạo hóa đơn "chua_thu" khi tạo phiếu khám LS
+      // PaymentWizard sẽ tìm hóa đơn đó theo MaPhieuKham rồi confirm
+      const paymentItems = [
+        ...payload.orderRows.map((r) => ({
+          name: r.serviceName || r.id,
+          amount: 0, // BE tính giá — Wizard sẽ hiện giá thực từ hóa đơn
+        })),
+        ...(payload.rxRows.length > 0
+          ? [
+              {
+                name: `Đơn thuốc (${payload.rxRows.length} loại)`,
+                amount: payload.rxRows.reduce(
+                  (s, r) => s + (r.price || 0) * (r.qty || 0),
+                  0
+                ),
+              },
+            ]
+          : []),
+      ];
+
+      // Luôn mở PaymentWizard — giá thực lấy từ hóa đơn BE tạo sẵn
+      if (allowPayment) {
+        setPendingDxPayload(paymentItems);
+        setPaymentOpen(true);
+      } else {
+        toast.success("Đã lưu chẩn đoán thành công.");
+      }
       return;
     }
     await dxMut.mutateAsync({
@@ -662,20 +709,22 @@ const svcMap = useMemo(() => {
                               {idx + 1}
                             </td>
                             <td className="px-2 py-2">
-                              <select
+                              <PopoverSelect
+                                name={`svcId-${r.id}`}
                                 value={r.svcId}
-                                onChange={(e) =>
-                                  patchRow(r.id, { svcId: e.target.value })
+                                onChange={(value) =>
+                                  patchRow(r.id, { svcId: value })
                                 }
-                                className="w-full rounded-lg px-2 py-1 ring-1 ring-teal-200/80 focus:ring-2 focus:ring-teal-500 outline-none"
-                              >
-                                <option value="">— Chọn dịch vụ —</option>
-                                {examServices.map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name}
-                                  </option>
-                                ))}
-                              </select>
+                                options={[
+                                  { value: "", label: "— Chọn dịch vụ —" },
+                                  ...examServices.map((s) => ({
+                                    value: s.id,
+                                    label: s.name,
+                                  })),
+                                ]}
+                                placeholder="Chọn dịch vụ"
+                                buttonClassName="rounded-lg ring-teal-200/80 focus:ring-teal-500 hover:ring-teal-300"
+                              />
                               {svc?.name && (
                                 <div className="text-xs text-slate-500 mt-0.5">
                                   {svc.name}
@@ -842,6 +891,10 @@ const svcMap = useMemo(() => {
                 <h4 className="font-extrabold mb-2 text-slate-900">
                   Chẩn đoán & Điều trị
                 </h4>
+                {/* ✅ RBAC: chỉ BS + YtaLS nhập chẩn đoán */}
+                {!allowExamData && (
+                  <p className="text-sm text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-2">📖 Bạn không có quyền nhập chẩn đoán — chỉ xem.</p>
+                )}
                 <div className="grid md:grid-cols-2 gap-3">
                   <label className="text-sm">
                     Chẩn đoán sơ bộ
@@ -850,7 +903,8 @@ const svcMap = useMemo(() => {
                       onChange={(e) =>
                         setDx((s) => ({ ...s, pre: e.target.value }))
                       }
-                      className="mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                      disabled={!allowExamData}
+                      className="mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </label>
                   <label className="text-sm">
@@ -860,7 +914,8 @@ const svcMap = useMemo(() => {
                       onChange={(e) =>
                         setDx((s) => ({ ...s, final: e.target.value }))
                       }
-                      className="mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                      disabled={!allowExamData}
+                      className="mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </label>
                   <label className="text-sm md:col-span-2">
@@ -871,7 +926,8 @@ const svcMap = useMemo(() => {
                       onChange={(e) =>
                         setDx((s) => ({ ...s, plan: e.target.value }))
                       }
-                      className="scrollbar-none mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                      disabled={!allowExamData}
+                      className="scrollbar-none mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </label>
                   <label className="text-sm md:col-span-2">
@@ -882,7 +938,8 @@ const svcMap = useMemo(() => {
                       onChange={(e) =>
                         setDx((s) => ({ ...s, advice: e.target.value }))
                       }
-                      className="scrollbar-none mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none"
+                      disabled={!allowExamData}
+                      className="scrollbar-none mt-1 w-full bg-transparent px-0 py-1 border-b border-slate-200 focus:border-teal-400 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </label>
 
@@ -895,6 +952,7 @@ const svcMap = useMemo(() => {
                           className="h-4 w-4 rounded border-slate-300 focus:ring-teal-500"
                           checked={!!dxFlags.choVe}
                           onChange={() => toggleDxFlag("choVe")}
+                          disabled={!allowExamData}
                         />
                         <span>Cho về</span>
                       </label>
@@ -904,6 +962,7 @@ const svcMap = useMemo(() => {
                           className="h-4 w-4 rounded border-slate-300 focus:ring-teal-500"
                           checked={!!dxFlags.choThuocVe}
                           onChange={() => toggleDxFlag("choThuocVe")}
+                          disabled={!allowExamData}
                         />
                         <span>Cho thuốc về</span>
                       </label>
@@ -913,6 +972,7 @@ const svcMap = useMemo(() => {
                           className="h-4 w-4 rounded border-slate-300 focus:ring-teal-500"
                           checked={!!dxFlags.taiKham}
                           onChange={() => toggleDxFlag("taiKham")}
+                          disabled={!allowExamData}
                         />
                         <span>Tái khám</span>
                       </label>
@@ -935,13 +995,16 @@ const svcMap = useMemo(() => {
                   <h4 className="font-extrabold text-slate-900">
                     Kê đơn thuốc
                   </h4>
-                  <Button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => setPickerOpen(true)}
-                  >
-                    Kê thuốc
-                  </Button>
+                  {/* ✅ RBAC: chỉ BS mới kê đơn */}
+                  {allowPrescribe && (
+                    <Button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => setPickerOpen(true)}
+                    >
+                      Kê thuốc
+                    </Button>
+                  )}
                 </div>
 
                 <div className="mt-2 rounded-xl bg-white shadow-inner/10 max-h-56 overflow-y-auto scrollbar-none border border-slate-200">
@@ -1033,22 +1096,27 @@ const svcMap = useMemo(() => {
                 </div>
 
                 <div className="px-4 pt-3 flex justify-end">
-                  <Button
-                    className="transition-all duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-70"
-                    variant="radigan"
-                    disabled={!hasDx || dxMut.isPending}
-                    aria-disabled={!hasDx || dxMut.isPending}
-                    onClick={handleExportDiagnosisLS}
-                    title={
-                      !hasDx
-                        ? "Cần có chẩn đoán"
-                        : "Xuất phiếu chẩn đoán & kết thúc khám"
-                    }
-                  >
-                    {dxMut.isPending
-                      ? "Đang lưu..."
-                      : "Xuất phiếu chẩn đoán"}
-                  </Button>
+                  {/* ✅ RBAC: chỉ BS + YtaLS xuất chẩn đoán */}
+                  {allowExamData ? (
+                    <Button
+                      className="transition-all duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-70"
+                      variant="radigan"
+                      disabled={!hasDx || dxMut.isPending}
+                      aria-disabled={!hasDx || dxMut.isPending}
+                      onClick={handleExportDiagnosisLS}
+                      title={
+                        !hasDx
+                          ? "Cần có chẩn đoán"
+                          : "Xuất phiếu chẩn đoán & kết thúc khám"
+                      }
+                    >
+                      {dxMut.isPending
+                        ? "Đang lưu..."
+                        : "Xuất phiếu chẩn đoán"}
+                    </Button>
+                  ) : (
+                    <span className="text-sm text-slate-400">Không có quyền xuất chẩn đoán</span>
+                  )}
                 </div>
               </motion.section>
             </>
@@ -1181,19 +1249,45 @@ const svcMap = useMemo(() => {
                   <Button variant="ghost" type="button" onClick={onBack}>
                     Đóng
                   </Button>
-                  <Button
-                    className="transition-all duration-300"
-                    variant="radigan"
-                    onClick={handleFinishCLS}
-                  >
-                    Hoàn tất CLS
-                  </Button>
+                  {/* ✅ RBAC: chỉ YtaCLS + KTV hoàn tất CLS */}
+                  {allowClsResult ? (
+                    <Button
+                      className="transition-all duration-300"
+                      variant="radigan"
+                      onClick={handleFinishCLS}
+                    >
+                      Hoàn tất CLS
+                    </Button>
+                  ) : (
+                    <span className="text-sm text-slate-400">Không có quyền hoàn tất CLS</span>
+                  )}
                 </div>
               </motion.section>
             </>
           )}
         </motion.div>
       </section>
+
+      {/* Payment Wizard — mở sau khi lưu chẩn đoán thành công */}
+      <PaymentWizard
+        open={allowPayment && paymentOpen}
+        patient={patient}
+        items={pendingDxPayload || []}
+        examId={maPhieuKham}
+        onClose={() => {
+          setPaymentOpen(false);
+          setPendingDxPayload(null);
+        }}
+        onComplete={(result) => {
+          setPaymentOpen(false);
+          setPendingDxPayload(null);
+          toast.success(
+            result?.status === "deferred"
+              ? "Đã lưu hóa đơn ở trạng thái chưa thu."
+              : "Thanh toán thành công!"
+          );
+        }}
+      />
 
       {/* Rx modal */}
       <RxPickerModal

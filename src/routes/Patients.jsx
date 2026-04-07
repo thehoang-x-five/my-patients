@@ -28,7 +28,15 @@ import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
 import { apiLogger } from "../utils/apiLogger.js";
-import { canManageReception } from "../utils/permissions.js";
+import { canCreatePatient, canEditPatient } from "../utils/permissions.js";
+
+const PATIENT_TOAST_IDS = {
+  checkInReady: "patients-checkin-ready",
+  checkInLoadError: "patients-checkin-load-error",
+  flashAddReady: "patients-flash-add-ready",
+  flashAddLoadError: "patients-flash-add-load-error",
+  examInfoLoadError: "patients-exam-info-load-error",
+};
 
 // Lấy chuỗi yyyy-MM-dd của hôm nay
 const todayStr = () => {
@@ -122,7 +130,8 @@ export default function Patients() {
 
   // ✅ Check permissions
   const user = useAuthStore((s) => s.user);
-  const hasReceptionPermission = canManageReception(user);
+  const canCreatePatientAction = canCreatePatient(user);
+  const canEditPatientAction = canEditPatient(user);
 
   // === Bộ lọc
   const [filter, setFilter] = useState({
@@ -242,6 +251,63 @@ export default function Patients() {
   // Map to suppress duplicate success toasts for the same patient
   const suppressedStatusToast = React.useRef(new Map());
 
+  const mutatePatientStatus = React.useCallback(
+    async (id, next, options = {}) => {
+      const pid = id || modal?.patient?.id || modal?.patient?.pid;
+      if (!pid) return;
+
+      let payload = null;
+      if (typeof next === "string") {
+        payload = { status: next };
+      } else if (next && typeof next === "object") {
+        const status =
+          next.status ||
+          next.statusCode ||
+          next.trang_thai_tai_khoan ||
+          next.TrangThai;
+
+        payload = {
+          ...next,
+          ...(status ? { status } : {}),
+        };
+      }
+
+      if (!payload?.status) return;
+
+      try {
+        await updatePatientStatus({
+          id: pid,
+          ...payload,
+        });
+
+        const shouldSuppress = options.suppressIfRecentlyUpdated ?? false;
+        const ts = suppressedStatusToast.current.get(pid);
+        const now = Date.now();
+
+        if (shouldSuppress && ts && now - ts < 3000) {
+          suppressedStatusToast.current.delete(pid);
+          return;
+        }
+
+        if (!options.suppressSuccessToast) {
+          toast.success(
+            options.successMessage ||
+              "Đã cập nhật trạng thái bệnh nhân thành công."
+          );
+        }
+      } catch (err) {
+        const msg =
+          options.errorMessage ||
+          err?.response?.data?.message ||
+          err?.message ||
+          "Không thể cập nhật trạng thái. Vui lòng thử lại.";
+        toast.error(msg);
+        throw err;
+      }
+    },
+    [modal?.patient?.id, modal?.patient?.pid, updatePatientStatus]
+  );
+
   // ✅ Subscribe realtime events for Patients
   useEffect(() => {
     const offPatientCreated = on('PatientCreated', (patient) => {
@@ -336,7 +402,9 @@ export default function Patients() {
         
         // ✅ Show toast only if not already notified
         if (!highlightNotified) {
-          toast.success("Đã check-in. Vui lòng lập phiếu khám cho bệnh nhân.");
+          toast.success("Đã check-in. Vui lòng lập phiếu khám cho bệnh nhân.", {
+            toastId: PATIENT_TOAST_IDS.checkInReady,
+          });
           markHighlightNotified();
         }
         
@@ -344,7 +412,9 @@ export default function Patients() {
         hasProcessedHighlightRef.current = true;
       } catch (err) {
         console.error("Không lấy được lịch hẹn đã check-in khi highlight:", err);
-        toast.error("Không thể tải thông tin lịch hẹn. Vui lòng thử lại.");
+        toast.error("Không thể tải thông tin lịch hẹn. Vui lòng thử lại.", {
+          toastId: PATIENT_TOAST_IDS.checkInLoadError,
+        });
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -369,7 +439,9 @@ export default function Patients() {
 
     // ✅ Show toast only if not already notified
     if (!flashAddNotified) {
-      toast.info("Vui lòng thêm bệnh nhân mới từ lịch hẹn đã check-in.");
+      toast.success("Vui lòng thêm bệnh nhân mới từ lịch hẹn đã check-in.", {
+        toastId: PATIENT_TOAST_IDS.flashAddReady,
+      });
       markFlashAddNotified();
     }
     
@@ -437,7 +509,9 @@ export default function Patients() {
         hasProcessedFlashAddApiRef.current = true;
       } catch (err) {
         console.error("Không lấy được lịch hẹn đã check-in khi flash add:", err);
-        toast.warn("Không thể tải thông tin từ lịch hẹn. Vui lòng nhập thủ công.");
+        toast.error("Không thể tải thông tin từ lịch hẹn. Vui lòng nhập thủ công.", {
+          toastId: PATIENT_TOAST_IDS.flashAddLoadError,
+        });
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -514,6 +588,10 @@ export default function Patients() {
 
     if (type === "view") {
       setModal({ open: true, mode: "view", patient: p });
+      return;
+    }
+
+    if (!canEditPatientAction) {
       return;
     }
 
@@ -640,7 +718,9 @@ export default function Patients() {
           }
         } catch (err) {
           console.error("Lỗi khi tìm phiếu khám:", err);
-          toast.warn("Không thể tải thông tin phiếu khám. Modal vẫn sẽ mở, bạn có thể tải lại sau.");
+          toast.error("Không thể tải thông tin phiếu khám. Modal vẫn sẽ mở, bạn có thể tải lại sau.", {
+            toastId: PATIENT_TOAST_IDS.examInfoLoadError,
+          });
         }
       }
 
@@ -668,7 +748,7 @@ export default function Patients() {
           counts={counts}
           viewMode={viewMode}
           onChangeViewMode={setViewMode}
-          onAdd={hasReceptionPermission ? () => {
+          onAdd={canCreatePatientAction ? () => {
             // Nếu có patientPrefill (từ flashAddAt) -> fill sẵn tên + sdt
             // Nếu không có patientPrefill -> mở bình thường không fill
             const hasPrefill = !!patientPrefill;
@@ -720,7 +800,6 @@ export default function Patients() {
               todayStatus: "all",
               todayOnly: false,
             });
-            toast.info("Đã đặt lại bộ lọc về mặc định.");
           }}
           sort={sort}
           onChangeSort={setSort}
@@ -733,13 +812,16 @@ export default function Patients() {
             <PatientsTable
               items={filtered}
               onAction={handleAction}
+              onStatusChange={mutatePatientStatus}
               stretch
               highlightPid={highlightPid}
-              hasReceptionPermission={hasReceptionPermission}
-              canCreateExam={hasReceptionPermission}
+              canEditPatient={canEditPatientAction}
+              canCreateExam={canEditPatientAction}
+              canProcessPatient={canEditPatientAction}
+              canCancelPatientFlow={canEditPatientAction}
             />
           </div>
-          {totalPages > 1 && (
+          {totalItems > 0 && (
             <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
               <Pagination
                 currentPage={page}
@@ -747,6 +829,7 @@ export default function Patients() {
                 totalItems={totalItems}
                 pageSize={50}
                 onPageChange={setPage}
+                showWhenSinglePage
                 className="px-4 py-3"
               />
             </div>
@@ -769,6 +852,15 @@ export default function Patients() {
             anchorEl={filterAnchor}
             sort={sort}
             onChangeSort={setSort}
+            onReset={() => {
+              setFilter({
+                keyword: "",
+                accountStatus: "all",
+                todayStatus: "all",
+                todayOnly: false,
+              });
+              setSort("priority");
+            }}
           />
         )}
 
@@ -840,55 +932,11 @@ export default function Patients() {
                          throw err;
                        }
                      }}
-                     onMutatePatient={async (id, next) => {
-                      const pid = id || modal?.patient?.id || modal?.patient?.pid;
-                      if (!pid) return;
-                    
-                      // Cho phép:
-                      // - onMutatePatient(pid, "wait_exam")
-                      // - onMutatePatient(pid, { status: STATUSES.WAIT_EXAM, ... })
-                      let payload = null;
-                    
-                      if (typeof next === "string") {
-                        payload = { status: next };
-                      } else if (next && typeof next === "object") {
-                        const status =
-                          next.status ||
-                          next.statusCode ||
-                          next.trang_thai_tai_khoan ||
-                          next.TrangThai;
-                    
-                        payload = {
-                          ...next,
-                          ...(status ? { status } : {}),
-                        };
-                      }
-                    
-                      if (!payload || !payload.status) return;
-                     
-                      try {
-                        await updatePatientStatus({
-                          id: pid,
-                          ...payload,
-                        });
-                        // Avoid duplicate toast if an info-update just occurred for the same pid
-                        const ts = suppressedStatusToast.current.get(pid);
-                        const now = Date.now();
-                        if (ts && now - ts < 3000) {
-                          // suppress this status-toast and remove the marker
-                          suppressedStatusToast.current.delete(pid);
-                        } else {
-                          toast.success("Đã cập nhật trạng thái bệnh nhân thành công.");
-                        }
-                      } catch (err) {
-                        const msg =
-                          err?.response?.data?.message ||
-                          err?.message ||
-                          "Không thể cập nhật trạng thái. Vui lòng thử lại.";
-                        toast.error(msg);
-                        throw err;
-                      }
-                    }}
+                     onMutatePatient={(id, next) =>
+                      mutatePatientStatus(id, next, {
+                        suppressIfRecentlyUpdated: true,
+                      })
+                    }
                     
           />
         )}

@@ -1,5 +1,6 @@
 // src/components/reports/ReportFilterPopover.jsx
 import React from "react";
+import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
 
 const PERIODS = [
   { value: "mtd", label: "Tháng này" },
@@ -56,11 +57,6 @@ export default function ReportFilterPopover({
       setFrom(range.from);
       setTo(range.to);
     }
-  };
-
-  const handleReset = () => {
-    if (typeof onReset === "function") onReset();
-    onClose?.();
   };
 
   return (
@@ -167,7 +163,15 @@ export default function ReportFilterPopover({
         </div>
       </div>
 
-   
+      <div className="mt-3 -mx-3 -mb-3">
+        <FilterPopoverFooter
+          onReset={() => onReset?.()}
+          onClose={onClose}
+          resetLabel="Reset bộ lọc"
+          closeLabel="Đóng"
+          accent="cyan"
+        />
+      </div>
     </div>
   );
 }

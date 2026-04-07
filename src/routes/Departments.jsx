@@ -3,19 +3,35 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
+import { toast } from "react-toastify";
 
 import DeptToolbar from "../components/departments/DeptToolbar.jsx";
 import DeptGrid from "../components/departments/DeptGrid.jsx";
 import DeptModal from "../components/departments/DeptModal.jsx";
 import ScheduleModal from "../components/departments/ScheduleModal.jsx";
+import RoomScheduleManagerModal from "../components/departments/RoomScheduleManagerModal.jsx";
 import DeptFilterPopover from "../components/departments/DeptFilterPopover.jsx";
+import DepartmentAdminModal from "../components/departments/DepartmentAdminModal.jsx";
 import Pagination from "../components/ui/Pagination.jsx";
 
 import {
   useDepartmentRooms,
   useDutyByRoom,
+  useRoomDutyWeek,
+  useDepartmentCatalog,
+  useRoomCatalog,
+  useServiceCatalog,
+  useCreateDepartment,
+  useUpdateDepartment,
+  useCreateRoom,
+  useUpdateRoom,
+  useUpdateRoomDutyWeek,
+  useCreateService,
+  useUpdateService,
 } from "../api/departments.js";
-import { useUIStore } from "../components/stores/appStore.js";
+import { useAdminUsers } from "../api/admin.js";
+import { useAuthStore, useUIStore } from "../components/stores/appStore.js";
+import { isAdmin as checkIsAdmin } from "../utils/permissions.js";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -225,10 +241,14 @@ function isClsRoom(r) {
 }
 
 export default function Departments() {
+  const ROOMS_PAGE_SIZE = 18;
+
   useViewportVH();
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
+  const user = useAuthStore((s) => s.user);
+  const userIsAdmin = checkIsAdmin(user);
 
   const todayKey = dayKeyToday();
 
@@ -265,13 +285,52 @@ export default function Departments() {
     status: mapStatusToBackend(filters.status) || undefined,
     roomType: mapRoomTypeToBackend(filters.roomType) || undefined,
     page,
-    pageSize: 50,
+    pageSize: ROOMS_PAGE_SIZE,
   }, { enabled: true });
 
-  const depRoomsResult = depRoomsData || { Items: [], TotalItems: 0, Page: 1, PageSize: 50 };
+  const depRoomsResult = depRoomsData || {
+    Items: [],
+    TotalItems: 0,
+    Page: 1,
+    PageSize: ROOMS_PAGE_SIZE,
+  };
   const depItems = depRoomsResult.Items || [];
   const totalItems = depRoomsResult.TotalItems || 0;
-  const totalPages = Math.ceil(totalItems / 50);
+  const currentPage = depRoomsResult.Page || page;
+  const currentPageSize = depRoomsResult.PageSize || ROOMS_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(totalItems / currentPageSize));
+
+  useEffect(() => {
+    if (!depRoomsLoading && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [depRoomsLoading, page, totalPages]);
+
+  const { data: departmentCatalog = [] } = useDepartmentCatalog({
+    enabled: userIsAdmin,
+  });
+  const { data: roomCatalogRes } = useRoomCatalog(
+    { page: 1, pageSize: 200 },
+    { enabled: userIsAdmin }
+  );
+  const roomCatalog = roomCatalogRes?.items || [];
+  const { data: serviceCatalogRes } = useServiceCatalog(
+    { page: 1, pageSize: 200 },
+    { enabled: userIsAdmin }
+  );
+  const serviceCatalog = serviceCatalogRes?.items || [];
+  const { data: adminStaffRes } = useAdminUsers(
+    { page: 1, pageSize: 400 },
+    { enabled: userIsAdmin }
+  );
+
+  const createDepartment = useCreateDepartment();
+  const updateDepartment = useUpdateDepartment();
+  const createRoom = useCreateRoom();
+  const updateRoom = useUpdateRoom();
+  const updateRoomDutyWeek = useUpdateRoomDutyWeek();
+  const createService = useCreateService();
+  const updateService = useUpdateService();
 
   // chuẩn hóa từng phòng cho UI
   const all = useMemo(
@@ -281,6 +340,7 @@ export default function Departments() {
 
   const filterBtnRef = useRef(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
 
   // stats cho toolbar (tính từ all đã được filter ở backend)
   const { totalRooms, onlineCount, offlineCount, clinicCount, clsCount } =
@@ -334,14 +394,66 @@ export default function Departments() {
   // duty when schedule modal opens
   const [schedule, setSchedule] = useState({ open: false, dept: null });
   const dutyRoomId = schedule.open && schedule.dept ? schedule.dept.id : null;
+  const { data: roomDutyWeek } = useRoomDutyWeek(dutyRoomId, {
+    enabled: !!dutyRoomId && userIsAdmin,
+  });
   const { data: dutyRaw = [] } = useDutyByRoom(dutyRoomId, {
-    enabled: !!dutyRoomId,
+    enabled: !!dutyRoomId && !userIsAdmin,
   });
   
   const weekDays = useMemo(
     () => buildWeekDaysFromDuty(dutyRaw),
     [dutyRaw]
   );
+
+  const dutyStaffOptions = useMemo(() => {
+    const staffItems = adminStaffRes?.items || [];
+    const currentRoom = schedule?.dept;
+    const roomIsCls = currentRoom ? isClsRoom(currentRoom) : false;
+
+    return staffItems
+      .filter((item) => {
+        const role = item.role || item.vaiTro;
+        const nurseType = String(item.nurseType || item.loaiYTa || "")
+          .trim()
+          .toLowerCase();
+        const workStatus = item.status || item.trangThaiCongTac;
+        const accountStatus = item.trangThaiTaiKhoan || item.statusAccount;
+
+        if (workStatus !== "dang_cong_tac" || accountStatus === "khoa") {
+          return false;
+        }
+
+        if (role === "ky_thuat_vien") {
+          return roomIsCls;
+        }
+
+        if (role !== "y_ta") {
+          return false;
+        }
+
+        if (roomIsCls) {
+          return (
+            nurseType === "" ||
+            nurseType === "cls" ||
+            nurseType === "can_lam_sang"
+          );
+        }
+
+        return (
+          nurseType === "" ||
+          nurseType === "ls" ||
+          nurseType === "lam_sang" ||
+          nurseType === "hanhchinh" ||
+          nurseType === "hanh_chinh" ||
+          nurseType === "hc"
+        );
+      })
+      .map((item) => ({
+        value: item.id || item.maNhanVien,
+        label: `${item.name || item.hoTen}${item.dept ? ` • ${item.dept}` : ""}`,
+      }));
+  }, [adminStaffRes, schedule]);
 
   // modal chi tiết
   const [detail, setDetail] = useState({ open: false, dept: null });
@@ -391,6 +503,97 @@ export default function Departments() {
     });
   };
 
+  const handleSaveRoomDutyWeek = (payload) => {
+    if (!dutyRoomId) return;
+
+    updateRoomDutyWeek.mutate(
+      { id: dutyRoomId, data: payload },
+      {
+        onSuccess: () => {
+          toast.success("Đã cập nhật lịch phòng");
+        },
+        onError: (error) => {
+          toast.error(error?.message || "Không thể cập nhật lịch phòng");
+        },
+      }
+    );
+  };
+
+  const handleCreateDepartment = (payload) => {
+    createDepartment.mutate(payload, {
+      onSuccess: () => {
+        toast.success("Đã tạo khoa mới");
+        setShowAdminModal(false);
+      },
+      onError: (error) =>
+        toast.error(error?.message || "Không thể tạo khoa"),
+    });
+  };
+
+  const handleUpdateDepartment = (id, payload) => {
+    updateDepartment.mutate(
+      { id, data: payload },
+      {
+        onSuccess: () => {
+          toast.success("Đã cập nhật khoa");
+          setShowAdminModal(false);
+        },
+        onError: (error) =>
+          toast.error(error?.message || "Không thể cập nhật khoa"),
+      }
+    );
+  };
+
+  const handleCreateRoom = (payload) => {
+    createRoom.mutate(payload, {
+      onSuccess: () => {
+        toast.success("Đã tạo phòng mới");
+        setShowAdminModal(false);
+      },
+      onError: (error) =>
+        toast.error(error?.message || "Không thể tạo phòng"),
+    });
+  };
+
+  const handleUpdateRoom = (id, payload) => {
+    updateRoom.mutate(
+      { id, data: payload },
+      {
+        onSuccess: () => {
+          toast.success("Đã cập nhật phòng");
+          setShowAdminModal(false);
+        },
+        onError: (error) =>
+          toast.error(error?.message || "Không thể cập nhật phòng"),
+      }
+    );
+  };
+
+  const handleCreateService = (payload) => {
+    createService.mutate(payload, {
+      onSuccess: () => {
+        toast.success("Tao dich vu moi thanh cong");
+        setShowAdminModal(false);
+      },
+      onError: (error) =>
+        toast.error(error?.message || "Khong the tao dich vu"),
+    });
+  };
+
+  const handleUpdateService = (id, payload) => {
+    updateService.mutate(
+      { id, data: payload },
+      {
+        onSuccess: () => {
+          toast.success("Cap nhat dich vu thanh cong");
+          setShowAdminModal(false);
+        },
+        onError: (error) =>
+          toast.error(error?.message || "Khong the cap nhat dich vu"),
+      }
+    );
+  };
+
   return (
     <motion.main
       initial={{ opacity: 0, y: 8 }}
@@ -405,17 +608,33 @@ export default function Departments() {
         style={{ "--topbar-h": `${topbar}px` }}
       >
         {/* Toolbar mới: chip Online / Offline / loại phòng + nút Lọc */}
-        <DeptToolbar
-          totalRooms={totalRooms}
-          onlineCount={onlineCount}
-          offlineCount={offlineCount}
-          clinicCount={clinicCount}
-          clsCount={clsCount}
-          onOpenFilter={() => setFilterOpen(true)}
-          onResetFilters={handleResetFilters}
-          filterBtnRef={filterBtnRef}
-        />
+        <div className="flex flex-wrap items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <DeptToolbar
+              totalRooms={totalRooms}
+              onlineCount={onlineCount}
+              offlineCount={offlineCount}
+              clinicCount={clinicCount}
+              clsCount={clsCount}
+              onOpenFilter={() => setFilterOpen(true)}
+              onResetFilters={handleResetFilters}
+              filterBtnRef={filterBtnRef}
+            />
+          </div>
 
+          {userIsAdmin && (
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAdminModal(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-500 px-3 py-1.5 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px"
+              >
+                <span className="text-base leading-none">+</span>
+                <span>Quản trị</span>
+              </button>
+            </div>
+          )}
+        </div>
         {depRoomsLoading ? (
           <section className="card mt-3 p-4 h-full  rounded-2xl bg-white ring-1 ring-slate-200/60 text-sm text-slate-500 min-h-[320px] flex items-center justify-center">
             Đang tải dữ liệu phòng khoa.
@@ -430,13 +649,14 @@ export default function Departments() {
                 highlightId={highlightRoomId}
               />
             </div>
-            {totalPages > 1 && (
+            {totalItems > 0 && (
               <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
                 <Pagination
-                  currentPage={page}
+                  currentPage={currentPage}
                   totalPages={totalPages}
                   totalItems={totalItems}
-                  pageSize={50}
+                  pageSize={currentPageSize}
+                  showWhenSinglePage
                   onPageChange={setPage}
                   className="px-4 py-3"
                 />
@@ -453,6 +673,7 @@ export default function Departments() {
         anchorEl={filterBtnRef}
         values={filters}
         setValues={setFilters}
+        onReset={handleResetFilters}
       />
 
       {/* Modal chi tiết phòng */}
@@ -463,14 +684,43 @@ export default function Departments() {
       />
 
       {/* Modal lịch trực theo phòng */}
-      <ScheduleModal
-  open={schedule.open}
-  dept={schedule.dept}
-  todayDuty={weekDays ? weekDays[todayKey] : null}
-  weekDays={weekDays}
-  todayKey={todayKey}
-  onClose={() => setSchedule({ open: false, dept: null })}
-/>
+      {userIsAdmin ? (
+        <RoomScheduleManagerModal
+          open={schedule.open}
+          dept={schedule.dept}
+          dutyWeek={roomDutyWeek}
+          staffOptions={dutyStaffOptions}
+          onClose={() => setSchedule({ open: false, dept: null })}
+          onSave={handleSaveRoomDutyWeek}
+          isPending={updateRoomDutyWeek.isPending}
+        />
+      ) : (
+        <ScheduleModal
+          open={schedule.open}
+          dept={schedule.dept}
+          todayDuty={weekDays ? weekDays[todayKey] : null}
+          weekDays={weekDays}
+          todayKey={todayKey}
+          onClose={() => setSchedule({ open: false, dept: null })}
+        />
+      )}
+
+      <DepartmentAdminModal
+        open={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
+        departments={departmentCatalog}
+        rooms={roomCatalog}
+        services={serviceCatalog}
+        onCreateDepartment={handleCreateDepartment}
+        onUpdateDepartment={handleUpdateDepartment}
+        onCreateRoom={handleCreateRoom}
+        onUpdateRoom={handleUpdateRoom}
+        onCreateService={handleCreateService}
+        onUpdateService={handleUpdateService}
+        departmentPending={createDepartment.isPending || updateDepartment.isPending}
+        roomPending={createRoom.isPending || updateRoom.isPending}
+        servicePending={createService.isPending || updateService.isPending}
+      />
     </motion.main>
   );
 }

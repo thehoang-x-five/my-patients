@@ -134,6 +134,10 @@ export function inferRecipientFromToken() {
       loaiNguoiNhan = "bac_si";
     } else if (vaiTro === "y_ta") {
       loaiNguoiNhan = "y_ta";
+    } else if (vaiTro === "admin") {
+      loaiNguoiNhan = "admin";
+    } else if (vaiTro === "ky_thuat_vien") {
+      loaiNguoiNhan = "ky_thuat_vien";
     }
   }
 
@@ -440,12 +444,111 @@ async function apiCreateNotification(payload) {
   return normalizeNotification(res.data);
 }
 
+async function searchSystemNotifications(params = {}) {
+  const res = await http.get("/notification/search", {
+    params: {
+      LoaiThongBao: params.type || undefined,
+      MucDoUuTien: params.priority || undefined,
+      TrangThai: params.status || undefined,
+      Keyword: params.keyword || undefined,
+      FromTime: params.fromTime || undefined,
+      ToTime: params.toTime || undefined,
+      Page: params.page || 1,
+      PageSize: params.pageSize || 50,
+    },
+  });
+
+  const payload = res.data || {};
+  const rawItems = Array.isArray(payload.Items)
+    ? payload.Items
+    : Array.isArray(payload.items)
+    ? payload.items
+    : [];
+
+  return {
+    items: rawItems.map(normalizeNotification),
+    totalItems: payload.TotalItems ?? payload.totalItems ?? rawItems.length,
+    page: payload.Page ?? payload.page ?? 1,
+    pageSize: payload.PageSize ?? payload.pageSize ?? rawItems.length,
+  };
+}
+
+async function listNotificationTemplates() {
+  const res = await http.get("/notification-templates");
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+async function createNotificationTemplate(payload) {
+  const res = await http.post("/notification-templates", payload);
+  return res.data;
+}
+
+async function updateNotificationTemplate({ id, data }) {
+  const res = await http.put(`/notification-templates/${id}`, data);
+  return res.data;
+}
+
+async function deleteNotificationTemplate(id) {
+  await http.delete(`/notification-templates/${id}`);
+  return true;
+}
+
 export function useCreateNotification() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: apiCreateNotification,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["notification-search"] });
+    },
+  });
+}
+
+export function useNotificationSearch(params = {}, options = {}) {
+  return useQuery({
+    queryKey: ["notification-search", params],
+    queryFn: () => searchSystemNotifications(params),
+    staleTime: 15_000,
+    keepPreviousData: true,
+    ...options,
+  });
+}
+
+export function useNotificationTemplates(options = {}) {
+  return useQuery({
+    queryKey: ["notification-templates"],
+    queryFn: listNotificationTemplates,
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
+export function useCreateNotificationTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createNotificationTemplate,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notification-templates"] });
+    },
+  });
+}
+
+export function useUpdateNotificationTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateNotificationTemplate,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notification-templates"] });
+    },
+  });
+}
+
+export function useDeleteNotificationTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteNotificationTemplate,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notification-templates"] });
     },
   });
 }
@@ -500,18 +603,8 @@ export function useMarkRead() {
  */
 export function subscribeNotifications(queryClient) {
   const handler = (dto) => {
-    const mapped = normalizeNotification(dto);
-    
     if (queryClient && typeof queryClient.invalidateQueries === "function") {
-           queryClient.invalidateQueries({ queryKey: ["notifications"] });
-           
-         }
-    try {
-      window.dispatchEvent(
-        new CustomEvent("app:new-notification", { detail: mapped })
-      );
-    } catch {
-      // ignore
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   };
 

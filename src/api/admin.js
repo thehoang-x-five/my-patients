@@ -30,6 +30,9 @@ export const updateAdminUser = (id, data) => put(`${BASE}/${id}`, data);
 export const updateAdminUserStatus = (id, data) =>
   put(`${BASE}/${id}/status`, data);
 
+export const lockUnlockAccount = (id, data) =>
+  put(`${BASE}/${id}/lock-status`, data);
+
 export const resetAdminUserPassword = (id, data) =>
   post(`${BASE}/${id}/reset-password`, data);
 
@@ -55,27 +58,77 @@ const statusColors = {
 };
 
 export function normalizeStaff(dto = {}) {
+  const id = dto.MaNhanVien ?? dto.maNhanVien ?? "";
+  const username = dto.TenDangNhap ?? dto.tenDangNhap ?? "";
+  const name = dto.HoTen ?? dto.hoTen ?? "";
+  const role = dto.VaiTro ?? dto.vaiTro ?? "";
+  const position = dto.ChucVu ?? dto.chucVu ?? "";
+  const nurseType = dto.LoaiYTa ?? dto.loaiYTa ?? null;
+  const email = dto.Email ?? dto.email ?? "";
+  const phone = dto.DienThoai ?? dto.dienThoai ?? "";
+  const specialty = dto.ChuyenMon ?? dto.chuyenMon ?? "";
+  const degree = dto.HocVi ?? dto.hocVi ?? "";
+  const experience = Number(dto.SoNamKinhNghiem ?? dto.soNamKinhNghiem ?? 0) || 0;
+  const departmentId = dto.MaKhoa ?? dto.maKhoa ?? "";
+  const departmentName = dto.TenKhoa ?? dto.tenKhoa ?? "";
+  const workStatus = dto.TrangThaiCongTac ?? dto.trangThaiCongTac ?? "dang_cong_tac";
+  const accountStatus = dto.TrangThaiTaiKhoan ?? dto.trangThaiTaiKhoan ?? "hoat_dong";
+  const avatar = dto.AnhDaiDien ?? dto.anhDaiDien ?? null;
+
   return {
-    id: dto.maNhanVien ?? "",
-    username: dto.tenDangNhap ?? "",
-    name: dto.hoTen ?? "",
-    role: dto.vaiTro ?? "",
-    roleLabel: roleLabels[dto.vaiTro] ?? dto.vaiTro ?? "",
-    position: dto.chucVu ?? "",
-    nurseType: dto.loaiYTa ?? null,
-    email: dto.email ?? "",
-    phone: dto.dienThoai ?? "",
-    specialty: dto.chuyenMon ?? "",
-    degree: dto.hocVi ?? "",
-    experience: dto.soNamKinhNghiem ?? 0,
-    departmentId: dto.maKhoa ?? "",
-    departmentName: dto.tenKhoa ?? "",
-    status: dto.trangThaiCongTac ?? "dang_cong_tac",
-    statusLabel: statusLabels[dto.trangThaiCongTac] ?? dto.trangThaiCongTac ?? "",
-    statusColor: statusColors[dto.trangThaiCongTac] ?? "gray",
-    avatar: dto.anhDaiDien ?? null,
-    // raw DTO
+    id,
+    maNhanVien: id,
+    username,
+    tenDangNhap: username,
+    name,
+    hoTen: name,
+    role,
+    vaiTro: role,
+    roleLabel: roleLabels[role] ?? role ?? "",
+    position,
+    chucVu: position,
+    nurseType,
+    loaiYTa: nurseType,
+    email,
+    phone,
+    dienThoai: phone,
+    specialty,
+    chuyenMon: specialty,
+    degree,
+    hocVi: degree,
+    experience,
+    soNamKinhNghiem: experience,
+    departmentId,
+    maKhoa: departmentId,
+    departmentName,
+    dept: departmentName,
+    tenKhoa: departmentName,
+    status: workStatus,
+    trangThaiCongTac: workStatus,
+    statusLabel: statusLabels[workStatus] ?? workStatus ?? "",
+    statusColor: statusColors[workStatus] ?? "gray",
+    trangThaiTaiKhoan: accountStatus,
+    statusAccount: accountStatus,
+    avatar,
+    anhDaiDien: avatar,
     _raw: dto,
+  };
+}
+
+function normalizeAdminUsersResponse(data = {}) {
+  const rawItems = data?.Items ?? data?.items ?? [];
+  const items = Array.isArray(rawItems) ? rawItems.map(normalizeStaff) : [];
+
+  return {
+    ...data,
+    Items: items,
+    items,
+    TotalItems: data?.TotalItems ?? data?.totalItems ?? items.length,
+    totalItems: data?.TotalItems ?? data?.totalItems ?? items.length,
+    Page: data?.Page ?? data?.page ?? 1,
+    page: data?.Page ?? data?.page ?? 1,
+    PageSize: data?.PageSize ?? data?.pageSize ?? items.length,
+    pageSize: data?.PageSize ?? data?.pageSize ?? items.length,
   };
 }
 
@@ -83,16 +136,15 @@ export function normalizeStaff(dto = {}) {
 
 const ADMIN_USERS_KEY = "admin-users";
 
-export function useAdminUsers(filter = {}) {
+export function useAdminUsers(filter = {}, options = {}) {
   const qc = useQueryClient();
   const query = useQuery({
     queryKey: [ADMIN_USERS_KEY, filter],
     queryFn: () => fetchAdminUsers(filter),
-    select: (data) => ({
-      ...data,
-      items: (data.items || []).map(normalizeStaff),
-    }),
+    select: normalizeAdminUsersResponse,
+    enabled: options.enabled ?? true,
     staleTime: 30_000,
+    ...options,
   });
 
   // Realtime: auto-refresh khi có StaffChanged
@@ -135,6 +187,14 @@ export function useUpdateUserStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }) => updateAdminUserStatus(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+  });
+}
+
+export function useLockUnlockAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }) => lockUnlockAccount(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
   });
 }

@@ -518,7 +518,13 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                         </Td>
                         <Td last right>
                           <div className="flex items-center justify-end gap-2">
-                            <ActionButton active={active} onClick={() => onStart?.(p)} />
+                            {onStart ? (
+                              <ActionButton active={active} onClick={() => onStart(p)} />
+                            ) : (
+                              <span className="inline-flex min-w-[5.5rem] justify-end text-sm font-medium text-slate-300">
+                                --
+                              </span>
+                            )}
                           </div>
                         </Td>
                       </Row>

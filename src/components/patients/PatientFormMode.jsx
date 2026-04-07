@@ -1,6 +1,7 @@
 // src/components/patients/PatientFormMode.jsx
 import React from "react";
 import { motion } from "framer-motion";
+import PopoverSelect from "../ui/PopoverSelect.jsx";
 
 // Đúng: từ src/components/patients -> lên src -> vào api
 import { STATUSES, TODAY_STATUS_MAP } from "../../api/patients";
@@ -71,16 +72,20 @@ export default function PatientFormMode({
         </label>
         <label className="text-sm font-semibold text-slate-700">
           Giới tính
-          <select
-            value={form.gender || ""}
-            onChange={(e) => change("gender", e.target.value)}
-            className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
-          >
-            <option value="">—</option>
-            <option>Nam</option>
-            <option>Nữ</option>
-            <option>Khác</option>
-          </select>
+          <div className="mt-2">
+            <PopoverSelect
+              name="gender"
+              value={form.gender || ""}
+              onChange={(value) => change("gender", value)}
+              options={[
+                { value: "", label: "—" },
+                { value: "Nam", label: "Nam" },
+                { value: "Nữ", label: "Nữ" },
+                { value: "Khác", label: "Khác" },
+              ]}
+              placeholder="Chọn giới tính"
+            />
+          </div>
         </label>
         <label className="text-sm font-semibold text-slate-700">
           Điện thoại
@@ -113,53 +118,61 @@ export default function PatientFormMode({
 
         <label className="text-sm font-semibold text-slate-700">
           Trạng thái tài khoản
-          <select
-            value={form.accountStatus || "hoat_dong"}
-              onChange={(e) => change("accountStatus", e.target.value)}
+          <div className="mt-2">
+            <PopoverSelect
+              name="accountStatus"
+              value={form.accountStatus || "hoat_dong"}
+              onChange={(value) => change("accountStatus", value)}
               disabled={mode === "add"}
-            className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm"
-          >
-            <option value="hoat_dong">Hoạt động</option>
-            <option value="da_xoa">Đã xóa</option>
-            <option value="khong_hoat_dong">Không hoạt động</option>
-          </select>
+              options={[
+                { value: "hoat_dong", label: "Hoạt động" },
+                { value: "da_xoa", label: "Đã xóa" },
+                { value: "khong_hoat_dong", label: "Không hoạt động" },
+              ]}
+              placeholder="Chọn trạng thái tài khoản"
+            />
+          </div>
         </label>
 
         <label className="text-sm font-semibold text-slate-700">
           Trạng thái trong ngày
-          <select
-            value={mode === "add" ? (form.status || STATUSES.WAIT_INTAKE) : (form.status || "")}
-            onChange={(e) => change("status", e.target.value)}
-            disabled={true} // ✅ Luôn disable - không cho phép chỉnh sửa trạng thái hôm nay
-            className="mt-2 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition-all shadow-sm disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
-          >
-            {mode === "add" ? (
-              <>
-                <option value={STATUSES.WAIT_INTAKE}>
-                  {TODAY_STATUS_MAP[STATUSES.WAIT_INTAKE] || STATUSES.WAIT_INTAKE}
-                </option>
-              </>
-            ) : (
-              <>
-                {/* ✅ Hiển thị trạng thái hiện tại của bệnh nhân */}
-                {form.status && form.status !== "" ? (
-                  <option value={form.status}>
-                    {TODAY_STATUS_MAP[form.status] || form.status}
-                  </option>
-                ) : (
-                  <option value="">—</option>
-                )}
-                {/* ✅ Hiển thị tất cả các trạng thái khác (disabled, chỉ để xem) */}
-                {Object.entries(TODAY_STATUS_MAP)
-                  .filter(([k]) => k !== form.status) // Loại bỏ trạng thái hiện tại để không bị duplicate
-                  .map(([k, v]) => (
-                    <option key={k} value={k} disabled>
-                      {v}
-                    </option>
-                  ))}
-              </>
-            )}
-          </select>
+          <div className="mt-2">
+            <PopoverSelect
+              name="status"
+              value={mode === "add" ? form.status || STATUSES.WAIT_INTAKE : form.status || ""}
+              onChange={(value) => change("status", value)}
+              disabled
+              options={
+                mode === "add"
+                  ? [
+                      {
+                        value: STATUSES.WAIT_INTAKE,
+                        label:
+                          TODAY_STATUS_MAP[STATUSES.WAIT_INTAKE] ||
+                          STATUSES.WAIT_INTAKE,
+                      },
+                    ]
+                  : [
+                      ...(form.status
+                        ? [
+                            {
+                              value: form.status,
+                              label: TODAY_STATUS_MAP[form.status] || form.status,
+                            },
+                          ]
+                        : [{ value: "", label: "—" }]),
+                      ...Object.entries(TODAY_STATUS_MAP)
+                        .filter(([key]) => key !== form.status)
+                        .map(([key, label]) => ({
+                          value: key,
+                          label,
+                          disabled: true,
+                        })),
+                    ]
+              }
+              placeholder="Trạng thái trong ngày"
+            />
+          </div>
         </label>
       </motion.div>
 
@@ -213,17 +226,18 @@ export default function PatientFormMode({
         </motion.button>
         <label className="text-sm flex-1">
           Loại
-          <select
-            value={newExtraKey}
-            onChange={(e) => setNewExtraKey(e.target.value)}
-            className="mt-1.5 w-full rounded-xl px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition"
-          >
-            {EXTRA_FIELDS.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <div className="mt-1.5">
+            <PopoverSelect
+              name="newExtraKey"
+              value={newExtraKey}
+              onChange={(value) => setNewExtraKey(value)}
+              options={EXTRA_FIELDS.map((o) => ({
+                value: o.key,
+                label: o.label,
+              }))}
+              placeholder="Chọn loại thông tin"
+            />
+          </div>
         </label>
         <label className="text-sm flex-[2]">
           Nội dung

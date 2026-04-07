@@ -3,7 +3,13 @@ import React from "react";
 
 const VND = (n) => Number(n || 0).toLocaleString("vi-VN");
 
-export default function ReportsTable({ rows = [], stretch = false }) {
+export default function ReportsTable({
+  rows = [],
+  stretch = false,
+  showRevenue = true,
+}) {
+  const emptyColSpan = showRevenue ? 5 : 4;
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 8 }}
@@ -27,10 +33,12 @@ export default function ReportsTable({ rows = [], stretch = false }) {
           <thead className="text-left text-slate-500 sticky top-0 bg-white">
             <tr>
               <th className="px-3 py-2">Ngày</th>
-              <th className="px-3 py-2 text-right">Doanh thu (đ)</th>
+              {showRevenue && (
+                <th className="px-3 py-2 text-right">Doanh thu (đ)</th>
+              )}
               <th className="px-3 py-2 text-right">Bệnh nhân mới</th>
               <th className="px-3 py-2 text-right">Tái khám</th>
-              <th className="px-3 py-2 text-right">Tỷ lệ huỷ (%)</th>
+              <th className="px-3 py-2 text-right">Tỷ lệ hủy (%)</th>
             </tr>
           </thead>
           <tbody>
@@ -43,11 +51,13 @@ export default function ReportsTable({ rows = [], stretch = false }) {
                 transition={{ delay: i * 0.01 }}
               >
                 <td className="px-3 py-2 whitespace-nowrap">{r.date}</td>
+                {showRevenue && (
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {VND(r.revenue)}
+                  </td>
+                )}
                 <td className="px-3 py-2 text-right tabular-nums">
-                  {VND(r.revenue)}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {r.orders}
+                  {r.newPatients}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {r.revisits}
@@ -60,7 +70,7 @@ export default function ReportsTable({ rows = [], stretch = false }) {
             {!rows.length && (
               <tr>
                 <td
-                  colSpan="5"
+                  colSpan={emptyColSpan}
                   className="px-3 py-10 text-center text-slate-500"
                 >
                   Chưa có dữ liệu phù hợp.

@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
+import PopoverSelect from "../ui/PopoverSelect.jsx";
 
 import { EXTRA_FIELDS } from "../../api/examination";
 import { ANIMATION_CONFIG, SERVICE_ROOMS } from "./Shared.jsx";
@@ -219,29 +220,31 @@ export default function PatientExamMode({
             <>
               <label className="text-sm font-semibold text-slate-700">
                 Mẫu khám
-                <select
-                  value={tplId || ""}
-                  onChange={(e) => {
-                    const newId = e.target.value;
-                    setTplId(newId);
-                    const found =
-                      selectTemplates.find((t) => t.id === newId) || tpl;
-                    setExam((s) => ({
-                      ...s,
-                      type: found?.title || s.type || "",
-                    }));
-                  }}
-                  className="mt-2 w-full rounded-xl px-3 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition shadow-sm"
-                >
-                  {selectTemplates.length === 0 && (
-                    <option value="">(Chưa có template)</option>
-                  )}
-                  {selectTemplates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.title}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-2">
+                  <PopoverSelect
+                    name="tplId"
+                    value={tplId || ""}
+                    onChange={(newId) => {
+                      setTplId(newId);
+                      const found =
+                        selectTemplates.find((t) => t.id === newId) || tpl;
+                      setExam((s) => ({
+                        ...s,
+                        type: found?.title || s.type || "",
+                      }));
+                    }}
+                    options={[
+                      ...(selectTemplates.length === 0
+                        ? [{ value: "", label: "(Chưa có template)" }]
+                        : []),
+                      ...selectTemplates.map((t) => ({
+                        value: t.id,
+                        label: t.title,
+                      })),
+                    ]}
+                    placeholder="Chọn mẫu khám"
+                  />
+                </div>
               </label>
               <label className="text-sm font-semibold text-slate-700">
                 Chuyên khoa
@@ -513,17 +516,18 @@ export default function PatientExamMode({
           </motion.button>
           <label className="text-sm flex-1">
             Loại thông tin
-            <select
-              value={newExamKey}
-              onChange={(e) => setNewExamKey(e.target.value)}
-              className="mt-1.5 w-full rounded-xl px-2 py-1.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-xs transition"
-            >
-              {EXTRA_FIELDS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <div className="mt-1.5">
+              <PopoverSelect
+                name="newExamKey"
+                value={newExamKey}
+                onChange={(value) => setNewExamKey(value)}
+                options={EXTRA_FIELDS.map((o) => ({
+                  value: o.key,
+                  label: o.label,
+                }))}
+                placeholder="Chọn loại thông tin"
+              />
+            </div>
           </label>
           <label className="text-sm flex-[2]">
             Nội dung

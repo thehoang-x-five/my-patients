@@ -12,6 +12,7 @@ export default function DeptToolbar({
   onOpenFilter,
   onResetFilters,
   filterBtnRef,
+  actions,
 }) {
   return (
     <header
@@ -40,6 +41,7 @@ export default function DeptToolbar({
 
       {/* Phải: nút lọc + hành động nhanh */}
       <div className="flex items-center gap-2">
+    {actions}
     <button
         type="button"
         onClick={onResetFilters}

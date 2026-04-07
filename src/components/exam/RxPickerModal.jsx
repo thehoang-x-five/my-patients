@@ -145,7 +145,7 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
                 </div>
                 
                 {/* ✅ Pagination cho modal (nếu có nhiều trang) */}
-                {stockTotalPages > 1 && (
+                {stockTotalItems > 0 && (
                   <div className="px-3 py-2 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between gap-2">
                     <span className="text-xs text-slate-600">
                       Trang {stockPage}/{stockTotalPages} ({stockTotalItems} kết quả)

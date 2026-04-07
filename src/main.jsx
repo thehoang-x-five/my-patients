@@ -32,7 +32,14 @@ const router = createBrowserRouter([
     path: "/",
     element: <App />,
     children: [
-      { index: true, element: <Overview /> },
+      {
+        index: true,
+        element: (
+          <ProtectedRoute permKey="overview">
+            <Overview />
+          </ProtectedRoute>
+        ),
+      },
       {
         path: "/appointments",
         element: (
@@ -41,23 +48,86 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-      { path: "/examination", element: <Examination /> },
-      { path: "/patients", element: <Patients /> },
-      { path: "/departments", element: <Departments /> },
-      { path: "/staff", element: <Staff /> },
       {
-        path: "/admin/users",
+        path: "/examination",
         element: (
-          <ProtectedRoute permKey="userManagement">
-            <AdminUsers />
+          <ProtectedRoute permKey="examination">
+            <Examination />
           </ProtectedRoute>
         ),
       },
-      { path: "/prescriptions", element: <Prescriptions /> },
-      { path: "/history", element: <History /> },
-      { path: "/notifications", element: <Notifications /> },
-      { path: "/reports", element: <Reports /> },
-      { path: "/settings", element: <Settings /> },
+      {
+        path: "/patients",
+        element: (
+          <ProtectedRoute permKey="patients">
+            <Patients />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/departments",
+        element: (
+          <ProtectedRoute permKey="departments">
+            <Departments />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/staff",
+        element: (
+          <ProtectedRoute permKey="staff">
+            <Staff />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/admin/users",
+        element: (
+          <ProtectedRoute permKey="adminUsers">
+            <Staff />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/prescriptions",
+        element: (
+          <ProtectedRoute permKey="prescriptions">
+            <Prescriptions />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/history",
+        element: (
+          <ProtectedRoute permKey="history">
+            <History />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/notifications",
+        element: (
+          <ProtectedRoute permKey="notifications">
+            <Notifications />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/reports",
+        element: (
+          <ProtectedRoute permKey="reports">
+            <Reports />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/settings",
+        element: (
+          <ProtectedRoute permKey="settings">
+            <Settings />
+          </ProtectedRoute>
+        ),
+      },
     ],
   },
 ]);
@@ -69,7 +139,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <AnimatePresence mode="wait">
         <AppProviders>
      <RouterProvider router={router} />
-     <ToastContainer />
+     <ToastContainer
+      limit={1}
+      newestOnTop
+      position="top-right"
+      autoClose={3200}
+      pauseOnFocusLoss={false}
+     />
     </AppProviders>
         </AnimatePresence>
       </Suspense>

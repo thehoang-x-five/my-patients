@@ -35,6 +35,10 @@ export default function ConfirmModal({
   confirmText = "Xác nhận",
   cancelText = "Không",
   tone = "danger",
+  hideCancel = false,
+  closeOnConfirm = true,
+  confirmDisabled = false,
+  isPending = false,
 }) {
   const toneMap = {
     danger: {
@@ -96,20 +100,23 @@ export default function ConfirmModal({
 
             {/* Actions */}
             <div className="flex items-center justify-end gap-2.5 mt-6">
+              {!hideCancel ? (
+                <button
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-[0.97]"
+                >
+                  {cancelText}
+                </button>
+              ) : null}
               <button
-                onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-[0.97]"
-              >
-                {cancelText}
-              </button>
-              <button
+                disabled={confirmDisabled || isPending}
                 onClick={() => {
                   onConfirm?.();
-                  onClose?.();
+                  if (closeOnConfirm) onClose?.();
                 }}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold shadow-sm hover:shadow-md transition-all active:scale-[0.97] ${t.confirmBtn}`}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold shadow-sm hover:shadow-md transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 ${t.confirmBtn}`}
               >
-                {confirmText}
+                {isPending ? "Dang xu ly..." : confirmText}
               </button>
             </div>
           </motion.div>

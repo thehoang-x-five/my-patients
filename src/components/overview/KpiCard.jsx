@@ -4,6 +4,23 @@ import { motion } from "framer-motion";
 import { ResponsiveContainer, BarChart, Bar, Tooltip } from "recharts";
 import { Badge } from "../ui/Supports.jsx";
 
+function SparkTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+
+  const point = payload[0]?.payload || {};
+  const hour = point.hour ?? label ?? 0;
+  const value = Number(payload[0]?.value ?? point.value ?? 0);
+
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-white/95 px-2.5 py-1.5 text-xs shadow-lg backdrop-blur"
+    >
+      <div className="text-slate-500">{`Giờ ${hour}`}</div>
+      <div className="font-semibold text-slate-800 tabular-nums">{value}</div>
+    </div>
+  );
+}
+
 function KpiCard({
   title,
   value,
@@ -14,6 +31,13 @@ function KpiCard({
   barColor = "#38bdf8",
   link, // { href, label }
 }) {
+  const deltaLabel = delta ?? "0.0%";
+  const valueLabel = value ?? "0";
+  const sparkData =
+    Array.isArray(data24) && data24.length > 0
+      ? data24
+      : Array.from({ length: 24 }, (_, hour) => ({ hour, value: 0 }));
+
   return (
     <motion.article
       initial={{ opacity: 0, y: 6 }}
@@ -31,11 +55,11 @@ function KpiCard({
 
       <div className="flex items-center justify-between gap-2">
         <span className="text-slate-600 truncate">{title}</span>
-        {delta ? <Badge tone={deltaTone || "neutral"}>{delta}</Badge> : null}
+        <Badge tone={deltaTone || "neutral"}>{deltaLabel}</Badge>
       </div>
 
       <div className="mt-1">
-        <div className="text-2xl font-bold tabular-nums">{value}</div>
+        <div className="text-2xl font-bold tabular-nums">{valueLabel}</div>
         {meta ? (
           <div className="text-xs text-slate-500 mt-0.5 truncate">
             {meta}
@@ -48,10 +72,11 @@ function KpiCard({
         <div className="h-16 rounded-md bg-slate-50 relative">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={data24}
+              data={sparkData}
               margin={{ left: 4, right: 4, top: 6, bottom: 0 }}
             >
               <Tooltip
+                content={<SparkTooltip />}
                 cursor={{ fill: "rgba(2,6,23,.06)" }}
                 labelFormatter={(l, p) => `Giờ ${p?.[0]?.payload?.hour || l}`}
                 formatter={(v) => [v, "Giá trị"]}
@@ -63,7 +88,12 @@ function KpiCard({
                   boxShadow: "0 8px 24px rgba(2,6,23,.08)",
                 }}
               />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]} fill={barColor} />
+              <Bar
+                dataKey="value"
+                radius={[4, 4, 0, 0]}
+                fill={barColor}
+                minPointSize={2}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>

@@ -20,6 +20,14 @@ const STATUS_LABEL = {
   da_huy: "Đã hủy",
 };
 
+const DOT_CLASS = {
+  emerald: "bg-emerald-500",
+  cyan: "bg-cyan-500",
+  violet: "bg-violet-500",
+  teal: "bg-teal-500",
+  amber: "bg-amber-500",
+};
+
 export default function PatientTimeline({ visits = [], highlightItems = false, patientId }) {
   const [expandedId, setExpandedId] = useState(null);
   const [filterType, setFilterType] = useState("all");
@@ -57,7 +65,7 @@ export default function PatientTimeline({ visits = [], highlightItems = false, p
   if (!visits || visits.length === 0) {
     return (
       <div className="text-center py-12 text-slate-400 text-sm">
-        Chưa có lịch sử khám bệnh.
+        Chưa có lịch sử sự kiện y tế.
       </div>
     );
   }
@@ -67,7 +75,7 @@ export default function PatientTimeline({ visits = [], highlightItems = false, p
       {/* Summary bar */}
       <div className="flex items-center justify-between">
         <div className="text-sm font-bold text-slate-800">
-          Tổng: {events.length} lượt khám
+          Tổng: {events.length} sự kiện y tế
         </div>
         <div className="text-xs text-slate-400">
           {events.length > 0 && `Gần nhất: ${formatDate(events[0]?.date)}`}
@@ -114,19 +122,29 @@ export default function PatientTimeline({ visits = [], highlightItems = false, p
                 className="relative"
               >
                 {/* Dot */}
-                <div className={`absolute -left-6 top-4 w-2.5 h-2.5 rounded-full ring-2 ring-white bg-${event.config.tone}-500 ${isHighlighted ? "animate-pulse" : ""}`} />
+                <div
+                  className={`absolute -left-6 top-4 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
+                    DOT_CLASS[event.config.tone] || "bg-slate-400"
+                  } ${isHighlighted ? "animate-pulse" : ""}`}
+                />
 
                 {/* Card */}
                 <motion.div
                   whileHover={{ y: -1 }}
-                  onClick={() => nav(`/history?tab=visits&pid=${patientId || ""}&highlight=${event.id}`)}
+                  onClick={() =>
+                    nav(
+                      `/history?tab=${
+                        event.eventType === "thanh_toan" ? "transactions" : "visits"
+                      }&pid=${patientId || ""}&highlight=${event.id}`
+                    )
+                  }
                   className={`rounded-2xl p-4 ring-1 shadow-sm cursor-pointer transition-all duration-300 ${
                     isHighlighted
                       ? "ring-emerald-400 bg-emerald-50/80 shadow-emerald-100"
                       : "ring-slate-200/60 bg-white hover:bg-emerald-50/60 hover:ring-emerald-300 hover:shadow-md"
                   }`}
                   role="link"
-                  title="Bấm để xem lịch sử khám này"
+                  title="Bấm để xem chi tiết lịch sử này"
                 >
                   {/* Row 1: Type + Doctor + Date */}
                   <div className="flex items-center justify-between gap-2">

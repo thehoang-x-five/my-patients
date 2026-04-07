@@ -4,7 +4,8 @@ import React, { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments.js";
-import { useUIStore } from "../stores/appStore";
+import { useUIStore, useAuthStore } from "../stores/appStore";
+import { isReceptionNurse } from "../../utils/permissions.js";
 import ConfirmModal from "../ui/ConfirmModal.jsx";
 
 function Badge({ status }) {
@@ -39,8 +40,12 @@ export default function ApptDetailModal({
   onCheckIn,
 }) {
 
+  // ✅ RBAC: chỉ YTHC thao tác, Admin + khác chỉ xem
+  const user = useAuthStore((s) => s.user);
+  const canAct = isReceptionNurse(user);
 
   const [editing, setEditing] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [form, setForm] = useState({
     date: "",
     time: "",
@@ -203,10 +208,12 @@ export default function ApptDetailModal({
 
                 <section className="rounded-xl ring-1 ring-violet-200/80 p-3 bg-white">
                   <div className="flex items-center justify-between">
-                    {appt.status !== APPT_STATUS.DA_CHECKIN ? (
+                    {!canAct ? (
+                      <p className="text-slate-500 ml-auto mr-auto text-center text-sm">📖 Chỉ xem — không có quyền thao tác lịch hẹn</p>
+                    ) : appt.status !== APPT_STATUS.DA_CHECKIN ? (
                       <b className="text-violet-800">Thao tác</b>) : (<p className="text-violet-800 ml-auto mr-auto text-center" > --- Đã Check-in: Không thể thao tác--- </p>)}
 
-                    {!editing ? (
+                    {canAct && !editing ? (
                       <div className="flex gap-2 flex-wrap">
                         {appt.status !== APPT_STATUS.DA_XAC_NHAN && appt.status !== APPT_STATUS.DA_CHECKIN && (
                           <button

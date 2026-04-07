@@ -190,4 +190,35 @@ export function useConfirmInvoice(options = {}) {
     },
     ...rest,
   });
-}
+}
+
+/* =========================================================
+ * 5. VIETQR — Tạo mã QR thanh toán
+ * Backend: POST /api/billing/invoices/{maHoaDon}/generate-qr
+ * =======================================================*/
+
+// Tạo mã QR VietQR cho hóa đơn
+export async function generateVietQR(maHoaDon, payload = {}) {
+  if (!maHoaDon) throw new Error("Thiếu mã hóa đơn");
+  const body = {
+    SoTien: payload.SoTien ?? payload.soTien ?? payload.amount ?? 0,
+    NoiDung: payload.NoiDung ?? payload.noiDung ?? payload.memo ?? null,
+  };
+  const res = await http.post(`${BASE}/invoices/${maHoaDon}/generate-qr`, body);
+  return res.data; // VietQRResponse { QrDataUrl, BankName, AccountNo, AccountName, SoTien, NoiDung }
+}
+
+export function useGenerateVietQR(options = {}) {
+  const { onSuccess, ...rest } = options;
+  return useMutation({
+    mutationFn: ({ maHoaDon, ...payload }) =>
+      generateVietQR(maHoaDon, payload),
+    onSuccess: (data, vars, ctx) => {
+      if (typeof onSuccess === "function") {
+        onSuccess(data, vars, ctx);
+      }
+    },
+    ...rest,
+  });
+}
+

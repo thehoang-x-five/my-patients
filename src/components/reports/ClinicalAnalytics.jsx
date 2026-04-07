@@ -91,7 +91,7 @@ function ChartPlaceholder({ loading, message = "Chưa có dữ liệu" }) {
         <div className="text-center">
           <p className="text-2xl mb-1">📊</p>
           <p>{message}</p>
-          <p className="text-xs mt-1 text-slate-300">API Aggregation sẽ có khi Dev 1 hoàn thành</p>
+          <p className="text-xs mt-1 text-slate-300">Biểu đồ sẽ hiện khi có dữ liệu phù hợp trong khoảng lọc</p>
         </div>
       )}
     </div>

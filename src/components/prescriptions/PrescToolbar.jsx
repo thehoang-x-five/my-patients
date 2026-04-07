@@ -34,6 +34,8 @@ export default function PrescToolbar({
   filterBtnRef,
   onOpenFilter,
   onResetFilters,
+  showStockManageAction = false,
+  onAddStock,
 }) {
   const isOrders = tab === "orders";
 
@@ -101,6 +103,17 @@ export default function PrescToolbar({
           <span className="text-indigo-600">🔍</span>
           Lọc
         </Button>
+
+        {!isOrders && showStockManageAction && onAddStock ? (
+          <Button
+            type="button"
+            onClick={onAddStock}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 px-3 py-1.5 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px"
+          >
+            <span className="text-base leading-none">+</span>
+            Thêm thuốc
+          </Button>
+        ) : null}
 
         {/* Segmented tabs */}
         <div

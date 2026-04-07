@@ -9,7 +9,6 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { ensureStarted, getConnection } from "../api/realtime";
 import { queryClient } from "../components/lib/queryClient.js";
 import { useAuthStore } from "../components/stores/appStore.js";
-import { subscribeNotifications } from "../api/notifications.js";
 // Context (nếu nơi khác cần dùng connection)
 export const RealtimeContext = createContext({ connection: null });
 
@@ -43,11 +42,6 @@ export default function AppProviders({ children }) {
       }
     };
   }, []);
-  useEffect(() => {
-        if (!auth?.user) return;
-        const off = subscribeNotifications(queryClient);
-        return () => off?.();
-      }, [auth?.user]);
   const value = useMemo(() => ({ connection: getConnection() }), []);
 
   return (

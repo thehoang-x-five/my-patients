@@ -14,7 +14,8 @@ const allLinks = [
   ["/examination", "Khám bệnh", "examinations", "examination"],
   ["/departments", "Khoa phòng", "departments", "departments"],
   ["/staff", "Nhân sự", "staff", "staff"],
-  ["/admin/users", "QL Nhân viên", "admin_users", "userManagement"],
+  // ❌ QL Nhân viên trang riêng ĐÃ HỦY — admin quản lý qua Staff page (toggle Table + actions)
+  // ["/admin/users", "QL Nhân viên", "admin_users", "userManagement"],
   ["/prescriptions", "Đơn thuốc", "prescriptions", "prescriptions"],
   ["/history", "Lịch sử", "history", "history"],
   ["/notifications", "Thông báo", "notifications", "notifications"],

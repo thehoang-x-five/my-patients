@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Chip from "../ui/Chip.jsx";
+import PopoverSelect from "../ui/PopoverSelect.jsx";
 import { toast } from "react-toastify";
 // ✅ Dùng API layer (TanStack Query) — KHÔNG còn data/*
 import {
@@ -23,6 +24,8 @@ export default function CreateDrawer({
   isLoading=false,
 }) {
   const firstFieldRef = useRef(null);
+  const latestOnCloseRef = useRef(onClose);
+  const latestDefaultValuesRef = useRef(defaultValues);
   const canEditCode = !!(defaultValues && (defaultValues.code || defaultValues.patient));
     const [selectedDeptCode, setSelectedDeptCode] = useState("");
     const [selectedDeptName, setSelectedDeptName] = useState("");
@@ -130,9 +133,18 @@ export default function CreateDrawer({
    // API trả về dạng [{name, waiting, appointments, status}]
     return Array.isArray(doctorQueue) ? doctorQueue : [];
   }, [selectedDeptCode, doctorQueue]);
+
+  useEffect(() => {
+    latestOnCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    latestDefaultValuesRef.current = defaultValues;
+  }, [defaultValues]);
+
   useEffect(() => {
     if (!open) return;
-    const handleKey = (e) => e.key === "Escape" && onClose?.();
+    const handleKey = (e) => e.key === "Escape" && latestOnCloseRef.current?.();
     window.addEventListener("keydown", handleKey);
 
     const t = setTimeout(() => firstFieldRef.current?.focus(), 60);
@@ -146,7 +158,7 @@ export default function CreateDrawer({
       };
       
     // Đọc từ localStorage trước (ưu tiên), sau đó mới từ defaultValues
-    let dv = defaultValues || {};
+    let dv = latestDefaultValuesRef.current || {};
     
     // Kiểm tra localStorage có data không
     try {
@@ -197,7 +209,7 @@ export default function CreateDrawer({
       window.removeEventListener("keydown", handleKey);
       clearTimeout(t);
     };
-  }, [open, onClose, defaultDate, defaultValues]);
+  }, [open, defaultDate]);
 
  
   function handleSubmit(e) {
@@ -347,16 +359,20 @@ export default function CreateDrawer({
 
                   <label className="text-sm font-semibold text-slate-700">
                     Loại khám
-                    <select
-                      name="type"
-                      value={apType}
-                      onChange={(e) => setApType(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl px-4 py-2.5 ring-1 ring-slate-300 focus:ring-2 focus:ring-violet-500 outline-none bg-white shadow-sm transition"
-                      required
-                    >
-                      <option value="new">Khám mới</option>
-                      <option value="follow_up">Tái khám</option>
-                    </select>
+                    <div className="mt-1.5">
+                      <PopoverSelect
+                        required
+                        name="type"
+                        value={apType}
+                        onChange={(value) => setApType(value)}
+                        options={[
+                          { value: "new", label: "Khám mới" },
+                          { value: "follow_up", label: "Tái khám" },
+                        ]}
+                        placeholder="Chọn loại khám"
+                        buttonClassName="ring-slate-300 focus:ring-violet-500 hover:ring-violet-300"
+                      />
+                    </div>
                   </label>
 
                   <label className="text-sm font-semibold text-slate-700">

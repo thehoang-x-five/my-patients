@@ -8,14 +8,23 @@ import React, {
   } from "react";
   import { motion } from "framer-motion";
   import { useLocation, useNavigate } from "react-router-dom";
+  import { toast } from "react-toastify";
   
   import NotificationsToolbar from "../components/notifications/NotificationsToolbar.jsx";
   import NotificationList from "../components/notifications/NotificationList.jsx";
   import NotificationDetailModal from "../components/notifications/NotificationDetailModal.jsx";
   import NotificationsFilterPopover from "../components/notifications/NotificationsFilterPopover.jsx";
+  import AdminNotificationComposeModal from "../components/notifications/AdminNotificationComposeModal.jsx";
+  import NotificationTemplatesModal from "../components/notifications/NotificationTemplatesModal.jsx";
   import Pagination from "../components/ui/Pagination.jsx";
   
-  import { useNotifications } from "../api/notifications.js";
+  import {
+    useCreateNotification,
+    useNotifications,
+    useNotificationSearch,
+  } from "../api/notifications.js";
+  import { useAuthStore } from "../components/stores/appStore.js";
+  import { isAdmin as checkIsAdmin } from "../utils/permissions.js";
   
   import useViewportVH from "../hooks/useViewportVH";
   import useMediaQuery from "../hooks/useMediaQuery";
@@ -25,6 +34,8 @@ export default function Notifications() {
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
+  const user = useAuthStore((s) => s.user);
+  const userIsAdmin = checkIsAdmin(user);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -47,6 +58,9 @@ export default function Notifications() {
     priority: "all",
   });
   const [page, setPage] = useState(1);
+  const [adminView, setAdminView] = useState("inbox");
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const deferredKeyword = useDeferredValue(filters.keyword);
 
@@ -91,8 +105,12 @@ export default function Notifications() {
     setPage(1);
   }, [tab, filters.keyword, filters.type, filters.priority]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [adminView]);
+
   // -------- Query dữ liệu --------
-  const { data, isLoading, isError } = useNotifications({
+  const inboxQuery = useNotifications({
     params: {
       tab,
       page,
@@ -103,8 +121,39 @@ export default function Notifications() {
       sortDirection: "asc", // High priority first (cao = 0, thuong = 1)
     },
   });
+  const systemQuery = useNotificationSearch(
+    {
+      page,
+      pageSize: 50,
+      keyword: deferredKeyword || undefined,
+      type: mapTypeToBackend(filters.type) || undefined,
+      priority: mapPriorityToBackend(filters.priority) || undefined,
+    },
+    {
+      enabled: userIsAdmin && adminView === "system",
+    }
+  );
+  const createNotification = useCreateNotification();
 
   // Extract PagedResult
+  const data =
+    userIsAdmin && adminView === "system"
+      ? {
+          Items: systemQuery.data?.items || [],
+          TotalItems: systemQuery.data?.totalItems || 0,
+          Page: systemQuery.data?.page || page,
+          PageSize: systemQuery.data?.pageSize || 50,
+        }
+      : inboxQuery.data;
+  const isLoading =
+    userIsAdmin && adminView === "system"
+      ? systemQuery.isLoading
+      : inboxQuery.isLoading;
+  const isError =
+    userIsAdmin && adminView === "system"
+      ? systemQuery.isError
+      : inboxQuery.isError;
+
   const notificationResult = data || { Items: [], TotalItems: 0, Page: 1, PageSize: 50 };
   const items = Array.isArray(notificationResult.Items) 
     ? notificationResult.Items 
@@ -135,7 +184,7 @@ export default function Notifications() {
       let priorityHigh = 0;
   
       for (const n of filtered) {
-        if (!n.read) unread += 1;
+        if (!(userIsAdmin && adminView === "system") && !n.read) unread += 1;
   
         const createdAt = n.createdAt ? new Date(n.createdAt) : null;
         if (createdAt && createdAt >= start && createdAt <= end) {
@@ -148,7 +197,7 @@ export default function Notifications() {
       }
   
       return { total: totalItems, unread, today, priorityHigh };
-    }, [filtered, totalItems]);
+    }, [adminView, filtered, totalItems, userIsAdmin]);
   
   
 
@@ -169,6 +218,18 @@ export default function Notifications() {
   const handleResetFilters = () =>
     setFilters({ keyword: "", type: "all", priority: "all" });
 
+  const handleCreateNotification = (payload) => {
+    createNotification.mutate(payload, {
+      onSuccess: () => {
+        toast.success("Đã gửi thông báo hệ thống");
+        setComposeOpen(false);
+      },
+      onError: (error) => {
+        toast.error(error?.message || "Không thể gửi thông báo");
+      },
+    });
+  };
+
   return (
     <motion.main
       initial={{ opacity: 0, y: 10 }}
@@ -183,14 +244,67 @@ export default function Notifications() {
         style={{ "--topbar-h": `${topbar}px` }}
       >
         {/* Toolbar */}
-        <NotificationsToolbar
-          tab={tab}
-          setTab={setTab}
-          stats={stats}
-          onOpenFilter={() => setOpenFilter(true)}
-          onResetFilters={handleResetFilters}
-          filterBtnRef={filterBtnRef}
-        />
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <NotificationsToolbar
+              tab={tab}
+              setTab={setTab}
+              stats={stats}
+              onOpenFilter={() => setOpenFilter(true)}
+              onResetFilters={handleResetFilters}
+              filterBtnRef={filterBtnRef}
+              hideTabs={userIsAdmin && adminView === "system"}
+            />
+          </div>
+
+          {userIsAdmin && (
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              <div className="inline-flex rounded-xl bg-white p-1 ring-1 ring-violet-200/80">
+                {[
+                  { key: "inbox", label: "Hộp thư cá nhân" },
+                  { key: "system", label: "Quản trị hệ thống" },
+                ].map((item) => {
+                  const active = adminView === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setAdminView(item.key)}
+                      className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold transition ${
+                        active
+                          ? "bg-violet-50 text-violet-700"
+                          : "text-slate-600 hover:text-violet-700"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {adminView === "system" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setTemplatesOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-1.5 text-[13px] font-semibold text-violet-700 shadow-sm ring-1 ring-violet-200 transition hover:bg-violet-50"
+                  >
+                    <span>▤</span>
+                    <span>Mẫu thông báo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setComposeOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-tr from-violet-600 via-violet-500 to-fuchsia-500 px-3 py-1.5 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px"
+                  >
+                    <span className="text-base leading-none">+</span>
+                    <span>Soạn thông báo</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Filter popover */}
         <NotificationsFilterPopover
@@ -199,6 +313,7 @@ export default function Notifications() {
           anchorEl={filterBtnRef}
           values={filters}
           setValues={setFilters}
+          onReset={handleResetFilters}
         />
 
         {/* Content */}
@@ -220,7 +335,7 @@ export default function Notifications() {
                   stretch
                 />
               </div>
-              {totalPages > 1 && (
+              {totalItems > 0 && (
                 <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
                   <Pagination
                     currentPage={page}
@@ -228,6 +343,7 @@ export default function Notifications() {
                     totalItems={totalItems}
                     pageSize={50}
                     onPageChange={setPage}
+                    showWhenSinglePage
                     className="px-4 py-3"
                   />
                 </div>
@@ -241,6 +357,18 @@ export default function Notifications() {
         open={detail.open}
         item={detail.item}
         onClose={() => setDetail({ open: false, item: null })}
+      />
+
+      <AdminNotificationComposeModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        onSubmit={handleCreateNotification}
+        isPending={createNotification.isPending}
+      />
+
+      <NotificationTemplatesModal
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
       />
     </motion.main>
   );

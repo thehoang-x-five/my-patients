@@ -9,6 +9,7 @@ export default function NotificationsToolbar({
   onOpenFilter,
   onResetFilters,
   filterBtnRef,
+  hideTabs = false,
 }) {
   const total = stats?.total ?? 0;
   const unread = stats?.unread ?? 0;
@@ -66,39 +67,41 @@ export default function NotificationsToolbar({
         </button>
 
         {/* Segmented tabs */}
-        <div
-          className="relative inline-flex p-0.5 overflow-hidden rounded-xl ring-1 ring-violet-200/70 bg-white"
-          role="tablist"
-          aria-label="Chọn chế độ hiển thị"
-        >
-          {tabs.map((t) => {
-            const active = tab === t.key;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(t.key)}
-                className={`relative z-10 px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                  active
-                    ? "text-violet-700"
-                    : "text-slate-700 hover:text-violet-700"
-                }`}
-                title={t.label}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="notifTabPill"
-                    className="absolute inset-0 rounded-lg bg-violet-50"
-                    transition={{ type: "spring", stiffness: 420, damping: 30 }}
-                  />
-                )}
-                <span className="relative">{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        {!hideTabs && (
+          <div
+            className="relative inline-flex p-0.5 overflow-hidden rounded-xl ring-1 ring-violet-200/70 bg-white"
+            role="tablist"
+            aria-label="Chọn chế độ hiển thị"
+          >
+            {tabs.map((t) => {
+              const active = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(t.key)}
+                  className={`relative z-10 px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                    active
+                      ? "text-violet-700"
+                      : "text-slate-700 hover:text-violet-700"
+                  }`}
+                  title={t.label}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="notifTabPill"
+                      className="absolute inset-0 rounded-lg bg-violet-50"
+                      transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                    />
+                  )}
+                  <span className="relative">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </header>
   );

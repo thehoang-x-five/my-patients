@@ -15,14 +15,13 @@ import {
 } from "../api/dashboard.js";
 import { useAuthStore } from "../components/stores/appStore.js";
 import {
+  hasGlobalScope,
   isAdmin,
-  isDoctor,
   isClinicalNurse,
   isClsNurse,
+  isDoctor,
   isReceptionNurse,
   isTechnician,
-  hasGlobalScope,
-  getScopeLabel,
 } from "../utils/permissions.js";
 
 export default function Overview() {
@@ -34,7 +33,6 @@ export default function Overview() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
 
-  // Detect role group
   const roleGroup = useMemo(() => {
     if (isAdmin(user)) return "admin";
     if (isDoctor(user) || isClinicalNurse(user)) return "clinical";
@@ -43,7 +41,6 @@ export default function Overview() {
     return "default";
   }, [user]);
 
-  // Realtime
   useEffect(() => {
     let off;
     (async () => {
@@ -60,22 +57,37 @@ export default function Overview() {
     };
   }, [queryClient]);
 
-  const { data, isLoading, error } = useDashboardToday();
+  const maKhoa = useMemo(() => {
+    if (hasGlobalScope(user)) return null;
+    return user?.MaKhoa || user?.maKhoa || user?.ma_khoa || null;
+  }, [user]);
+
+  const { data, isLoading, error } = useDashboardToday(maKhoa);
 
   const kpi = data?.kpi || {
     patientsToday: { value: "0", delta: null, meta: null, spark: [] },
+    lsPatients: { value: "0", delta: null, meta: null, spark: [] },
+    clsPatients: { value: "0", delta: null, meta: null, spark: [] },
     appointments: { value: "0", delta: null, meta: null, spark: [] },
     revenue: { value: "0", delta: null, meta: null, spark: [] },
     exams: { value: "0", delta: null, meta: null, spark: [] },
+    lsExams: { value: "0", delta: null, meta: null, spark: [] },
+    clsExams: { value: "0", delta: null, meta: null, spark: [] },
+    diagnoses: { value: "0", delta: null, meta: null, spark: [] },
+    results: { value: "0", delta: null, meta: null, spark: [] },
   };
 
   const upcomingAppointments = data?.upcomingAppointments || [];
   const upcomingServices = data?.upcomingServices || [];
   const trendingServices = data?.trendingServices || [];
-  const services = data?.services || { value: "0", delta: null, meta: null, spark: [] };
+  const services = data?.services || {
+    value: "0",
+    delta: null,
+    meta: null,
+    spark: [],
+  };
   const activities = data?.activities || [];
 
-  // Left card: depends on role
   const renderLeftCard = () => {
     const errMsg = error ? error.message : null;
 
@@ -101,7 +113,6 @@ export default function Overview() {
       );
     }
 
-    // clinical / default
     return (
       <AppointmentsCard
         rows={upcomingAppointments}
@@ -118,44 +129,30 @@ export default function Overview() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      className="px-4 pb-2.5 pt-1 min-h-0 overflow-hidden"
+      className="min-h-0 overflow-hidden px-4 pb-2.5 pt-1"
       role="main"
       aria-label="Tổng quan trong ngày"
     >
       <div
-        className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
+        className="mt-2 flex h-[calc(var(--app-dvh)-var(--topbar-h)+1px)] min-h-0 flex-col"
         style={{ "--topbar-h": `${topbar}px` }}
       >
-        {/* Dải KPI 4 box */}
         <div className="flex-none">
           <KpiRail kpi={kpi} role={roleGroup} services={services} />
         </div>
 
-        {/* Scope badge — Tầng 6-7: hiện phạm vi dữ liệu cho user không global */}
-        {!hasGlobalScope(user) && getScopeLabel(user) && (
-          <div className="flex-none mt-1.5">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200/70 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-600/40">
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none">
-                <path d="M12 9v4m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              {getScopeLabel(user)}
-            </span>
-          </div>
-        )}
         <div className="mt-1.5 flex-1 min-h-0 overflow-hidden">
           <section
             className="
-              pb-0.5 pt-1.5 h-full py-0 overflow-y-auto scrollbar-none
-              grid gap-2 items-stretch md:grid-cols-12 content-stretch
+              grid items-stretch content-stretch gap-2 overflow-y-auto scrollbar-none
+              py-0 pb-0.5 pt-1.5 h-full md:grid-cols-12
             "
           >
-            {/* Left card — role-specific */}
-            <div className="p-1 pb-0 md:col-span-6 min-w-0 h-full">
+            <div className="min-w-0 h-full p-1 pb-0 md:col-span-6">
               {renderLeftCard()}
             </div>
 
-            {/* Hoạt động gần đây — shared */}
-            <div className="p-1 pb-0 md:col-span-6 min-w-0 h-full">
+            <div className="min-w-0 h-full p-1 pb-0 md:col-span-6">
               <ActivityCard
                 items={activities}
                 loading={isLoading}

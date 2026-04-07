@@ -7,6 +7,7 @@ import React, {
   } from "react";
   import { AnimatePresence, motion } from "framer-motion";
   import { createPortal } from "react-dom";
+  import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
   
   const TYPE_SEG = [
     { code: "all", label: "Tất cả" },
@@ -70,6 +71,7 @@ import React, {
     anchorEl,
     values,
     setValues,
+    onReset,
   }) {
     const boxRef = useRef(null);
     const kwRef = useRef(null);
@@ -288,8 +290,14 @@ import React, {
                   </div>
                 </div>
   
-              
               </div>
+              <FilterPopoverFooter
+                onReset={() => onReset?.()}
+                onClose={onClose}
+                resetLabel="Reset bộ lọc"
+                closeLabel="Đóng"
+                accent="violet"
+              />
             </div>
           </motion.div>
         )}

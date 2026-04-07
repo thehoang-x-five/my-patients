@@ -2,6 +2,7 @@
 import React from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
 
 /* ---------- date utils ---------- */
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -65,6 +66,7 @@ export default function HistoryFilterPopover({
   setValues, // function to mutate parent state
   anchorEl, // anchor element (Filter button)
   tab = "visits",
+  onReset,
 }) {
   const ref = useRef(null);
   const [kw, setKw] = useState(values?.keyword || "");
@@ -376,6 +378,13 @@ export default function HistoryFilterPopover({
                 </div>
               )}
             </div>
+            <FilterPopoverFooter
+              onReset={() => onReset?.()}
+              onClose={onClose}
+              resetLabel="Reset bộ lọc"
+              closeLabel="Đóng"
+              accent="cyan"
+            />
           </div>
         </motion.div>
       )}

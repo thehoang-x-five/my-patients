@@ -207,7 +207,7 @@ export default function PatientGenealogy({ patientId, allPatients = [] }) {
 
   async function handleLink() {
     if (!linkCha && !linkMe) {
-      toast.warn("Vui lòng chọn ít nhất Cha hoặc Mẹ.");
+      toast.error("Vui lòng chọn ít nhất Cha hoặc Mẹ.");
       return;
     }
     try {

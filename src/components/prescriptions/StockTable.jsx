@@ -128,7 +128,7 @@ const Row = ({ i, children, ...rest }) => (
 const Td = ({ children, first, last, right, classNameOverride = "" }) => (
   <td
     className={[
-      "px-3 py-2 align-top text-[13px] text-slate-700 group-hover:bg-white/70",
+      "px-3 py-2.5 align-top text-[13px] leading-6 text-slate-700 group-hover:bg-white/70",
       first ? "pl-3 rounded-l-lg" : "",
       last ? "pr-3 rounded-r-lg" : "",
       right ? "text-right tabular-nums" : "",
@@ -145,6 +145,7 @@ const Td = ({ children, first, last, right, classNameOverride = "" }) => (
 export default function StockTable({
   items = [],
   onEdit,
+  canEdit = false, // ✅ RBAC: chỉ Admin + YTHC mới sửa kho
   loading = false,
   nearExpiryDays = 30,
   stretch = false,
@@ -158,8 +159,8 @@ export default function StockTable({
       }`}
       aria-label="Kho thuốc"
     >
-      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none px-4 pb-2 pt-0">
-        <table className="min-w-full table-fixed">
+      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none px-4 pb-0 pt-0">
+        <table className="min-w-full table-fixed text-[13px] leading-6">
           <colgroup>
             <col style={{ width: "12%" }} /> {/* Mã thuốc */}
             <col style={{ width: "22%" }} /> {/* Tên thuốc */}
@@ -328,13 +329,15 @@ export default function StockTable({
 
                     {/* Thao tác */}
                     <Td last right classNameOverride="whitespace-nowrap">
-                      <Button
-                        type="button"
-                        className="!px-2"
-                        onClick={() => onEdit?.(d)}
-                      >
-                        Sửa
-                      </Button>
+                      {canEdit && (
+                        <Button
+                          type="button"
+                          className="!px-2"
+                          onClick={() => onEdit?.(d)}
+                        >
+                          Sửa
+                        </Button>
+                      )}
                     </Td>
                   </Row>
                 );

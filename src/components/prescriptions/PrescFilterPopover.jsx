@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
+import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
 function Chip({ active, dot, children, ...rest }) {
   const base =
     "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-medium cursor-pointer select-none transition";
@@ -81,6 +82,7 @@ export default function PrescFilterPopover({
 
   stockStatus = "all",
   setStockStatus = () => {},
+  onResetFilters,
 }) {
   const boxRef = useRef(null);
   const kwRef = useRef(null);
@@ -350,6 +352,13 @@ export default function PrescFilterPopover({
                 </>
               )}
             </div>
+            <FilterPopoverFooter
+              onReset={() => onResetFilters?.()}
+              onClose={onClose}
+              resetLabel="Reset bộ lọc"
+              closeLabel="Đóng"
+              accent="indigo"
+            />
           </div>
         </motion.div>
       )}

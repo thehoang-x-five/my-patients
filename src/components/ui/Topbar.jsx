@@ -2,9 +2,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
-import Button from "../ui/Button.jsx";
 import NotifBell from "../notifications/NotifBell.jsx";
-import  {inferRecipientFromToken} from "../../api/notifications.js";
+import { inferRecipientFromToken } from "../../api/notifications.js";
+import { useAuthStore } from "../stores/appStore.js";
+import {
+  canCreateAppointment,
+  canViewAppointment,
+  formatDepartmentLabel,
+  hasGlobalScope,
+} from "../../utils/permissions.js";
+
 function formatNow(d = new Date()) {
   const fmtDate = d.toLocaleDateString("vi-VN", {
     weekday: "short",
@@ -24,20 +31,25 @@ export default function Topbar() {
   const [qaOpen, setQaOpen] = useState(false);
   const qaRef = useRef(null);
   const loc = useLocation();
-  const { LoaiNguoiNhan, MaNguoiNhan,TenNguoiNhan } = inferRecipientFromToken() || {};
+  const user = useAuthStore((s) => s.user);
+  const { TenNguoiNhan } = inferRecipientFromToken() || {};
+  const scopeLabel = !hasGlobalScope(user)
+    ? formatDepartmentLabel(
+        user?.TenKhoa || user?.tenKhoa || user?.MaKhoa || user?.maKhoa || null
+      )
+    : null;
+  const canViewAppt = canViewAppointment(user);
+  const canCreateAppt = canCreateAppointment(user);
 
-  // cập nhật thời gian mỗi 30s (đủ mượt, ít re-render)
   useEffect(() => {
     const t = setInterval(() => setNow(formatNow()), 30_000);
     return () => clearInterval(t);
   }, []);
 
-  // đóng Quick Actions khi đổi route
   useEffect(() => {
     setQaOpen(false);
   }, [loc.pathname]);
 
-  // click ra ngoài / ESC để đóng
   useEffect(() => {
     if (!qaOpen) return;
     const onDown = (e) => {
@@ -53,12 +65,16 @@ export default function Topbar() {
   }, [qaOpen]);
 
   const actions = [
-    {
-      to: "/appointments",
-      icon: "📅",
-      title: "Tạo lịch hẹn",
-      desc: "Chuyển tới trang Lịch hẹn",
-    },
+    canViewAppt
+      ? {
+          to: "/appointments",
+          icon: "📅",
+          title: canCreateAppt ? "Tạo lịch hẹn" : "Xem lịch hẹn",
+          desc: canCreateAppt
+            ? "Chuyển tới trang Lịch hẹn"
+            : "Xem danh sách lịch hẹn",
+        }
+      : null,
     {
       to: "/patients",
       icon: "➕",
@@ -71,37 +87,44 @@ export default function Topbar() {
       title: "Xem thông báo",
       desc: "Xem danh sách thông báo",
     },
-  ];
+  ].filter(Boolean);
+
   const MotionLink = motion(Link);
+
   return (
     <header
-      className="card sticky top-0 z-20 mx-4 mt-4 flex items-center justify-between gap-3 px-4 py-2 bg-white/90 backdrop-blur"
+      className="card sticky top-0 z-20 mx-4 mt-4 flex items-center justify-between gap-3 bg-white/90 px-4 py-2 backdrop-blur"
       role="banner"
       aria-label="Thanh trên"
     >
-      {/* Trái: chào user + chip thời gian */}
       <div className="flex items-center gap-2">
         <img
           src="/avata.png"
           alt="Admin User"
-          className="w-10 h-10 rounded-full"
+          className="h-10 w-10 rounded-full"
           onError={({ currentTarget: t }) => (t.style.display = "none")}
         />
-        <div className="flex flex-col">
-          <span className="text-slate-500">
-            Xin chào, <b>{TenNguoiNhan ||"User"}</b>
-          </span>
+        <div className="flex min-w-0 flex-col">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-slate-500">
+              Xin chào,{" "}
+              <b>{TenNguoiNhan || user?.TenNhanSu || user?.tenNhanSu || "User"}</b>
+            </span>
+            {scopeLabel && (
+              <span className="inline-flex max-w-[14rem] items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200/80">
+                <span className="truncate">{scopeLabel}</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Phải: Quick Actions + Chuông + Cài đặt */}
       <div className="flex items-center gap-2">
-        <span className="h-8 inline-flex items-center gap-2 text-xs rounded-full px-2 py-2 bg-slate-100 ring-1 ring-slate-200 text-slate-600">
-          <i className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        <span className="inline-flex h-8 items-center gap-2 rounded-full bg-slate-100 px-2 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
+          <i className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           {now}
         </span>
 
-        {/* Quick Actions */}
         <div className="relative" ref={qaRef}>
           <motion.button
             type="button"
@@ -110,7 +133,7 @@ export default function Topbar() {
               boxShadow: "0 10px 20px rgba(16,185,129,0.28)",
             }}
             whileTap={{ scale: 0.95, y: 0 }}
-            className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/85 ring-1 ring-slate-200 hover:bg-emerald-50/10 hover:ring-slate-200 text-emerald-600 shadow-sm transition-colors"
+            className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/85 text-emerald-600 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-emerald-50/10 hover:ring-slate-200"
             aria-haspopup="menu"
             aria-expanded={qaOpen}
             onClick={() => setQaOpen((v) => !v)}
@@ -130,9 +153,9 @@ export default function Topbar() {
                 role="menu"
                 aria-label="Hành động nhanh"
               >
-                <div className="rounded-2xl bg-white ring-1 ring-emerald-200/70 shadow-2xl overflow-hidden">
-                  <div className="px-4 py-2 border-b border-emerald-100 bg-emerald-50/40 flex items-center gap-2">
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 text-sm">
+                <div className="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-emerald-200/70">
+                  <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50/40 px-4 py-2">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-xl bg-emerald-100 text-sm text-emerald-700">
                       ⚡
                     </span>
                     <div className="text-[13px] font-semibold text-slate-700">
@@ -140,7 +163,7 @@ export default function Topbar() {
                     </div>
                   </div>
 
-                  <ul className="p-2 space-y-1">
+                  <ul className="space-y-1 p-2">
                     {actions.map((item, idx) => (
                       <motion.li
                         key={idx}
@@ -184,16 +207,18 @@ export default function Topbar() {
           </AnimatePresence>
         </div>
 
-        {/* Chuông thông báo (dropdown + badge + auto-peek) */}
         <NotifBell />
 
-        {/* Cài đặt */}
         <MotionLink
           type="button"
-          whileHover={{ y: -1, boxShadow: "0 8px 18px rgba(250, 109, 205, 0.3)" }}
+          whileHover={{
+            y: -1,
+            boxShadow: "0 8px 18px rgba(250, 109, 205, 0.3)",
+          }}
           whileTap={{ scale: 0.96, y: 0 }}
-          as={Link} to="/settings"
-          className="px-1 relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/80 ring-1 ring-slate-200 hover:bg-pink-50/10 hover:ring-slate-200 text-slate-600 shadow-sm transition-colors"
+          as={Link}
+          to="/settings"
+          className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/80 px-1 text-slate-600 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-pink-50/10 hover:ring-slate-200"
           title="Cài đặt"
         >
           ⚙️

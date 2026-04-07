@@ -29,7 +29,11 @@ import {
 import { useCreateHistoryVisit } from "../api/history.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "../components/stores/appStore.js";
-import { canCallPatient } from "../utils/permissions.js";
+import {
+  canCallPatient,
+  canCancelClinicalVisit,
+  canCancelClsOrder,
+} from "../utils/permissions.js";
 
 const CLS_CREATED_KEY = "cls-orders-created";
 
@@ -66,6 +70,8 @@ export default function Examination() {
   // ✅ Check permissions
   const user = useAuthStore((s) => s.user);
   const canCall = canCallPatient(user);
+  const canCancelVisitAction = canCancelClinicalVisit(user);
+  const canCancelClsAction = canCancelClsOrder(user);
 
   // ✅ Auto-detect queue type based on user role
   const userRole = user?.ChucVu || user?.chucVu || user?.role || null;
@@ -804,15 +810,23 @@ export default function Examination() {
                     <PatientTable
                       items={filtered}
                       onStart={canCall ? handleStart : undefined}
-                      onCancelVisit={(maLuot) => cancelVisitMut.mutate(maLuot)}
-                      onCancelClsOrder={(maPhieuCls) => cancelClsMut.mutate(maPhieuCls)}
+                      onCancelVisit={
+                        canCancelVisitAction
+                          ? (maLuot) => cancelVisitMut.mutate(maLuot)
+                          : undefined
+                      }
+                      onCancelClsOrder={
+                        canCancelClsAction
+                          ? (maPhieuCls) => cancelClsMut.mutate(maPhieuCls)
+                          : undefined
+                      }
                       inProgress={inProgress}
                       stretch
                     />
                   </div>
                   
                   {/* Pagination */}
-                  {totalPages > 1 && (
+                  {totalItems > 0 && (
                     <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
                       <Pagination
                         currentPage={page}
@@ -820,6 +834,7 @@ export default function Examination() {
                         totalItems={totalItems}
                         pageSize={50}
                         onPageChange={setPage}
+                        showWhenSinglePage
                         className="px-3 py-2"
                       />
                     </div>
@@ -836,6 +851,9 @@ export default function Examination() {
           onClose={() => setFilterOpen(false)}
           values={filter}
           setValues={setFilter}
+          onReset={() =>
+            setFilter({ source: "all", kind: defaultKind, status: "all", search: "" })
+          }
         />
       </div>
     </motion.main>

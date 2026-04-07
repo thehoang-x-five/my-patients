@@ -419,6 +419,17 @@ export async function upsertStockItem(form) {
   return normalizeDrug(dto);
 }
 
+export async function updatePrescriptionStatus(maDonThuoc, trangThai) {
+  if (!maDonThuoc) {
+    throw new Error("Thiếu mã đơn thuốc");
+  }
+
+  const dto = await put(`/pharmacy/prescriptions/${maDonThuoc}/status`, {
+    TrangThai: trangThai,
+  });
+  return normalizePrescription(dto);
+}
+
 /** ================== REACT QUERY HOOKS ================== */
 
 export function useStock(options = {}) {
@@ -492,6 +503,24 @@ export function useUpsertStockItem(options = {}) {
     onSuccess: (data, variables, context) => {
       qc.invalidateQueries({ queryKey: ["pharmacy", "stock"] });
       qc.invalidateQueries({ queryKey: ["pharmacy", "rxOrders"] });
+      if (typeof onSuccess === "function") {
+        onSuccess(data, variables, context);
+      }
+    },
+    ...rest,
+  });
+}
+
+export function useUpdatePrescriptionStatus(options = {}) {
+  const qc = useQueryClient();
+  const { onSuccess, ...rest } = options || {};
+
+  return useMutation({
+    mutationFn: ({ maDonThuoc, trangThai }) =>
+      updatePrescriptionStatus(maDonThuoc, trangThai),
+    onSuccess: (data, variables, context) => {
+      qc.invalidateQueries({ queryKey: ["pharmacy", "rxOrders"] });
+      qc.invalidateQueries({ queryKey: ["pharmacy", "stock"] });
       if (typeof onSuccess === "function") {
         onSuccess(data, variables, context);
       }

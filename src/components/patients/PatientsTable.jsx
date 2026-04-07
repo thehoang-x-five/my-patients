@@ -1,5 +1,5 @@
 // src/components/patients/PatientsTable.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import ConfirmModal from "../ui/ConfirmModal.jsx";
@@ -220,10 +220,13 @@ function safeCssEscape(v) {
 export default function PatientsTable({
   items = [],
   onAction,
+  onStatusChange,
   stretch = false,
   highlightPid = null,
-  hasReceptionPermission = true, // ✅ Default true for backward compatibility
-  canCreateExam = true, // ✅ Quyền lập phiếu khám (chỉ Y tá HC)
+  canEditPatient = true,
+  canCreateExam = true,
+  canProcessPatient = true,
+  canCancelPatientFlow = true,
 }) {
   // Prefetch danh sách dịch vụ khám lâm sàng để PatientExamMode dùng ngay
   useServicesOverview({ loaiDichVu: "kham_lam_sang" }, { enabled: true });
@@ -232,19 +235,21 @@ export default function PatientsTable({
   const enqueueServiceMut = useEnqueueService();
   const returnToDoctorMut = useReturnToDoctor();
   const updatePatientStatus = useUpdatePatientStatus();
-
-  // ===== Confirm modal state =====
   const [confirmBoVe, setConfirmBoVe] = useState({ open: false, name: "", id: null });
 
   const handleStartToday = (p) => {
     if (!p) return;
     const id = p.id ?? p.pid;
     if (!id) return;
-    // Call UpdateDailyStatus với status "cho_tiep_nhan"
-    updatePatientStatus.mutate({
-      id,
-      status: "cho_tiep_nhan",
-    });
+    if (typeof onStatusChange === "function") {
+      onStatusChange(id, STATUSES.WAIT_INTAKE, {
+        successMessage: "Đã bắt đầu lượt xử lý hôm nay cho bệnh nhân.",
+        errorMessage: "Không thể bắt đầu lượt xử lý hôm nay. Vui lòng thử lại.",
+      });
+      return;
+    }
+
+    updatePatientStatus.mutate({ id, status: STATUSES.WAIT_INTAKE });
   };
 
   // scroll tới dòng được highlight
@@ -498,7 +503,7 @@ export default function PatientsTable({
                             )}
                           </div>
                         ) : (
-                          accountActive && (
+                          accountActive && canEditPatient && (
                             <button
                               type="button"
                               onClick={() => handleStartToday(p)}
@@ -520,7 +525,7 @@ export default function PatientsTable({
                         >
                           👁️
                         </Button>
-                        {hasReceptionPermission && (
+                        {canEditPatient && (
                           <Button
                             className="!px-2"
                             onClick={() => onAction?.("edit", p)}
@@ -541,7 +546,7 @@ export default function PatientsTable({
                           </button>
                         )}
 
-                        {accountActive && showProcessBtn && hasReceptionPermission && (
+                        {accountActive && showProcessBtn && canProcessPatient && (
                           <button
                             onClick={() => onAction?.("process", p)}
                             className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-gradient-to-tr from-rose-100 to-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-900 shadow hover:shadow-md hover:-translate-y-0.5 transition"
@@ -551,13 +556,17 @@ export default function PatientsTable({
                         )}
 
                         {/* ✅ Nút BN bỏ về — cho phép hủy BN đang chờ/đang khám */}
-                        {accountActive && hasTodayStatus && hasReceptionPermission &&
+                        {accountActive && hasTodayStatus && canCancelPatientFlow &&
                           statusCode !== STATUSES.DONE &&
                           statusCode !== STATUSES.CANCELLED && (
                             <button
                               onClick={() => {
                                 const id = p.id ?? p.pid;
-                                setConfirmBoVe({ open: true, name: p.name || p.ho_ten, id });
+                                setConfirmBoVe({
+                                  open: true,
+                                  name: p.name || p.ho_ten || id || "bệnh nhân",
+                                  id,
+                                });
                               }}
                               className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition"
                               title="BN bỏ về"
@@ -575,14 +584,24 @@ export default function PatientsTable({
         </table>
       </div>
     </section>
-
       <ConfirmModal
         open={confirmBoVe.open}
         onClose={() => setConfirmBoVe({ open: false, name: "", id: null })}
         onConfirm={() => {
-          if (confirmBoVe.id) {
-            updatePatientStatus.mutate({ id: confirmBoVe.id, status: "da_huy" });
+          if (!confirmBoVe.id) return;
+
+          if (typeof onStatusChange === "function") {
+            onStatusChange(confirmBoVe.id, STATUSES.CANCELLED, {
+              successMessage: "Đã chuyển bệnh nhân sang trạng thái bỏ về.",
+              errorMessage: "Không thể cập nhật trạng thái bỏ về. Vui lòng thử lại.",
+            });
+            return;
           }
+
+          updatePatientStatus.mutate({
+            id: confirmBoVe.id,
+            status: STATUSES.CANCELLED,
+          });
         }}
         title="Xác nhận bỏ về"
         message={`Bệnh nhân "${confirmBoVe.name}" sẽ được chuyển trạng thái bỏ về. Bạn có chắc chắn?`}

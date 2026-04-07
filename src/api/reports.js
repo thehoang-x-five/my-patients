@@ -1,18 +1,18 @@
-// src/api/reports.js
 import { useQuery } from "@tanstack/react-query";
 import { http } from "./http.js";
 
 const EMPTY = {
   kpi: {
     revenue: { value: 0, trend: 0, spark: [] },
+    checkedIn: { value: 0, trend: 0, spark: [] },
     newPatients: { value: 0, trend: 0, spark: [] },
     revisits: { value: 0, trend: 0, spark: [] },
     cancelRate: { value: 0, trend: 0, spark: [] },
   },
   rows: [],
+  canViewRevenue: true,
 };
 
-// Lấy số đầu tiên hợp lệ trong list giá trị
 function toNumber(...vals) {
   for (const v of vals) {
     if (v === null || v === undefined) continue;
@@ -22,7 +22,6 @@ function toNumber(...vals) {
   return 0;
 }
 
-// Tỷ lệ % cũng chỉ là Number, không scale thêm
 function toPercent(...vals) {
   for (const v of vals) {
     if (v === null || v === undefined) continue;
@@ -32,7 +31,6 @@ function toPercent(...vals) {
   return 0;
 }
 
-// Map list PhanBoTheoNgay -> { date, value } cho sparkline
 function mapSpark(list) {
   if (!Array.isArray(list)) return [];
   return list.map((x, idx) => ({
@@ -41,18 +39,15 @@ function mapSpark(list) {
   }));
 }
 
-/**
- * Chuẩn hoá ReportOverviewDto từ BE về shape FE:
- * {
- *   kpi: { revenue, newPatients, revisits, cancelRate },
- *   rows: [{ id, date, revenue, newPatients, revisits, cancelRate }]
- * }
- */
 function normalizeOverviewDto(dto) {
   if (!dto || typeof dto !== "object") return EMPTY;
 
-  // Kpi raw từ BE (PascalCase) + fallback camelCase/mock
+  const canViewRevenue = Boolean(
+    dto.CoTheXemDoanhThu ?? dto.coTheXemDoanhThu ?? true
+  );
+
   const revRaw = dto.DoanhThu || dto.doanhThu || {};
+  const checkedInRaw = dto.BenhNhanDaCheckIn || dto.benhNhanDaCheckIn || {};
   const newRaw = dto.BenhNhanMoi || dto.benhNhanMoi || {};
   const rvRaw = dto.TaiKham || dto.taiKham || {};
   const cancelRaw = dto.TyLeHuy || dto.tyLeHuy || {};
@@ -87,6 +82,23 @@ function normalizeOverviewDto(dto) {
     spark: mapSpark(newRaw.PhanBoTheoNgay || newRaw.phanBoTheoNgay || []),
   };
 
+  const checkedIn = {
+    value: toNumber(
+      checkedInRaw.TongBenhNhanDaCheckIn,
+      checkedInRaw.tongBenhNhanDaCheckIn,
+      checkedInRaw.total,
+      checkedInRaw.value
+    ),
+    trend: toPercent(
+      checkedInRaw.CheckInChangePercent,
+      checkedInRaw.checkInChangePercent,
+      checkedInRaw.delta
+    ),
+    spark: mapSpark(
+      checkedInRaw.PhanBoTheoNgay || checkedInRaw.phanBoTheoNgay || []
+    ),
+  };
+
   const revisits = {
     value: toNumber(
       rvRaw.TongTaiKham,
@@ -119,9 +131,7 @@ function normalizeOverviewDto(dto) {
     ),
   };
 
-  // Items chi tiết theo ngày/tuần/tháng
-  const rawItems =
-    dto.Items || dto.items || dto.Rows || dto.rows || [];
+  const rawItems = dto.Items || dto.items || dto.Rows || dto.rows || [];
 
   const rows = Array.isArray(rawItems)
     ? rawItems.map((i, idx) => {
@@ -149,24 +159,17 @@ function normalizeOverviewDto(dto) {
     : [];
 
   return {
-    kpi: { revenue, newPatients, revisits, cancelRate },
+    kpi: { revenue, checkedIn, newPatients, revisits, cancelRate },
     rows,
+    canViewRevenue,
   };
 }
 
-/**
- * Build khoảng thời gian + GroupBy theo period:
- * - mtd: từ đầu tháng -> hôm nay
- * - 30d: 30 ngày gần nhất
- * - 90d: 90 ngày gần nhất
- * - ytd: từ 01/01 năm hiện tại
- * - custom: nếu FE truyền from/to thì dùng thẳng, nếu không fallback 30d
- */
 function buildDateRange({ period, from, to }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  let toDate = to
+  const toDate = to
     ? new Date(to)
     : new Date(today.getFullYear(), today.getMonth(), today.getDate());
   let fromDate;
@@ -211,10 +214,6 @@ function buildDateRange({ period, from, to }) {
   return { fromDate: fromStr, toDate: toStr, groupBy };
 }
 
-/**
- * Gọi BE thật: POST /reports/overview
- * Body: { FromDate, ToDate, GroupBy }
- */
 export async function getReportsOverview(params = {}) {
   const { fromDate, toDate, groupBy } = buildDateRange(params);
 
@@ -228,9 +227,6 @@ export async function getReportsOverview(params = {}) {
   return normalizeOverviewDto(dto);
 }
 
-/**
- * Hook React Query cho trang Reports
- */
 export function useReportsOverview(params) {
   return useQuery({
     queryKey: ["reportsOverview", params],

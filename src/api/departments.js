@@ -369,6 +369,7 @@ function normalizeStaffOverview(dto, maKhoa) {
  *  - string? MaKhoa
  *  - string? MaPhong
  *  - decimal DonGia
+ *  - int ThoiGianDuKienPhut
  */
 function normalizeService(dto, fallbackRoomId) {
   if (!dto) return null;
@@ -385,6 +386,11 @@ function normalizeService(dto, fallbackRoomId) {
     dto.MaPhong || dto.maPhong || dto.ma_phong || dto.roomId || fallbackRoomId;
 
   const donGia = dto.DonGia ?? dto.donGia ?? dto.price ?? 0;
+  const thoiGianDuKienPhut =
+    dto.ThoiGianDuKienPhut ??
+    dto.thoiGianDuKienPhut ??
+    dto.expectedMinutes ??
+    0;
 
   const status =
     dto.TrangThai ||
@@ -406,6 +412,8 @@ function normalizeService(dto, fallbackRoomId) {
     roomId: maPhong,
     price: donGia,
     donGia,
+    thoiGianDuKienPhut,
+    expectedMinutes: thoiGianDuKienPhut,
     status,
   };
 }
@@ -521,6 +529,138 @@ export const listDepartments = async (params = {}) => {
     page: body.Page ?? body.page ?? filter.Page ?? 1,
     pageSize: body.PageSize ?? body.pageSize ?? filter.PageSize ?? items.length,
   };
+};
+
+export const listDepartmentCatalog = async () => {
+  const res = await http.get("/master-data/departments");
+  const data = res.data ?? res;
+  const arr = normalizeListLike(data);
+
+  return arr.map((dto) => ({
+    MaKhoa: dto.MaKhoa || dto.maKhoa || dto.code || dto.id || "",
+    TenKhoa: dto.TenKhoa || dto.tenKhoa || dto.name || "",
+    TrangThai: dto.TrangThai || dto.trangThai || "hoat_dong",
+    MoTa: dto.MoTa || dto.moTa || "",
+    DienThoai: dto.DienThoai || dto.dienThoai || "",
+    Email: dto.Email || dto.email || "",
+    DiaDiem: dto.DiaDiem || dto.diaDiem || "",
+    GhiChu: dto.GhiChu || dto.ghiChu || "",
+  }));
+};
+
+export const listRoomCatalog = async (params = {}) => {
+  const filter = buildRoomSearchFilter({
+    ...params,
+    page: params.page || 1,
+    pageSize: params.pageSize || 200,
+  });
+
+  const [roomRes, deptRes] = await Promise.all([
+    http.post("/master-data/rooms/search", filter),
+    http.get("/master-data/departments"),
+  ]);
+
+  const roomPayload = roomRes.data ?? roomRes;
+  const deptPayload = deptRes.data ?? deptRes;
+  const roomItems = normalizeListLike(roomPayload);
+  const deptItems = normalizeListLike(deptPayload);
+
+  const deptMap = new Map(
+    deptItems.map((d) => [
+      d.MaKhoa || d.maKhoa || d.code || d.id || "",
+      d.TenKhoa || d.tenKhoa || d.name || "",
+    ])
+  );
+
+  return {
+    items: roomItems.map((dto) => ({
+      MaPhong: dto.MaPhong || dto.maPhong || dto.code || dto.id || "",
+      TenPhong: dto.TenPhong || dto.tenPhong || dto.name || "",
+      MaKhoa: dto.MaKhoa || dto.maKhoa || "",
+      TenKhoa:
+        dto.TenKhoa || dto.tenKhoa || deptMap.get(dto.MaKhoa || dto.maKhoa || "") || "",
+      LoaiPhong: dto.LoaiPhong || dto.loaiPhong || "",
+      SucChua: dto.SucChua ?? dto.sucChua ?? null,
+      ViTri: dto.ViTri || dto.viTri || "",
+      Email: dto.Email || dto.email || "",
+      DienThoai: dto.DienThoai || dto.dienThoai || "",
+      GioMoCua: dto.GioMoCua || dto.gioMoCua || null,
+      GioDongCua: dto.GioDongCua || dto.gioDongCua || null,
+      ThietBi: dto.ThietBi || dto.thietBi || [],
+      TrangThai: dto.TrangThai || dto.trangThai || "hoat_dong",
+      MaBacSiPhuTrach: dto.MaBacSiPhuTrach || dto.maBacSiPhuTrach || "",
+    })),
+    totalItems: roomPayload.TotalItems ?? roomPayload.totalItems ?? roomItems.length,
+    page: roomPayload.Page ?? roomPayload.page ?? 1,
+    pageSize: roomPayload.PageSize ?? roomPayload.pageSize ?? roomItems.length,
+  };
+};
+
+export const listServiceCatalog = async (params = {}) => {
+  const payload = cleanupFilter({
+    Keyword: params.keyword,
+    MaKhoa: params.maKhoa,
+    MaPhong: params.maPhong,
+    LoaiDichVu: params.loaiDichVu,
+    SortBy: params.sortBy || "TenDichVu",
+    SortDirection: params.sortDirection || "asc",
+    Page: params.page || 1,
+    PageSize: params.pageSize || 200,
+  });
+
+  const res = await http.post("/master-data/services/search", payload);
+  const body = res.data ?? res;
+  const serviceItems = normalizeListLike(body);
+
+  return {
+    items: serviceItems.map((dto) => {
+      const normalized = normalizeService(dto);
+      if (!normalized) return null;
+
+      return {
+        MaDichVu: normalized.code,
+        TenDichVu: normalized.tenDichVu,
+        LoaiDichVu: normalized.loaiDichVu,
+        MaKhoa: normalized.maKhoa || "",
+        MaPhong: normalized.maPhong || "",
+        DonGia: normalized.donGia,
+        ThoiGianDuKienPhut: normalized.thoiGianDuKienPhut ?? 0,
+      };
+    }).filter(Boolean),
+    totalItems: body.TotalItems ?? body.totalItems ?? serviceItems.length,
+    page: body.Page ?? body.page ?? 1,
+    pageSize: body.PageSize ?? body.pageSize ?? serviceItems.length,
+  };
+};
+
+export const createDepartment = async (payload) => {
+  const res = await http.post("/master-data/departments", payload);
+  return res.data ?? res;
+};
+
+export const updateDepartment = async ({ id, data }) => {
+  const res = await http.put(`/master-data/departments/${id}`, data);
+  return res.data ?? res;
+};
+
+export const createRoom = async (payload) => {
+  const res = await http.post("/master-data/rooms", payload);
+  return res.data ?? res;
+};
+
+export const updateRoom = async ({ id, data }) => {
+  const res = await http.put(`/master-data/rooms/${id}`, data);
+  return res.data ?? res;
+};
+
+export const createService = async (payload) => {
+  const res = await http.post("/master-data/services", payload);
+  return res.data ?? res;
+};
+
+export const updateService = async ({ id, data }) => {
+  const res = await http.put(`/master-data/services/${id}`, data);
+  return res.data ?? res;
 };
 
 
@@ -665,6 +805,40 @@ export const getDepartment = async (id) => {
   return normalizeRoomDetail(detail);
 };
 
+function normalizeRoomDutyWeek(data) {
+  if (!data) return null;
+
+  const dutyItems = Array.isArray(data.LichDieuDuongTuan || data.lichDieuDuongTuan)
+    ? data.LichDieuDuongTuan || data.lichDieuDuongTuan
+    : [];
+
+  return {
+    roomId: data.MaPhong || data.maPhong || "",
+    roomName: data.TenPhong || data.tenPhong || "",
+    deptName: data.TenKhoa || data.tenKhoa || "",
+    doctorId: data.MaBacSiPhuTrach || data.maBacSiPhuTrach || "",
+    doctorName: data.TenBacSiPhuTrach || data.tenBacSiPhuTrach || "",
+    today: data.Today || data.today || null,
+    items: dutyItems.map((item) => ({
+      day: item.Thu || item.thu || "",
+      nghiTruc: Boolean(item.NghiTruc ?? item.nghiTruc ?? false),
+      maNhanVien: item.MaYTa || item.maYTa || "",
+      tenNhanVien: item.TenYTa || item.tenYTa || "",
+      shift: item.CaTruc || item.caTruc || "",
+      gioBatDau: item.GioBatDau || item.gioBatDau || null,
+      gioKetThuc: item.GioKetThuc || item.gioKetThuc || null,
+    })),
+    raw: data,
+  };
+}
+
+export const getRoomDutyWeek = async (id) => {
+  if (!id) return null;
+
+  const res = await http.get(`/master-data/rooms/${id}/duty-week`);
+  return normalizeRoomDutyWeek(res.data ?? res);
+};
+
 
 
 /**
@@ -683,32 +857,27 @@ export const getDepartment = async (id) => {
  *  - Thu, NghiTruc, MaYTa, TenYTa, CaTruc, GioBatDau, GioKetThuc
  */
 export const getDutyByRoom = async (id) => {
-  if (!id) return [];
-
-  const res = await http.get(`/master-data/rooms/${id}/duty-week`);
-  const data = res.data ?? res;
-  if (!data) return [];
-
-  const days = Array.isArray(data.LichDieuDuongTuan || data.lichDieuDuongTuan)
-    ? data.LichDieuDuongTuan || data.lichDieuDuongTuan
-    : [];
-
-  const doctor =
-    data.TenBacSiPhuTrach ||
-    data.tenBacSiPhuTrach ||
-    data.BacSi ||
-    data.bacSi ||
-    "";
+  const dutyWeek = await getRoomDutyWeek(id);
+  if (!dutyWeek) return [];
 
   // convert -> list các dòng để buildWeekDaysFromDuty xử lý
-  return days.map((d) => ({
-    DayOfWeek: d.Thu || d.thu,
-    TenDieuDuong: d.TenYTa || d.tenYTa,
-    CaTruc: d.CaTruc || d.caTruc,
-    GioBatDau: d.GioBatDau || d.gioBatDau,
-    GioKetThuc: d.GioKetThuc || d.gioKetThuc,
-    BacSi: doctor,
-  }));
+  return dutyWeek.items
+    .filter((item) => !item.nghiTruc)
+    .map((item) => ({
+      DayOfWeek: item.day,
+      TenDieuDuong: item.tenNhanVien,
+      CaTruc: item.shift,
+      GioBatDau: item.gioBatDau,
+      GioKetThuc: item.gioKetThuc,
+      BacSi: dutyWeek.doctorName,
+    }));
+};
+
+export const updateRoomDutyWeek = async ({ id, data }) => {
+  if (!id) throw new Error("Missing room id");
+
+  const res = await http.put(`/master-data/rooms/${id}/duty-week`, data);
+  return normalizeRoomDutyWeek(res.data ?? res);
 };
 
 
@@ -809,6 +978,35 @@ export function useDepartmentRooms(params = {}, options = {}) {
   });
 }
 
+export function useDepartmentCatalog(options = {}) {
+  return useQuery({
+    queryKey: ["departments-admin-catalog"],
+    queryFn: listDepartmentCatalog,
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
+export function useRoomCatalog(params = {}, options = {}) {
+  return useQuery({
+    queryKey: ["rooms-admin-catalog", params],
+    queryFn: () => listRoomCatalog(params),
+    staleTime: 30_000,
+    keepPreviousData: true,
+    ...options,
+  });
+}
+
+export function useServiceCatalog(params = {}, options = {}) {
+  return useQuery({
+    queryKey: ["services-admin-catalog", params],
+    queryFn: () => listServiceCatalog(params),
+    staleTime: 30_000,
+    keepPreviousData: true,
+    ...options,
+  });
+}
+
 
 /**
  * Lấy danh sách bác sĩ + số BN đang chờ + số lịch hôm nay theo khoa.
@@ -859,6 +1057,16 @@ export function useDutyByRoom(id, options = {}) {
   });
 }
 
+export function useRoomDutyWeek(id, options = {}) {
+  return useQuery({
+    queryKey: ["room-duty-week", id],
+    queryFn: () => getRoomDutyWeek(id),
+    enabled: !!id && (options.enabled ?? true),
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
 
 /**
  * Dịch vụ theo phòng
@@ -879,6 +1087,91 @@ export function useRoomServices(roomId, options = {}) {
 }
 
 /* ========= Hooks: Mutations ========= */
+
+export function useCreateDepartment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createDepartment,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["departments-admin-catalog"] });
+      qc.invalidateQueries({ queryKey: ["departments"] });
+      qc.invalidateQueries({ queryKey: ["department-rooms"] });
+    },
+  });
+}
+
+export function useUpdateDepartment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateDepartment,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["departments-admin-catalog"] });
+      qc.invalidateQueries({ queryKey: ["departments"] });
+      qc.invalidateQueries({ queryKey: ["department-rooms"] });
+    },
+  });
+}
+
+export function useCreateRoom() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createRoom,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rooms-admin-catalog"] });
+      qc.invalidateQueries({ queryKey: ["department-rooms"] });
+      qc.invalidateQueries({ queryKey: ["department"] });
+    },
+  });
+}
+
+export function useUpdateRoom() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateRoom,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rooms-admin-catalog"] });
+      qc.invalidateQueries({ queryKey: ["department-rooms"] });
+      qc.invalidateQueries({ queryKey: ["department"] });
+    },
+  });
+}
+
+export function useCreateService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createService,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["services-admin-catalog"] });
+      qc.invalidateQueries({ queryKey: ["dept-services"] });
+      qc.invalidateQueries({ queryKey: ["department"] });
+    },
+  });
+}
+
+export function useUpdateService() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateService,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["services-admin-catalog"] });
+      qc.invalidateQueries({ queryKey: ["dept-services"] });
+      qc.invalidateQueries({ queryKey: ["department"] });
+    },
+  });
+}
+
+export function useUpdateRoomDutyWeek() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateRoomDutyWeek,
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ["duty", vars?.id] });
+      qc.invalidateQueries({ queryKey: ["room-duty-week", vars?.id] });
+      qc.invalidateQueries({ queryKey: ["department-rooms"] });
+      qc.invalidateQueries({ queryKey: ["department", vars?.id] });
+    },
+  });
+}
 
 
 

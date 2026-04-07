@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-toastify";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
+import PopoverSelect from "../components/ui/PopoverSelect.jsx";
 
 import {
   useAdminUsers,
@@ -181,16 +182,18 @@ function StaffFormModal({ open, onClose, initial, isEdit, onSubmit, isPending })
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Vai trò">
-                <select
-                  className="input"
+                <PopoverSelect
+                  name="vaiTro"
                   value={form.vaiTro}
-                  onChange={(e) => set("vaiTro", e.target.value)}
-                >
-                  <option value="bac_si">Bác sĩ</option>
-                  <option value="y_ta">Y tá</option>
-                  <option value="ky_thuat_vien">Kỹ thuật viên</option>
-                  <option value="admin">Admin</option>
-                </select>
+                  onChange={(value) => set("vaiTro", value)}
+                  options={[
+                    { value: "bac_si", label: "Bác sĩ" },
+                    { value: "y_ta", label: "Y tá" },
+                    { value: "ky_thuat_vien", label: "Kỹ thuật viên" },
+                    { value: "admin", label: "Admin" },
+                  ]}
+                  placeholder="Chọn vai trò"
+                />
               </Field>
               <Field label="Chức vụ">
                 <input
@@ -204,15 +207,13 @@ function StaffFormModal({ open, onClose, initial, isEdit, onSubmit, isPending })
 
             {form.vaiTro === "y_ta" && (
               <Field label="Loại y tá">
-                <select
-                  className="input"
+                <PopoverSelect
+                  name="loaiYTa"
                   value={form.loaiYTa}
-                  onChange={(e) => set("loaiYTa", e.target.value)}
-                >
-                  {NURSE_TYPE_OPTS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+                  onChange={(value) => set("loaiYTa", value)}
+                  options={NURSE_TYPE_OPTS}
+                  placeholder="Chọn loại y tá"
+                />
               </Field>
             )}
 
@@ -452,24 +453,24 @@ export default function AdminUsers() {
               onChange={(e) => { setQ(e.target.value); setPage(1); }}
             />
           </div>
-          <select
-            className="input max-w-[170px]"
-            value={roleFilter}
-            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
-          >
-            {ROLE_OPTS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          <select
-            className="input max-w-[170px]"
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          >
-            {STATUS_OPTS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+          <div className="max-w-[170px] flex-1">
+            <PopoverSelect
+              name="roleFilter"
+              value={roleFilter}
+              onChange={(value) => { setRoleFilter(value); setPage(1); }}
+              options={ROLE_OPTS}
+              placeholder="Lọc vai trò"
+            />
+          </div>
+          <div className="max-w-[170px] flex-1">
+            <PopoverSelect
+              name="statusFilter"
+              value={statusFilter}
+              onChange={(value) => { setStatusFilter(value); setPage(1); }}
+              options={STATUS_OPTS}
+              placeholder="Lọc trạng thái"
+            />
+          </div>
         </div>
 
         {/* ======= TABLE ======= */}
@@ -599,7 +600,7 @@ export default function AdminUsers() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {totalItems > 0 && (
             <div className="flex-none flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-white">
               <span className="text-xs text-slate-400">
                 Trang {page} / {totalPages} • {totalItems} kết quả

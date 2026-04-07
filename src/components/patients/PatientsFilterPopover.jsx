@@ -3,6 +3,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { STATUSES, ACCOUNT_STATUSES, mapTodayStatusLabel } from "../../api/patients";
+import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
 
 const TODAY_SEG = [
   "all",
@@ -39,6 +40,7 @@ export default function PatientsFilterPopover({
   anchorEl,
   sort = "priority",
   onChangeSort,
+  onReset,
 }) {
   const boxRef = useRef(null);
   const kwRef = useRef(null);
@@ -338,6 +340,13 @@ export default function PatientsFilterPopover({
                 </div>
               </div>
             </div>
+            <FilterPopoverFooter
+              onReset={() => onReset?.()}
+              onClose={onClose}
+              resetLabel="Reset bộ lọc"
+              closeLabel="Đóng"
+              accent="emerald"
+            />
           </div>
         </motion.div>
       )}

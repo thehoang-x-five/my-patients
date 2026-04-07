@@ -6,6 +6,7 @@ export default function Chip({
   children,
   dot, // "emerald" | "amber" | "sky" | "rose" | "slate" | "teal" | "cyan" | "violet"
   tone = "white", // "white" | "yellow" | "amber" | "sky" | "slate" | "teal" | "emerald" | "violet"
+  active = false,
   className = "",
   as: Tag = "span",
   ...rest
@@ -56,11 +57,38 @@ export default function Chip({
   
   const prefer = dot && rgbByTone[dot] ? dot : tone;
   const hoverRGB = rgbByTone[prefer] || rgbByTone.violet;
+  const activeColor = dot && toneMap[dot] ? dot : toneMap[tone] ? tone : "violet";
+  const activeToneMap = {
+    white: "bg-violet-50 text-violet-700 ring-violet-300 shadow-sm",
+    yellow: "bg-yellow-100 text-yellow-800 ring-yellow-300 shadow-sm",
+    amber: "bg-amber-100 text-amber-800 ring-amber-300 shadow-sm",
+    sky: "bg-sky-100 text-sky-800 ring-sky-300 shadow-sm",
+    slate: "bg-slate-200 text-slate-800 ring-slate-300 shadow-sm",
+    teal: "bg-teal-100 text-teal-800 ring-teal-300 shadow-sm",
+    emerald: "bg-emerald-100 text-emerald-800 ring-emerald-300 shadow-sm",
+    violet: "bg-violet-100 text-violet-800 ring-violet-300 shadow-sm",
+    red: "bg-red-100 text-red-800 ring-red-300 shadow-sm",
+    rose: "bg-rose-100 text-rose-800 ring-rose-300 shadow-sm",
+    indigo: "bg-indigo-100 text-indigo-800 ring-indigo-300 shadow-sm",
+    cyan: "bg-cyan-100 text-cyan-800 ring-cyan-300 shadow-sm",
+  };
+  const interactive = typeof rest.onClick === "function" || Tag === "button";
 
   return (
     <motion.span
-      whileHover={{ y: -1, boxShadow: `0 6px 18px rgba(${hoverRGB}, .18)` }}
-      className={`inline-flex text-sm items-center gap-2 rounded-full px-3 py-1.5 ring-1 ${toneMap[tone] || toneMap.white} ${className}`}
+      whileHover={{
+        y: -1,
+        boxShadow: `0 6px 18px rgba(${hoverRGB}, ${active ? ".24" : ".18"})`,
+      }}
+      whileTap={interactive ? { scale: 0.98 } : undefined}
+      className={[
+        "inline-flex text-sm items-center gap-2 rounded-full px-3 py-1.5 ring-1 transition-all duration-150",
+        interactive ? "cursor-pointer select-none" : "",
+        active
+          ? activeToneMap[activeColor] || activeToneMap.violet
+          : toneMap[tone] || toneMap.white,
+        className,
+      ].join(" ")}
       {...rest}
     >
       {dot && <span className={`w-2 h-2 rounded-full ${dotMap[dot] || ""}`} />}

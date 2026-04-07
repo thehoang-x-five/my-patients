@@ -1,21 +1,26 @@
 // src/components/billing/PaymentWizard.jsx
 // Wizard thanh toán inline — tích hợp trong flow khám bệnh
-// Flow: Dịch vụ chờ thanh toán → Chọn phương thức → Xác nhận → Hoàn tất
-// Chờ Dev1 endpoints: POST /api/billing/invoices/confirm, PUT .../cancel
+// Flow: Tìm hóa đơn đã tạo sẵn (chua_thu) → Hiện chi tiết → Chọn phương thức → Xác nhận → Hoàn tất
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useCreateInvoice, useCancelInvoice } from "../../api/billing.js";
+import {
+  searchInvoices,
+  useConfirmInvoice,
+  useCreateInvoice,
+  useGenerateVietQR,
+} from "../../api/billing.js";
 import { useAuthStore } from "../stores/appStore.js";
 import { canManageReception } from "../../utils/permissions.js";
 import {
   PHUONG_THUC_THANH_TOAN,
   PHUONG_THUC_THANH_TOAN_LABEL,
-  TRANG_THAI_HOA_DON,
 } from "../../constants/enums.js";
+import VietQRDisplay from "./VietQRDisplay.jsx";
 
 // ==================== STEPS ====================
 const STEPS = {
+  LOADING: "loading",
   REVIEW: "review",
   METHOD: "method",
   CONFIRM: "confirm",
@@ -23,14 +28,22 @@ const STEPS = {
 };
 
 const STEP_LABELS = {
+  [STEPS.LOADING]: "Đang tải...",
   [STEPS.REVIEW]: "Chi tiết phí",
   [STEPS.METHOD]: "Phương thức",
   [STEPS.CONFIRM]: "Xác nhận",
   [STEPS.DONE]: "Hoàn tất",
 };
 
-const VND = (n) =>
-  `${Number(n || 0).toLocaleString("vi-VN")} ₫`;
+const DEFERRED_METHOD = "__thu_sau__";
+const VND = (n) => `${Number(n || 0).toLocaleString("vi-VN")} ₫`;
+const METHOD_OPTIONS = [
+  ...Object.values(PHUONG_THUC_THANH_TOAN).map((value) => ({
+    value,
+    label: PHUONG_THUC_THANH_TOAN_LABEL[value],
+  })),
+  { value: DEFERRED_METHOD, label: "Thu sau" },
+];
 
 // ==================== MAIN COMPONENT ====================
 
@@ -38,8 +51,8 @@ const VND = (n) =>
  * PaymentWizard — Wizard thanh toán inline
  * @param {boolean} open - Hiển thị wizard
  * @param {object} patient - Thông tin bệnh nhân (MaBenhNhan, HoTen)
- * @param {Array} items - Danh sách dịch vụ chờ thanh toán [{name, amount, type}]
- * @param {string} [examId] - MaPhieuKham đang liên kết
+ * @param {Array} items - Danh sách dịch vụ hiển thị [{name, amount}] (fallback display)
+ * @param {string} [examId] - MaPhieuKham để tìm hóa đơn auto-created
  * @param {string} [clsId] - MaPhieuKhamCls
  * @param {string} [rxId] - MaDonThuoc
  * @param {function} onClose - Đóng wizard
@@ -58,24 +71,19 @@ export default function PaymentWizard({
   const user = useAuthStore((s) => s.user);
   const canPay = canManageReception(user);
 
-  const [step, setStep] = useState(STEPS.REVIEW);
+  const [step, setStep] = useState(STEPS.LOADING);
   const [method, setMethod] = useState(PHUONG_THUC_THANH_TOAN.TIEN_MAT);
   const [error, setError] = useState(null);
+  const [qrData, setQrData] = useState(null);
+  const [completionMode, setCompletionMode] = useState("paid");
+  const [isPreparingStep, setIsPreparingStep] = useState(false);
 
+  // Hóa đơn tìm được từ BE
+  const [invoice, setInvoice] = useState(null);
+
+  const confirmInvoice = useConfirmInvoice();
   const createInvoice = useCreateInvoice();
-  const cancelInvoice = useCancelInvoice();
-
-  // Tổng tiền
-  const total = useMemo(
-    () => items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0),
-    [items]
-  );
-
-  // Nội dung hóa đơn
-  const content = useMemo(
-    () => items.map((it) => it.name || it.serviceName || "Dịch vụ").join(", "),
-    [items]
-  );
+  const generateVietQR = useGenerateVietQR();
 
   const patientId =
     patient?.MaBenhNhan ??
@@ -87,13 +95,181 @@ export default function PaymentWizard({
   const patientName =
     patient?.HoTen ?? patient?.hoTen ?? patient?.name ?? "—";
 
+  const billingType = clsId
+    ? "can_lam_sang"
+    : rxId
+      ? "thuoc"
+      : "kham_lam_sang";
+
+  // ==================== TÌM HÓA ĐƠN KHI MỞ ====================
+  useEffect(() => {
+    if (!open) return;
+
+    setStep(STEPS.LOADING);
+    setInvoice(null);
+    setError(null);
+    setMethod(PHUONG_THUC_THANH_TOAN.TIEN_MAT);
+    setQrData(null);
+    setCompletionMode("paid");
+
+    let cancelled = false;
+
+    async function findInvoice() {
+      try {
+        // Tìm hóa đơn "chua_thu" cho bệnh nhân này
+        const result = await searchInvoices({
+          MaBenhNhan: patientId,
+          LoaiDotThu: billingType,
+          TrangThai: "chua_thu",
+          Page: 1,
+          PageSize: 10,
+        });
+
+        if (cancelled) return;
+
+        const invoices =
+          result?.Items ?? result?.items ?? result?.data ?? [];
+
+        let matched = null;
+        if (examId || clsId || rxId) {
+          matched = invoices.find(
+            (inv) =>
+              (examId &&
+                (inv.MaPhieuKham ?? inv.maPhieuKham) === examId) ||
+              (clsId &&
+                (inv.MaPhieuKhamCls ?? inv.maPhieuKhamCls) === clsId) ||
+              (rxId &&
+                (inv.MaDonThuoc ?? inv.maDonThuoc) === rxId)
+          );
+        }
+
+        if (matched) {
+          setInvoice(matched);
+          setStep(STEPS.REVIEW);
+        } else {
+          // Không tìm được hóa đơn — cho phép tạo mới
+          setInvoice(null);
+          setStep(STEPS.REVIEW);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.warn("Không thể tìm hóa đơn:", err);
+        setInvoice(null);
+        setStep(STEPS.REVIEW);
+      }
+    }
+
+    findInvoice();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, patientId, examId, clsId, rxId, billingType]);
+
+  // Tổng tiền — ưu tiên từ invoice BE
+  const total = useMemo(() => {
+    if (invoice) {
+      return Number(invoice.SoTien ?? invoice.soTien ?? 0);
+    }
+    return items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+  }, [invoice, items]);
+
+  // Nội dung hóa đơn
+  const content = useMemo(() => {
+    if (invoice) {
+      return invoice.NoiDung ?? invoice.noiDung ?? "Thanh toán dịch vụ";
+    }
+    return items
+      .map((it) => it.name || it.serviceName || "Dịch vụ")
+      .join(", ");
+  }, [invoice, items]);
+
+  // Mã hóa đơn
+  const invoiceId = invoice?.MaHoaDon ?? invoice?.maHoaDon ?? null;
+
+  const ensureInvoiceExists = useCallback(async () => {
+    if (invoice) {
+      return invoice;
+    }
+
+    const fallbackTotal =
+      items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0) || 0;
+
+    const createdInvoice = await createInvoice.mutateAsync({
+      MaBenhNhan: patientId,
+      MaNhanSuThu:
+        user?.maNhanSu || user?.staffCode || user?.id || "admin",
+      LoaiDotThu: billingType,
+      SoTien: fallbackTotal > 0 ? fallbackTotal : 1,
+      PhuongThucThanhToan:
+        method === DEFERRED_METHOD
+          ? PHUONG_THUC_THANH_TOAN.TIEN_MAT
+          : method,
+      NoiDung: content,
+      MaPhieuKham: examId || null,
+      MaPhieuKhamCls: clsId || null,
+      MaDonThuoc: rxId || null,
+    });
+
+    setInvoice(createdInvoice);
+    return createdInvoice;
+  }, [invoice, items, createInvoice, patientId, user, method, content, examId, clsId, rxId, billingType]);
+
   // Reset khi đóng
   const handleClose = useCallback(() => {
-    setStep(STEPS.REVIEW);
+    setStep(STEPS.LOADING);
     setMethod(PHUONG_THUC_THANH_TOAN.TIEN_MAT);
     setError(null);
+    setInvoice(null);
+    setQrData(null);
+    setCompletionMode("paid");
     onClose?.();
   }, [onClose]);
+
+  const handleAdvance = useCallback(async () => {
+    if (step === STEPS.REVIEW) {
+      setStep(STEPS.METHOD);
+      return;
+    }
+
+    if (step !== STEPS.METHOD) {
+      setStep(STEPS.CONFIRM);
+      return;
+    }
+
+    setError(null);
+
+    if (method === PHUONG_THUC_THANH_TOAN.VIETQR) {
+      try {
+        setIsPreparingStep(true);
+        const activeInvoice = await ensureInvoiceExists();
+        const activeInvoiceId =
+          activeInvoice?.MaHoaDon ?? activeInvoice?.maHoaDon ?? null;
+
+        if (activeInvoiceId) {
+          const qr = await generateVietQR.mutateAsync({
+            maHoaDon: activeInvoiceId,
+            SoTien: Number(activeInvoice.SoTien ?? activeInvoice.soTien ?? total),
+            NoiDung: activeInvoice.NoiDung ?? activeInvoice.noiDung ?? content,
+          });
+          setQrData(qr);
+        }
+      } catch (err) {
+        setError(
+          err?.response?.data?.Message ||
+            err?.response?.data?.message ||
+            err?.message ||
+            "Không thể tạo mã VietQR. Vui lòng thử lại."
+        );
+        return;
+      } finally {
+        setIsPreparingStep(false);
+      }
+    } else {
+      setQrData(null);
+    }
+
+    setStep(STEPS.CONFIRM);
+  }, [step, method, ensureInvoiceExists, generateVietQR, total, content]);
 
   // Xác nhận thanh toán
   const handleConfirm = useCallback(async () => {
@@ -101,44 +277,76 @@ export default function PaymentWizard({
     setError(null);
 
     try {
-      const result = await createInvoice.mutateAsync({
-        MaBenhNhan: patientId,
-        MaNhanSuThu: user?.maNhanSu || user?.staffCode || user?.id || "admin",
-        LoaiDotThu: "kham_lam_sang",
-        SoTien: total,
+      const activeInvoice = invoice ?? (await ensureInvoiceExists());
+      const activeInvoiceId =
+        activeInvoice?.MaHoaDon ?? activeInvoice?.maHoaDon ?? null;
+
+      if (method === DEFERRED_METHOD) {
+        setCompletionMode("deferred");
+        setStep(STEPS.DONE);
+        onComplete?.({
+          status: "deferred",
+          invoiceId: activeInvoiceId,
+        });
+        return;
+      }
+
+      if (!activeInvoiceId) {
+        throw new Error("Không tìm thấy mã hóa đơn để xác nhận thanh toán.");
+      }
+
+      await confirmInvoice.mutateAsync({
+        maHoaDon: activeInvoiceId,
         PhuongThucThanhToan: method,
-        NoiDung: content,
-        MaPhieuKham: examId || null,
-        MaPhieuKhamCls: clsId || null,
-        MaDonThuoc: rxId || null,
       });
 
+      setCompletionMode("paid");
       setStep(STEPS.DONE);
-      onComplete?.(result);
+      onComplete?.({
+        status: "paid",
+        method,
+        invoiceId: activeInvoiceId,
+      });
     } catch (err) {
       setError(
         err?.response?.data?.Message ||
+          err?.response?.data?.message ||
           err?.message ||
-          "Không thể tạo hóa đơn. Vui lòng thử lại."
+          "Không thể thanh toán. Vui lòng thử lại."
       );
     }
   }, [
     canPay,
-    createInvoice,
-    patientId,
-    user,
-    total,
+    invoice,
+    confirmInvoice,
     method,
-    content,
-    examId,
-    clsId,
-    rxId,
+    ensureInvoiceExists,
     onComplete,
   ]);
 
+  useEffect(() => {
+    if (method !== PHUONG_THUC_THANH_TOAN.VIETQR) {
+      setQrData(null);
+    }
+  }, [method]);
+
   if (!open) return null;
 
-  const isLoading = createInvoice.isPending;
+  const isLoading =
+    confirmInvoice.isPending ||
+    createInvoice.isPending ||
+    generateVietQR.isPending ||
+    isPreparingStep;
+
+  const confirmActionLabel =
+    method === DEFERRED_METHOD
+      ? "Lưu thu sau"
+      : method === PHUONG_THUC_THANH_TOAN.VIETQR
+      ? "Xác nhận đã nhận chuyển khoản"
+      : "Xác nhận thanh toán";
+
+  // Steps for the progress bar (exclude LOADING)
+  const visibleSteps = [STEPS.REVIEW, STEPS.METHOD, STEPS.CONFIRM, STEPS.DONE];
 
   return (
     <AnimatePresence>
@@ -179,19 +387,21 @@ export default function PaymentWizard({
               </button>
             </div>
             {/* Step indicator */}
-            <div className="flex gap-2 mt-3">
-              {Object.values(STEPS).map((s, i) => (
-                <div key={s} className="flex items-center gap-1 flex-1">
-                  <div
-                    className={`h-1.5 flex-1 rounded-full transition-colors ${
-                      Object.values(STEPS).indexOf(step) >= i
-                        ? "bg-white"
-                        : "bg-white/30"
-                    }`}
-                  />
-                </div>
-              ))}
-            </div>
+            {step !== STEPS.LOADING && (
+              <div className="flex gap-2 mt-3">
+                {visibleSteps.map((s, i) => (
+                  <div key={s} className="flex items-center gap-1 flex-1">
+                    <div
+                      className={`h-1.5 flex-1 rounded-full transition-colors ${
+                        visibleSteps.indexOf(step) >= i
+                          ? "bg-white"
+                          : "bg-white/30"
+                      }`}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="text-sm mt-1 text-emerald-100">
               {STEP_LABELS[step]}
             </div>
@@ -200,6 +410,37 @@ export default function PaymentWizard({
           {/* Content */}
           <div className="p-5">
             <AnimatePresence mode="wait">
+              {/* STEP: LOADING */}
+              {step === STEPS.LOADING && (
+                <motion.div
+                  key="loading"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col items-center justify-center py-10"
+                >
+                  <svg
+                    className="w-8 h-8 animate-spin text-emerald-500"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeDasharray="31.4"
+                      strokeDashoffset="10"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="text-sm text-slate-500 mt-3">
+                    Đang tìm hóa đơn...
+                  </div>
+                </motion.div>
+              )}
+
               {/* STEP: REVIEW */}
               {step === STEPS.REVIEW && (
                 <motion.div
@@ -218,8 +459,33 @@ export default function PaymentWizard({
                     </div>
                   </div>
 
+                  {/* Nguồn hóa đơn */}
+                  {invoice && (
+                    <div className="mb-3 p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
+                      ✅ Hóa đơn #{invoiceId} —{" "}
+                      {invoice.NoiDung ?? invoice.noiDung ?? "Dịch vụ khám"}
+                    </div>
+                  )}
+
+                  {!invoice && items.length > 0 && (
+                    <div className="mb-3 p-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
+                      ⚠ Không tìm được hóa đơn tự tạo. Sẽ tạo hóa đơn mới khi
+                      xác nhận.
+                    </div>
+                  )}
+
                   <div className="space-y-2">
-                    {items.length === 0 ? (
+                    {invoice ? (
+                      // Hiện info từ invoice thực
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/60">
+                        <span className="text-sm text-slate-700">
+                          {invoice.NoiDung ?? invoice.noiDung ?? "Dịch vụ khám"}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-800">
+                          {VND(total)}
+                        </span>
+                      </div>
+                    ) : items.length === 0 ? (
                       <div className="text-center text-slate-400 py-6">
                         Không có dịch vụ nào cần thanh toán
                       </div>
@@ -263,24 +529,22 @@ export default function PaymentWizard({
                     Chọn phương thức thanh toán
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    {Object.entries(PHUONG_THUC_THANH_TOAN).map(
-                      ([, value]) => (
+                    {METHOD_OPTIONS.map((option) => (
                         <button
-                          key={value}
+                          key={option.value}
                           type="button"
-                          onClick={() => setMethod(value)}
+                          onClick={() => setMethod(option.value)}
                           className={`p-4 rounded-xl border-2 text-sm font-medium transition-all ${
-                            method === value
+                            method === option.value
                               ? "border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-500/20"
                               : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                           }`}
                         >
                           <div className="text-center">
-                            {PHUONG_THUC_THANH_TOAN_LABEL[value]}
+                            {option.label}
                           </div>
                         </button>
-                      )
-                    )}
+                      ))}
                   </div>
                 </motion.div>
               )}
@@ -295,20 +559,41 @@ export default function PaymentWizard({
                 >
                   <div className="text-center py-2">
                     <div className="text-4xl mb-3">💳</div>
-                    <div className="text-sm text-slate-500">Xác nhận thanh toán</div>
+                    <div className="text-sm text-slate-500">
+                      Xác nhận thanh toán
+                    </div>
                     <div className="text-2xl font-bold text-emerald-600 mt-1">
                       {VND(total)}
                     </div>
                     <div className="mt-2 text-sm text-slate-500">
                       Phương thức:{" "}
                       <span className="font-medium text-slate-700">
-                        {PHUONG_THUC_THANH_TOAN_LABEL[method]}
+                        {METHOD_OPTIONS.find((option) => option.value === method)
+                          ?.label || "—"}
                       </span>
                     </div>
                     <div className="text-sm text-slate-400 mt-1">
                       {patientName}
                     </div>
                   </div>
+
+                  {method === PHUONG_THUC_THANH_TOAN.VIETQR && (
+                    <div className="mt-4">
+                      {generateVietQR.isPending || isPreparingStep ? (
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 text-sm text-emerald-700">
+                          Đang tạo mã VietQR...
+                        </div>
+                      ) : (
+                        <VietQRDisplay qr={qrData} />
+                      )}
+                    </div>
+                  )}
+
+                  {method === DEFERRED_METHOD && (
+                    <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                      Hóa đơn sẽ được giữ ở trạng thái chưa thu để thanh toán sau.
+                    </div>
+                  )}
 
                   {error && (
                     <div className="mt-3 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600">
@@ -342,10 +627,17 @@ export default function PaymentWizard({
                     </svg>
                   </div>
                   <div className="text-lg font-semibold text-slate-800">
-                    Thanh toán thành công
+                    {completionMode === "deferred"
+                      ? "Đã lưu hóa đơn chưa thu"
+                      : "Thanh toán thành công"}
                   </div>
                   <div className="text-sm text-slate-500 mt-1">
-                    {VND(total)} — {PHUONG_THUC_THANH_TOAN_LABEL[method]}
+                    {completionMode === "deferred"
+                      ? `${VND(total)} — Chưa thu`
+                      : `${VND(total)} — ${
+                          METHOD_OPTIONS.find((option) => option.value === method)
+                            ?.label || "—"
+                        }`}
                   </div>
                 </motion.div>
               )}
@@ -361,6 +653,14 @@ export default function PaymentWizard({
                 className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
               >
                 Đóng
+              </button>
+            ) : step === STEPS.LOADING ? (
+              <button
+                type="button"
+                onClick={handleClose}
+                className="w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 transition-colors"
+              >
+                Hủy
               </button>
             ) : (
               <>
@@ -416,18 +716,14 @@ export default function PaymentWizard({
                         Đang xử lý...
                       </>
                     ) : (
-                      "Xác nhận thanh toán"
+                      confirmActionLabel
                     )}
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() =>
-                      setStep(
-                        step === STEPS.REVIEW ? STEPS.METHOD : STEPS.CONFIRM
-                      )
-                    }
-                    disabled={items.length === 0}
+                    onClick={handleAdvance}
+                    disabled={!invoice && items.length === 0}
                     className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
                   >
                     Tiếp tục

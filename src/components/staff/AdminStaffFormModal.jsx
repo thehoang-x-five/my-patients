@@ -1,0 +1,297 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import PopoverSelect from "../ui/PopoverSelect.jsx";
+
+const ROLE_OPTIONS = [
+  { value: "bac_si", label: "Bác sĩ" },
+  { value: "y_ta", label: "Y tá" },
+  { value: "ky_thuat_vien", label: "Kỹ thuật viên" },
+  { value: "admin", label: "Admin" },
+];
+
+const NURSE_TYPE_OPTIONS = [
+  { value: "", label: "-- Chọn loại y tá --" },
+  { value: "hanhchinh", label: "Hành chính" },
+  { value: "phong_kham", label: "Lâm sàng" },
+  { value: "can_lam_sang", label: "Cận lâm sàng" },
+];
+
+const EMPTY_FORM = {
+  tenDangNhap: "",
+  matKhau: "",
+  hoTen: "",
+  vaiTro: "y_ta",
+  chucVu: "",
+  loaiYTa: "",
+  email: "",
+  dienThoai: "",
+  chuyenMon: "",
+  hocVi: "",
+  soNamKinhNghiem: 0,
+  maKhoa: "",
+};
+
+function Field({ label, required = false, children }) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1 block font-medium text-slate-600">
+        {label}
+        {required ? " *" : ""}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function normalizeForm(initial, isEdit) {
+  if (!initial) return EMPTY_FORM;
+
+  return {
+    tenDangNhap: initial.tenDangNhap || initial.username || "",
+    matKhau: "",
+    hoTen: initial.hoTen || initial.name || "",
+    vaiTro: initial.vaiTro || initial.role || "y_ta",
+    chucVu: initial.chucVu || initial.position || "",
+    loaiYTa: initial.loaiYTa || initial.nurseType || "",
+    email: initial.email || "",
+    dienThoai: initial.dienThoai || initial.phone || "",
+    chuyenMon: initial.chuyenMon || initial.specialty || "",
+    hocVi: initial.hocVi || initial.degree || "",
+    soNamKinhNghiem:
+      Number(initial.soNamKinhNghiem ?? initial.experience ?? 0) || 0,
+    maKhoa: initial.maKhoa || initial.departmentId || "",
+    ...(isEdit ? {} : { tenDangNhap: initial.tenDangNhap || "" }),
+  };
+}
+
+function submitShape(form, isEdit) {
+  const base = {
+    HoTen: form.hoTen.trim(),
+    VaiTro: form.vaiTro,
+    ChucVu: (form.chucVu || form.vaiTro).trim(),
+    LoaiYTa: form.vaiTro === "y_ta" ? form.loaiYTa || null : null,
+    Email: form.email?.trim() || null,
+    DienThoai: form.dienThoai?.trim() || null,
+    ChuyenMon: form.chuyenMon?.trim() || null,
+    HocVi: form.hocVi?.trim() || null,
+    SoNamKinhNghiem: Number(form.soNamKinhNghiem) || 0,
+    MaKhoa: form.maKhoa,
+  };
+
+  if (isEdit) return base;
+
+  return {
+    ...base,
+    TenDangNhap: form.tenDangNhap.trim(),
+    MatKhau: form.matKhau,
+  };
+}
+
+export default function AdminStaffFormModal({
+  open,
+  onClose,
+  initial = null,
+  isEdit = false,
+  onSubmit,
+  isPending = false,
+  departments = [],
+}) {
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  useEffect(() => {
+    if (open) {
+      setForm(normalizeForm(initial, isEdit));
+    }
+  }, [open, initial, isEdit]);
+
+  const departmentOptions = useMemo(
+    () =>
+      (Array.isArray(departments) ? departments : []).map((d) => ({
+        value: d.MaKhoa || d.maKhoa || d.code || d.id || "",
+        label: d.TenKhoa || d.tenKhoa || d.name || d.code || "—",
+      })),
+    [departments]
+  );
+
+  if (!open) return null;
+
+  const updateField = (key, value) => {
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === "vaiTro" && value !== "y_ta") {
+        next.loaiYTa = "";
+      }
+      return next;
+    });
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    onSubmit?.(submitShape(form, isEdit));
+  };
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 12 }}
+          transition={{ type: "spring", stiffness: 360, damping: 28 }}
+          className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200/80"
+        >
+          <form onSubmit={handleSubmit}>
+            <div className="sticky top-0 rounded-t-2xl border-b border-teal-100 bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4">
+              <h3 className="text-lg font-semibold text-slate-900">
+                {isEdit ? "Sửa nhân viên" : "Thêm nhân viên"}
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Admin quản lý trực tiếp user ngay trong màn Staff.
+              </p>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              {!isEdit && (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="Tên đăng nhập" required>
+                    <input
+                      required
+                      className="input"
+                      value={form.tenDangNhap}
+                      onChange={(e) => updateField("tenDangNhap", e.target.value)}
+                      placeholder="vd: nguyenvana"
+                    />
+                  </Field>
+                  <Field label="Mật khẩu" required>
+                    <input
+                      required
+                      type="password"
+                      className="input"
+                      value={form.matKhau}
+                      onChange={(e) => updateField("matKhau", e.target.value)}
+                      placeholder="Tối thiểu 6 ký tự"
+                    />
+                  </Field>
+                </div>
+              )}
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Họ tên" required>
+                  <input
+                    required
+                    className="input"
+                    value={form.hoTen}
+                    onChange={(e) => updateField("hoTen", e.target.value)}
+                    placeholder="Nguyễn Văn A"
+                  />
+                </Field>
+                <Field label="Khoa" required>
+                  <PopoverSelect
+                    required
+                    name="maKhoa"
+                    value={form.maKhoa}
+                    onChange={(value) => updateField("maKhoa", value)}
+                    options={departmentOptions}
+                    placeholder="Chọn khoa"
+                  />
+                </Field>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Vai trò">
+                  <PopoverSelect
+                    name="vaiTro"
+                    value={form.vaiTro}
+                    onChange={(value) => updateField("vaiTro", value)}
+                    options={ROLE_OPTIONS}
+                    placeholder="Chọn vai trò"
+                  />
+                </Field>
+                <Field label="Chức vụ">
+                  <input
+                    className="input"
+                    value={form.chucVu}
+                    onChange={(e) => updateField("chucVu", e.target.value)}
+                    placeholder="vd: Trưởng khoa"
+                  />
+                </Field>
+                {form.vaiTro === "y_ta" ? (
+                  <Field label="Loại y tá">
+                    <PopoverSelect
+                      name="loaiYTa"
+                      value={form.loaiYTa}
+                      onChange={(value) => updateField("loaiYTa", value)}
+                      options={NURSE_TYPE_OPTIONS}
+                      placeholder="Chọn loại y tá"
+                    />
+                  </Field>
+                ) : (
+                  <div />
+                )}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Email">
+                  <input
+                    type="email"
+                    className="input"
+                    value={form.email}
+                    onChange={(e) => updateField("email", e.target.value)}
+                  />
+                </Field>
+                <Field label="Điện thoại">
+                  <input
+                    className="input"
+                    value={form.dienThoai}
+                    onChange={(e) => updateField("dienThoai", e.target.value)}
+                  />
+                </Field>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Chuyên môn">
+                  <input
+                    className="input"
+                    value={form.chuyenMon}
+                    onChange={(e) => updateField("chuyenMon", e.target.value)}
+                  />
+                </Field>
+                <Field label="Học vị">
+                  <input
+                    className="input"
+                    value={form.hocVi}
+                    onChange={(e) => updateField("hocVi", e.target.value)}
+                  />
+                </Field>
+                <Field label="Số năm kinh nghiệm">
+                  <input
+                    min="0"
+                    type="number"
+                    className="input"
+                    value={form.soNamKinhNghiem}
+                    onChange={(e) =>
+                      updateField("soNamKinhNghiem", Number(e.target.value))
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 flex justify-end gap-2 rounded-b-2xl border-t border-slate-100 bg-white px-6 py-4">
+              <button type="button" onClick={onClose} className="btn text-sm">
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={isPending}
+                className="inline-flex items-center gap-2 rounded-xl border-transparent bg-gradient-to-tr from-teal-600 via-teal-500 to-cyan-500 px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:-translate-y-px disabled:opacity-50"
+              >
+                {isPending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo mới"}
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}

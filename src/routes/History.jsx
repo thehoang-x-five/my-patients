@@ -347,30 +347,32 @@ export default function History() {
               }
               stretch
             />
-            {tab === "visits" && visitTotalPages > 1 && (
+            {tab === "visits" && visitTotalItems > 0 && (
               <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-2xl">
                 <Pagination
                   currentPage={visitPage}
                   totalPages={visitTotalPages}
                   totalItems={visitTotalItems}
-                    pageSize={50}
-                    onPageChange={setVisitPage}
-                    className="px-4 py-3"
-                  />
-                </div>
-              )}
-              {tab === "transactions" && txnTotalPages > 1 && (
-                <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
-                  <Pagination
-                    currentPage={txnPage}
-                    totalPages={txnTotalPages}
-                    totalItems={txnTotalItems}
-                    pageSize={50}
-                    onPageChange={setTxnPage}
-                    className="px-4 py-3"
-                  />
-                </div>
-              )}
+                  pageSize={50}
+                  onPageChange={setVisitPage}
+                  showWhenSinglePage
+                  className="px-4 py-3"
+                />
+              </div>
+            )}
+            {tab === "transactions" && txnTotalItems > 0 && (
+              <div className="flex-shrink-0 border-t border-slate-200 bg-white rounded-b-lg">
+                <Pagination
+                  currentPage={txnPage}
+                  totalPages={txnTotalPages}
+                  totalItems={txnTotalItems}
+                  pageSize={50}
+                  onPageChange={setTxnPage}
+                  showWhenSinglePage
+                  className="px-4 py-3"
+                />
+              </div>
+            )}
           </motion.section>
         </AnimatePresence>
       </div>
@@ -401,6 +403,7 @@ export default function History() {
           if (visitType !== undefined) setVisitType(visitType);
           if (txnType !== undefined) setTxnType(txnType);
         }}
+        onReset={resetFilters}
       />
 
       <HistoryDetailModal

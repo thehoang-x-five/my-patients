@@ -473,6 +473,73 @@ export function useHistoryTransactions(params = {}, options = {}) {
 
 /* ===================== MONGODB MEDICAL HISTORY (W2) ===================== */
 
+function normalizeMedicalHistoryEvent(dto = {}, index = 0) {
+  const data = dto.data || dto.Data || {};
+  const metadata = dto.metadata || dto.Metadata || {};
+  const eventType =
+    dto.event_type || dto.eventType || dto.EventType || "kham_lam_sang";
+  const eventDate =
+    dto.event_date || dto.eventDate || dto.EventDate || data.thoi_gian || null;
+  const fallbackId = `${eventType}-${eventDate || "unknown"}-${index}`;
+
+  return {
+    id:
+      dto._id?.$oid ||
+      dto._id ||
+      data.ma_phieu_chan_doan ||
+      data.ma_ket_qua ||
+      data.ma_hoa_don ||
+      data.ma_don_thuoc ||
+      data.ma_phieu_kham ||
+      fallbackId,
+    date: eventDate,
+    eventType,
+    type: eventType,
+    typeLabel: eventType,
+    doctor:
+      data.ten_bac_si ||
+      data.ten_ky_thuat_vien ||
+      data.ten_nhan_su_thu ||
+      data.ten_nhan_su ||
+      metadata.created_by ||
+      "—",
+    department: data.khoa || data.ten_khoa || "",
+    dept: data.khoa || data.ten_khoa || "",
+    room: data.phong || data.ten_phong || "",
+    status: data.trang_thai || data.trang_thai_chot || "",
+    diagnosis: data.chan_doan_cuoi || data.ket_luan || "",
+    note:
+      data.ghi_chu ||
+      data.loi_khuyen ||
+      data.noi_dung_kham ||
+      data.noi_dung ||
+      "",
+    ref:
+      data.ma_phieu_kham ||
+      data.ma_ket_qua ||
+      data.ma_hoa_don ||
+      data.ma_don_thuoc ||
+      "",
+    vitalSigns: data.sinh_hieu || data.sinh_hieu_truoc_kham || "",
+    _raw: dto,
+  };
+}
+
+function normalizeMedicalHistoryResponse(payload = {}, patientId = "") {
+  const rawEvents = payload?.Events ?? payload?.events ?? [];
+  const events = Array.isArray(rawEvents)
+    ? rawEvents.map((event, index) => normalizeMedicalHistoryEvent(event, index))
+    : [];
+
+  return {
+    ...payload,
+    MaBenhNhan: payload?.MaBenhNhan ?? payload?.maBenhNhan ?? patientId,
+    TotalEvents: payload?.TotalEvents ?? payload?.totalEvents ?? events.length,
+    Events: events,
+    events,
+  };
+}
+
 // Lấy timeline lịch sử y tế từ MongoDB
 // BE: GET /api/patients/{maBenhNhan}/medical-history?eventType=&fromDate=&toDate=&limit=100
 export async function getMedicalHistory(maBenhNhan, params = {}) {
@@ -487,7 +554,7 @@ export async function getMedicalHistory(maBenhNhan, params = {}) {
   const res = await http.get(`/patients/${maBenhNhan}/medical-history`, {
     params: query,
   });
-  return res?.data || { MaBenhNhan: maBenhNhan, TotalEvents: 0, Events: [] };
+  return normalizeMedicalHistoryResponse(res?.data || {}, maBenhNhan);
 }
 
 export function useMedicalHistory(maBenhNhan, params = {}, options = {}) {

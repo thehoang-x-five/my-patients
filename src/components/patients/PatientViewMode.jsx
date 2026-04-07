@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
 import { ANIMATION_CONFIG, StatusPill } from "./Shared.jsx";
 import { mapTodayStatusLabel, mapGenderLabel, mapVisitTypeLabel } from "../../api/patients";
+import { useMedicalHistory } from "../../api/history.js";
 
 // ===== NEW TABS =====
 import PatientTimeline from "./PatientTimeline.jsx";
@@ -43,6 +44,11 @@ export default function PatientViewMode({
 
   const patientId = patient?.MaBenhNhan || patient?.maBenhNhan || patient?.id || "";
   const name = patient?.nameFormatted || patient?.HoTen || patient?.hoTen || patient?.name || "—";
+  const { data: medicalHistory } = useMedicalHistory(
+    patientId,
+    { limit: 50 },
+    { enabled: !!patientId }
+  );
 
   const rawDob = patient?.NgaySinh || patient?.ngaySinh || patient?.dob;
   let dobText = "—";
@@ -78,6 +84,8 @@ export default function PatientViewMode({
   const safePatientExtras = patientExtras || [];
   const safeVisits = visits || [];
   const safeTransactions = transactions || [];
+  const safeTimelineEvents =
+    medicalHistory?.events?.length > 0 ? medicalHistory.events : safeVisits;
 
   return (
     <motion.div {...ANIMATION_CONFIG} className="space-y-3">
@@ -170,8 +178,8 @@ export default function PatientViewMode({
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-bold text-slate-900">Lịch sử khám</h4>
                   <div className="flex items-center gap-2">
-                    <Chip tone="emerald" dot="emerald" className="text-xs">{safeVisits.length}</Chip>
-                    {safeVisits.length > 0 && (
+                    <Chip tone="emerald" dot="emerald" className="text-xs">{safeTimelineEvents.length}</Chip>
+                    {safeTimelineEvents.length > 0 && (
                       <button onClick={() => switchTabWithHighlight("history")} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium transition hover:underline">
                         Xem tất cả →
                       </button>
@@ -179,10 +187,10 @@ export default function PatientViewMode({
                   </div>
                 </div>
                 <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 scrollbar-none">
-                  {safeVisits.length ? (
-                    safeVisits.slice(0, 5).map((v, i) => {
+                  {safeTimelineEvents.length ? (
+                    safeTimelineEvents.slice(0, 5).map((v, i) => {
                       const dateText = v.dateLabel || v.date || v.Date || v.ngay || v.Ngay || "";
-                      const deptText = v.dept || v.Dept || v.khoa || v.Khoa || "";
+                      const deptText = v.dept || v.department || v.Dept || v.khoa || v.Khoa || "";
                       const doctorText = v.doctor || v.Doctor || v.bacSi || v.BacSi || "";
                       const typeText = v.typeLabel || mapVisitTypeLabel(v.type || v.Type) || "—";
                       return (
@@ -249,7 +257,7 @@ export default function PatientViewMode({
             className={`rounded-2xl p-4 ring-1 shadow-sm transition-all duration-500 ${
               highlightTab ? "ring-emerald-400 bg-emerald-50/60 shadow-emerald-200/50" : "ring-emerald-200/50 bg-white"
             }`}>
-            <PatientTimeline visits={safeVisits} highlightItems={highlightTab} patientId={patientId} />
+            <PatientTimeline visits={safeTimelineEvents} highlightItems={highlightTab} patientId={patientId} />
           </motion.div>
         )}
 

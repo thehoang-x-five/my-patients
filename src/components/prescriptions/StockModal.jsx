@@ -2,6 +2,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import React, { useEffect, useState } from "react";
+import PopoverSelect from "../ui/PopoverSelect.jsx";
 
 const EMPTY_FORM = {
   code: "",
@@ -217,16 +218,18 @@ export default function StockModal({ open, item, onClose, onSave }) {
               <div className="grid grid-cols-3 gap-3">
                 <label className="text-sm col-span-1">
                   Trạng thái
-                  <select
-                    className="mt-1 w-full rounded-md px-3 py-2 ring-1 ring-slate-200/80 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
-                    value={form.status}
-                    onChange={(e) =>
-                      updateField("status", e.target.value)
-                    }
-                  >
-                    <option value="hoat_dong">Hoạt động</option>
-                    <option value="tam_dung">Tạm dừng</option>
-                  </select>
+                  <div className="mt-1">
+                    <PopoverSelect
+                      name="status"
+                      value={form.status}
+                      onChange={(value) => updateField("status", value)}
+                      options={[
+                        { value: "hoat_dong", label: "Hoạt động" },
+                        { value: "tam_dung", label: "Tạm dừng" },
+                      ]}
+                      placeholder="Chọn trạng thái"
+                    />
+                  </div>
                 </label>
               </div>
             </div>

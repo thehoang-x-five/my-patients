@@ -26,7 +26,10 @@ import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
 import { getFollowupContext, clearFollowupContext } from "../utils/followupContext.js";
-import { canManageReception } from "../utils/permissions.js";
+import {
+  canCreateAppointment,
+  canEditAppointment,
+} from "../utils/permissions.js";
 
 const RECEPTION_HOURS = { start: 0, end: 24 };
 const isWithinReceptionHours = () => {
@@ -53,11 +56,12 @@ export default function Appointments() {
 
   // ✅ Check permissions
   const user = useAuthStore((s) => s.user);
-  const hasReceptionPermission = canManageReception(user);
+  const canCreateAppt = canCreateAppointment(user);
+  const canEditAppt = canEditAppointment(user);
 
   const TODAY = toYMD(new Date());
   const [view, setView] = useState("list");
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const currentTime = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -177,18 +181,6 @@ export default function Appointments() {
     };
   }, [queryClient]);
 
-  // ✅ Subscribe realtime events for Appointments
-  useEffect(() => {
-    const offApptChanged = on('AppointmentChanged', (appt) => {
-      console.log('[Appointments] Lịch hẹn thay đổi:', appt);
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-    });
-    
-    return () => {
-      offApptChanged?.();
-    };
-  }, [queryClient]);
-
   const itemsByDate = useMemo(() => {
     const map = {};
     (monthItems || []).forEach((a) => {
@@ -299,11 +291,6 @@ export default function Appointments() {
       window.removeEventListener("beforeunload", onBeforeUnload);
       clearIfAnyPrefill();
     };
-  }, []);
-
-  useEffect(() => {
-    const t = setInterval(() => setCurrentTime(new Date()), 60_000);
-    return () => clearInterval(t);
   }, []);
 
   // ✅ Clear prefill nếu thực hiện hành động khác (mở chi tiết, đổi view, chọn ngày…)
@@ -563,7 +550,7 @@ export default function Appointments() {
             setView(v);
             clearIfAnyPrefill();
           }} // ✅ đổi view cũng hủy prefill
-          onOpenCreate={hasReceptionPermission ? () => {
+          onOpenCreate={canCreateAppt ? () => {
             if (!isWithinReceptionHours()) {
               toast.warn(
                 `Tiếp nhận từ ${RECEPTION_HOURS.start}h đến ${RECEPTION_HOURS.end}h`
@@ -608,8 +595,8 @@ export default function Appointments() {
               loading={isLoading}
               error={null}
               onDetail={openDetail}
-              onCheckIn={hasReceptionPermission ? handleCheckIn : undefined}
-              onCreate={hasReceptionPermission ? () => {
+              onCheckIn={canEditAppt ? handleCheckIn : undefined}
+              onCreate={canCreateAppt ? () => {
                 setCreateDate(TODAY);
                 setDrawerOpen(true);
               } : undefined}
@@ -658,7 +645,7 @@ export default function Appointments() {
           openDetail(a);
         }} // ✅ mở chi tiết → clear
         onCreate={
-          hasReceptionPermission && panelDate
+          canCreateAppt && panelDate
             ? () => {
                 if (!isWithinReceptionHours()) {
                   toast.warn(
@@ -671,7 +658,7 @@ export default function Appointments() {
               }
             : undefined
         }
-        onCheckIn={hasReceptionPermission ? handleCheckIn : undefined}
+        onCheckIn={canEditAppt ? handleCheckIn : undefined}
         highlightId={newId}
       />
 
@@ -699,7 +686,7 @@ export default function Appointments() {
           clearIfAnyPrefill();
           closeDetail();
         }}
-        onUpdate={hasReceptionPermission ? async (patch) => {
+        onUpdate={canEditAppt ? async (patch) => {
           if (!patch?.id) return;
          
           // Lấy bản hiện tại
@@ -750,7 +737,7 @@ export default function Appointments() {
           );
           toast.success("Đã cập nhật lịch hẹn.");
         } : undefined}
-        onCheckIn={hasReceptionPermission ? handleCheckIn : undefined}
+        onCheckIn={canEditAppt ? handleCheckIn : undefined}
       />
     </motion.main>
   );

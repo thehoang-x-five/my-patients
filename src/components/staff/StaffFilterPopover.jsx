@@ -1,4 +1,3 @@
-// src/components/staff/StaffFilterPopover.jsx
 import React, {
   useEffect,
   useLayoutEffect,
@@ -8,13 +7,13 @@ import React, {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
-import Chip from "../ui/Chip.jsx";
+import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
 
 const STATUS_SEG = [
-  { code: "all", label: "Tất cả" },
-  { code: "online", label: "Online" },
-  { code: "pause", label: "Pause" },
-  { code: "offline", label: "Offline" },
+  { code: "all", label: "Tất cả", dot: "bg-slate-400" },
+  { code: "online", label: "Online", dot: "bg-emerald-500" },
+  { code: "pause", label: "Pause", dot: "bg-amber-500" },
+  { code: "offline", label: "Offline", dot: "bg-slate-500" },
 ];
 
 const NURSE_TYPES = [
@@ -24,14 +23,53 @@ const NURSE_TYPES = [
   { code: "lam_sang", label: "Lâm sàng" },
 ];
 
+function FilterPill({ active = false, onClick, children, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "rounded-full border px-2.5 py-1 text-[12px] font-semibold transition",
+        active
+          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+          : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/40 hover:text-emerald-700",
+        className,
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function StatusPill({ active = false, dot, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition",
+        active
+          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+          : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/40",
+      ].join(" ")}
+    >
+      <span className={`h-2 w-2 rounded-full ${dot}`} />
+      {children}
+    </button>
+  );
+}
+
 export default function StaffFilterPopover({
   open,
   onClose,
   anchorEl,
   role = "doctor",
+  setRole,
+  roleOptions = [],
   values,
   setValues,
   departments = [],
+  onReset,
 }) {
   const boxRef = useRef(null);
   const kwRef = useRef(null);
@@ -41,16 +79,15 @@ export default function StaffFilterPopover({
     anchorEl && anchorEl.current ? anchorEl.current : anchorEl || null;
 
   const [pos, setPos] = useState({ top: 72, left: 16 });
-  const [widthPx, setWidthPx] = useState(380);
+  const [widthPx, setWidthPx] = useState(350);
   const [maxH, setMaxH] = useState(460);
 
-  // chuẩn hoá danh sách khoa
   const deptList = useMemo(() => {
     const raw = Array.isArray(departments) ? departments : [];
     const mapped = raw
       .map((d) => {
         const value =
-        d.MaKhoa ||    
+          d.MaKhoa ||
           d.maKhoa ||
           d.ma_khoa ||
           d.code ||
@@ -59,7 +96,7 @@ export default function StaffFilterPopover({
           d.ma_phong ||
           "";
         const label =
-        d.TenKhoa ||  
+          d.TenKhoa ||
           d.tenKhoa ||
           d.ten_khoa ||
           d.name ||
@@ -86,7 +123,13 @@ export default function StaffFilterPopover({
       ...patch,
     }));
 
-  // ESC + click ngoài
+  const applyRole = (nextRole) => {
+    setRole?.(nextRole);
+    if (nextRole !== "nurse" && nurseType !== "all") {
+      apply({ nurseType: "all" });
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     justOpenedRef.current = true;
@@ -122,13 +165,12 @@ export default function StaffFilterPopover({
     };
   }, [open, onClose, anchorNode]);
 
-  // tính vị trí
   function computePosition() {
     const gap = 8;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-
-    const W = Math.min(390, vw - 24);
+    const preferredWidth = role === "nurse" ? 372 : 340;
+    const W = Math.min(preferredWidth, vw - 24);
     const el =
       anchorNode && anchorNode.getBoundingClientRect ? anchorNode : null;
     const r = el ? el.getBoundingClientRect() : null;
@@ -136,19 +178,19 @@ export default function StaffFilterPopover({
     let left = Math.min(Math.max(r ? r.right - W : 16, 12), vw - W - 12);
     let top = (r ? r.bottom : 64) + gap;
 
-    const estH = 400;
+    const estH = role === "nurse" ? 440 : 380;
     if (top + estH > vh - 12 && r) {
       top = Math.max(12, r.top - gap - estH);
     }
 
     setWidthPx(W);
     setPos({ top, left });
-    setMaxH(Math.min(vh - top - 12, 520));
+    setMaxH(Math.min(vh - top - 12, role === "nurse" ? 520 : 470));
   }
 
   useLayoutEffect(() => {
     if (open) computePosition();
-  }, [open, anchorNode]);
+  }, [open, anchorNode, role]);
 
   useEffect(() => {
     if (!open) return;
@@ -169,7 +211,7 @@ export default function StaffFilterPopover({
         window.visualViewport.removeEventListener("scroll", handler);
       }
     };
-  }, [open, anchorNode]);
+  }, [open, anchorNode, role]);
 
   if (typeof document === "undefined") return null;
 
@@ -189,36 +231,31 @@ export default function StaffFilterPopover({
             role="dialog"
             aria-modal="true"
             aria-label="Bộ lọc nhân sự"
-            className="rounded-2xl bg-white shadow-2xl ring-1 ring-emerald-200/80 overflow-hidden"
+            className="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-emerald-200/70"
             style={{ maxHeight: maxH }}
           >
-            {/* Header */}
-            <div className="px-3 py-2 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-b border-emerald-100">
-              <div className="text-[13px] font-extrabold tracking-tight text-emerald-800 flex items-center gap-2">
-                <span className="inline-flex w-5 h-5 rounded-lg bg-white ring-1 ring-emerald-200 items-center justify-center">
+            <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 px-3 py-2">
+              <div className="flex items-center gap-2 text-[13px] font-extrabold tracking-tight text-emerald-800">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-lg bg-emerald-100 ring-1 ring-emerald-200">
                   🧩
                 </span>
                 Bộ lọc nhân sự
               </div>
             </div>
 
-            {/* Body */}
-            <div className="p-3 grid gap-3 text-[13px] text-slate-700 overflow-y-auto">
-              {/* Search */}
+            <div className="grid gap-2 overflow-y-auto p-2.5 text-[13px] text-slate-700">
               <label className="text-[13px]">
                 Từ khóa
                 <div className="relative mt-1">
                   <input
                     ref={kwRef}
                     value={keyword}
-                    onChange={(e) =>
-                      apply({ keyword: e.target.value || "" })
-                    }
-                    placeholder="Tên / mã / khoa / chức vụ…"
-                    className="w-full rounded-xl px-3 py-2 pl-9 bg-white ring-1 ring-slate-200/80 focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm"
+                    onChange={(e) => apply({ keyword: e.target.value || "" })}
+                    placeholder="Tên / mã / khoa / chức vụ..."
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pl-9 text-[13px] shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/30"
                   />
-                  <span className="absolute left-2 top-2.5 text-emerald-600">
-                    🔍
+                  <span className="absolute left-3 top-2.5 text-emerald-600">
+                    🔎
                   </span>
                   {keyword && (
                     <button
@@ -233,67 +270,77 @@ export default function StaffFilterPopover({
                 </div>
               </label>
 
-              {/* Khoa / phòng */}
-              <div>
-                Khoa / phòng
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {deptList.map((d) => (
-                    <Chip
-                      key={d.value || "all"}
-                      active={dept === d.value}
-                      onClick={() => apply({ dept: d.value })}
-                    >
-                      {d.label}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
- 
-
-
-              {/* Trạng thái */}
-              <div>
-                Trạng thái làm việc
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {STATUS_SEG.map((s) => (
-                    <Chip
-                      key={s.code}
-                      active={status === s.code}
-                      onClick={() => apply({ status: s.code })}
-                      dot={
-                        s.code === "online"
-                          ? "emerald"
-                          : s.code === "pause"
-                          ? "amber"
-                          : s.code === "offline"
-                          ? "slate"
-                          : "slate"
-                      }
-                    >
-                      {s.label}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-
-              {/* Loại y tá (chỉ hiện khi role = nurse) */}
-              {role === "nurse" && (
-                <div>
-                  Loại y tá
+              {roleOptions.length > 0 && (
+                <div className="text-[13px]">
+                  Vai trò
                   <div className="mt-1 flex flex-wrap gap-1.5">
-                    {NURSE_TYPES.map((n) => (
-                      <Chip
-                        key={n.code}
-                        active={nurseType === n.code}
-                        onClick={() => apply({ nurseType: n.code })}
+                    {roleOptions.map((item) => (
+                      <FilterPill
+                        key={item.key}
+                        active={role === item.key}
+                        onClick={() => applyRole(item.key)}
                       >
-                        {n.label}
-                      </Chip>
+                        {item.label}
+                      </FilterPill>
                     ))}
                   </div>
                 </div>
               )}
+
+              {role === "nurse" && (
+                <div className="text-[13px]">
+                  Loại y tá
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {NURSE_TYPES.map((item) => (
+                      <FilterPill
+                        key={item.code}
+                        active={nurseType === item.code}
+                        onClick={() => apply({ nurseType: item.code })}
+                      >
+                        {item.label}
+                      </FilterPill>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="text-[13px]">
+                Khoa / phòng
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {deptList.map((item) => (
+                    <FilterPill
+                      key={item.value || "all"}
+                      active={dept === item.value}
+                      onClick={() => apply({ dept: item.value })}
+                    >
+                      {item.label}
+                    </FilterPill>
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-[13px]">
+                Trạng thái làm việc
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {STATUS_SEG.map((item) => (
+                    <StatusPill
+                      key={item.code}
+                      active={status === item.code}
+                      dot={item.dot}
+                      onClick={() => apply({ status: item.code })}
+                    >
+                      {item.label}
+                    </StatusPill>
+                  ))}
+                </div>
+              </div>
             </div>
+
+            <FilterPopoverFooter
+              onReset={onReset}
+              onClose={onClose}
+              accent="emerald"
+            />
           </div>
         </motion.div>
       )}

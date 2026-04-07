@@ -8,9 +8,15 @@ import { ensureStarted, on } from "./realtime.js";
 const EMPTY = {
   kpi: {
     patientsToday: { value: "0", delta: null, meta: null, spark: [] },
+    lsPatients: { value: "0", delta: null, meta: null, spark: [] },
+    clsPatients: { value: "0", delta: null, meta: null, spark: [] },
     appointments: { value: "0", delta: null, meta: null, spark: [] },
     revenue: { value: "0", delta: null, meta: null, spark: [] },
     exams: { value: "0", delta: null, meta: null, spark: [] },
+    lsExams: { value: "0", delta: null, meta: null, spark: [] },
+    clsExams: { value: "0", delta: null, meta: null, spark: [] },
+    diagnoses: { value: "0", delta: null, meta: null, spark: [] },
+    results: { value: "0", delta: null, meta: null, spark: [] },
   },
   upcomingAppointments: [],
   activities: [],
@@ -248,6 +254,11 @@ function mapExamsKpi(src = {}) {
     src.dangKham,
     src.inProgress
   );
+  const pending = toNumber(
+    src.ChoKham,
+    src.choKham,
+    src.pending
+  );
   const done = toNumber(
     src.DaHoanTat,
     src.daHoanTat,
@@ -267,6 +278,8 @@ function mapExamsKpi(src = {}) {
   );
 
   const parts = [];
+  if (pending !== null) parts.push(`Chờ thực hiện: ${pending}`);
+  if (pending !== null) parts.push(`Chờ khám: ${pending}`);
   if (inProgress !== null) parts.push(`Đang khám: ${inProgress}`);
   if (done !== null) parts.push(`Hoàn tất: ${done}`);
   if (cancelled !== null) parts.push(`Đã hủy: ${cancelled}`);
@@ -275,6 +288,12 @@ function mapExamsKpi(src = {}) {
     value: total !== null ? String(total) : "0",
     delta: formatDelta(delta),
     meta: parts.join(" · ") || null,
+    counts: {
+      pending: pending ?? 0,
+      inProgress: inProgress ?? 0,
+      done: done ?? 0,
+      cancelled: cancelled ?? 0,
+    },
     spark: mapSpark(
       src.PhanBoTheoGio ||
         src.phanBoTheoGio ||
@@ -289,6 +308,10 @@ function mapServicesKpi(src = {}) {
   const done = toNumber(src.HoanTat, src.hoanTat, src.done);
   const inProg = toNumber(src.DangLam, src.dangLam, src.inProgress);
   const cancelled = toNumber(src.DaHuy, src.daHuy, src.cancelled);
+  const pending =
+    total !== null
+      ? Math.max(total - (done ?? 0) - (inProg ?? 0) - (cancelled ?? 0), 0)
+      : 0;
   const delta = toNumber(
     src.TangTruongPhanTram, src.tangTruongPhanTram, src.deltaPercent, src.delta
   );
@@ -302,6 +325,13 @@ function mapServicesKpi(src = {}) {
     value: total !== null ? String(total) : "0",
     delta: formatDelta(delta),
     meta: parts.join(" · ") || null,
+    counts: {
+      total: total ?? 0,
+      pending,
+      inProgress: inProg ?? 0,
+      done: done ?? 0,
+      cancelled: cancelled ?? 0,
+    },
     spark: mapSpark(
       src.PhanBoTheoGio || src.phanBoTheoGio || src.spark
     ),
@@ -403,6 +433,66 @@ function normalizeActivity(a = {}, idx = 0) {
 
 /* ================== ROOT NORMALIZER ================== */
 
+function mapDiagnosisKpi(src = {}) {
+  const total = toNumber(src.TongChanDoan, src.tongChanDoan, src.total);
+  const choVe = toNumber(src.ChoVe, src.choVe);
+  const taiKham = toNumber(src.TaiKham, src.taiKham);
+  const choThuoc = toNumber(src.ChoThuoc, src.choThuoc);
+  const delta = toNumber(
+    src.TangTruongPhanTram,
+    src.tangTruongPhanTram,
+    src.deltaPercent,
+    src.delta
+  );
+
+  const parts = [];
+  if (choVe !== null) parts.push(`Cho về: ${choVe}`);
+  if (taiKham !== null) parts.push(`Tái khám: ${taiKham}`);
+  if (choThuoc !== null) parts.push(`Cho thuốc: ${choThuoc}`);
+
+  return {
+    value: total !== null ? String(total) : "0",
+    delta: formatDelta(delta),
+    meta: parts.join(" · ") || null,
+    counts: {
+      choVe: choVe ?? 0,
+      taiKham: taiKham ?? 0,
+      choThuoc: choThuoc ?? 0,
+    },
+    spark: mapSpark(src.PhanBoTheoGio || src.phanBoTheoGio || src.spark),
+  };
+}
+
+function mapResultsKpi(src = {}) {
+  const total = toNumber(src.TongKetQua, src.tongKetQua, src.total);
+  const early = toNumber(src.Som, src.som, src.early);
+  const onTime = toNumber(src.DungGio, src.dungGio, src.onTime);
+  const late = toNumber(src.Tre, src.tre, src.late);
+  const delta = toNumber(
+    src.TangTruongPhanTram,
+    src.tangTruongPhanTram,
+    src.deltaPercent,
+    src.delta
+  );
+
+  const parts = [];
+  if (early !== null) parts.push(`Sớm: ${early}`);
+  if (onTime !== null) parts.push(`Đúng giờ: ${onTime}`);
+  if (late !== null) parts.push(`Trễ: ${late}`);
+
+  return {
+    value: total !== null ? String(total) : "0",
+    delta: formatDelta(delta),
+    meta: parts.join(" · ") || null,
+    counts: {
+      early: early ?? 0,
+      onTime: onTime ?? 0,
+      late: late ?? 0,
+    },
+    spark: mapSpark(src.PhanBoTheoGio || src.phanBoTheoGio || src.spark),
+  };
+}
+
 function normalizeDashboardDto(dto) {
   if (!dto || typeof dto !== "object") {
     return {
@@ -415,6 +505,16 @@ function normalizeDashboardDto(dto) {
     dto.BenhNhanTrongNgay ||
     dto.benhNhanTrongNgay ||
     dto.patientsToday ||
+    {};
+  const lsPatientsRaw =
+    dto.BenhNhanLsHomNay ||
+    dto.benhNhanLsHomNay ||
+    dto.lsPatients ||
+    {};
+  const clsPatientsRaw =
+    dto.BenhNhanClsHomNay ||
+    dto.benhNhanClsHomNay ||
+    dto.clsPatients ||
     {};
   const apptRaw =
     dto.LichHenHomNay ||
@@ -430,6 +530,26 @@ function normalizeDashboardDto(dto) {
     dto.LuotKhamHomNay ||
     dto.luotKhamHomNay ||
     dto.exams ||
+    {};
+  const lsExamsRaw =
+    dto.LuotKhamLsHomNay ||
+    dto.luotKhamLsHomNay ||
+    dto.lsExams ||
+    {};
+  const clsExamsRaw =
+    dto.LuotKhamClsHomNay ||
+    dto.luotKhamClsHomNay ||
+    dto.clsExams ||
+    {};
+  const diagnosesRaw =
+    dto.ChanDoanHomNay ||
+    dto.chanDoanHomNay ||
+    dto.diagnoses ||
+    {};
+  const resultsRaw =
+    dto.KetQuaHomNay ||
+    dto.ketQuaHomNay ||
+    dto.results ||
     {};
 
   const rawUpcoming =
@@ -451,9 +571,15 @@ function normalizeDashboardDto(dto) {
       null,
     kpi: {
       patientsToday: mapPatientsKpi(patientsRaw),
+      lsPatients: mapPatientsKpi(lsPatientsRaw),
+      clsPatients: mapPatientsKpi(clsPatientsRaw),
       appointments: mapAppointmentsKpi(apptRaw),
       revenue: mapRevenueKpi(revenueRaw),
       exams: mapExamsKpi(examsRaw),
+      lsExams: mapExamsKpi(lsExamsRaw),
+      clsExams: mapExamsKpi(clsExamsRaw),
+      diagnoses: mapDiagnosisKpi(diagnosesRaw),
+      results: mapResultsKpi(resultsRaw),
     },
     // Role-specific: services KPI (for CLS/KTV)
     services: mapServicesKpi(
@@ -492,8 +618,10 @@ function normalizeDashboardDto(dto) {
 
 /* ================== HTTP HOOK ================== */
 
-export async function getDashboardToday() {
-  const response = await http.get("/dashboard/today");
+export async function getDashboardToday(maKhoa) {
+  const params = {};
+  if (maKhoa) params.maKhoa = maKhoa;
+  const response = await http.get("/dashboard/today", { params });
 
   console.log(response?.data);
   const raw = response?.data ?? response;
@@ -508,10 +636,10 @@ export async function getDashboardToday() {
   
 }
 
-export function useDashboardToday(options = {}) {
+export function useDashboardToday(maKhoa, options = {}) {
   return useQuery({
-    queryKey: ["dashboardToday"],
-    queryFn: getDashboardToday,
+    queryKey: ["dashboardToday", maKhoa || "global"],
+    queryFn: () => getDashboardToday(maKhoa),
     staleTime: 30_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,

@@ -2,6 +2,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
+import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
 
 const SOURCE_OPTIONS = [
   { value: "all", label: "Tất cả " },
@@ -29,6 +30,7 @@ export default function QueueFilterPopover({
   anchorEl,
   values,
   setValues,
+  onReset,
 }) {
   const boxRef = useRef(null);
   const [pos, setPos] = useState({ top: 72, left: 16, width: 320 });
@@ -199,6 +201,13 @@ export default function QueueFilterPopover({
                 </div>
               </div>
             </div>
+            <FilterPopoverFooter
+              onReset={() => onReset?.()}
+              onClose={onClose}
+              resetLabel="Reset bộ lọc"
+              closeLabel="Đóng"
+              accent="emerald"
+            />
           </div>
         </motion.div>
       )}
