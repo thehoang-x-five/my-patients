@@ -3,14 +3,7 @@ import Button from "../ui/Button.jsx";
 import React, { useMemo } from "react";
 import {  useDepartment} from "../../api/departments.js";
 import Avatar from "../ui/Avatar.jsx";
-const avatar=[];
-function randomInRange(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-for (let i = 1; i <= 6; i++) {
-  avatar[i]="../../../public/"+i.toString()+".jpg";
-}
+import { getDemoPublicImage } from "../../utils/demoPublicImages.js";
 function isClsType(type) {
   const v = String(type || "").toLowerCase();
   return (
@@ -53,6 +46,7 @@ export default function DeptModal({ open, dept, onClose }) {
 
   // Ưu tiên detail (RoomDetailDto đã map sang normalizeRoomDetail), fallback card
   const view = detail || dept || {};
+  const deptImage = getDemoPublicImage(view, roomId);
 
   const roomType =
     view.room?.type ||
@@ -131,7 +125,7 @@ export default function DeptModal({ open, dept, onClose }) {
               <div className="sticky top-0 z-10 backdrop-blur-sm bg-gradient-to-r from-indigo-50/80 via-violet-50/80 to-emerald-50/80 border-b border-slate-200 p-4 rounded-t-2xl">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                  <Avatar src={avatar[randomInRange(1, 6)]} item={view} size="lg" />
+                  <Avatar src={deptImage} item={view} size="lg" />
                     <div className="min-w-0">
                     <h3
                         className="text-lg font-extrabold text-slate-900 truncate"

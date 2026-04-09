@@ -42,7 +42,10 @@ const PATIENT_TOAST_IDS = {
 const todayStr = () => {
   try {
     const d = new Date();
-    return d.toISOString().slice(0, 10);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   } catch {
     return "";
   }
@@ -114,6 +117,58 @@ function pickLatestAppointment(list = []) {
     null
   )?.item;
 }
+
+const toSearchableText = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+const toDigits = (value) => String(value || "").replace(/\D/g, "");
+
+const readPatientName = (patient) =>
+  patient?.HoTen ||
+  patient?.hoTen ||
+  patient?.fullName ||
+  patient?.name ||
+  patient?.TenBenhNhan ||
+  patient?.tenBenhNhan ||
+  patient?.patientName ||
+  "";
+
+const readPatientPhone = (patient) =>
+  patient?.SoDienThoai ||
+  patient?.soDienThoai ||
+  patient?.DienThoai ||
+  patient?.dienThoai ||
+  patient?.phone ||
+  "";
+
+const readAppointmentPatientCode = (appt) =>
+  appt?.MaBenhNhan ||
+  appt?.maBenhNhan ||
+  appt?.patientCode ||
+  appt?.code ||
+  appt?.patient_code ||
+  "";
+
+const readAppointmentPatientName = (appt) =>
+  appt?.TenBenhNhan ||
+  appt?.tenBenhNhan ||
+  appt?.HoTen ||
+  appt?.hoTen ||
+  appt?.patientName ||
+  appt?.patient ||
+  "";
+
+const readAppointmentPhone = (appt) =>
+  appt?.SoDienThoai ||
+  appt?.soDienThoai ||
+  appt?.DienThoai ||
+  appt?.dienThoai ||
+  appt?.phone ||
+  "";
 
 
 export default function Patients() {
@@ -194,6 +249,81 @@ export default function Patients() {
   const setExamCurrentClinical = useExamStore(
     (s) => s.setCurrentClinical
   );
+
+  async function findLatestCheckedInAppointmentForPatient(patient) {
+    const patientCode =
+      patient?.id ||
+      patient?.maBenhNhan ||
+      patient?.ma_benh_nhan ||
+      patient?.MaBenhNhan ||
+      patient?.pid ||
+      "";
+    const patientName = toSearchableText(readPatientName(patient));
+    const patientPhone = toDigits(readPatientPhone(patient));
+    const today = todayStr();
+
+    const prefilledAppointment = patientPrefill?.latestAppointment;
+    if (prefilledAppointment) {
+      const prefillCode = String(
+        patientPrefill?.code || patientPrefill?.maBenhNhan || ""
+      ).trim();
+      const samePrefillCode =
+        !!patientCode && !!prefillCode && String(patientCode).trim() === prefillCode;
+      const samePrefillName =
+        !!patientName &&
+        patientName === toSearchableText(patientPrefill?.name || readAppointmentPatientName(prefilledAppointment));
+      const samePrefillPhone =
+        !!patientPhone &&
+        patientPhone === toDigits(patientPrefill?.phone || readAppointmentPhone(prefilledAppointment));
+
+      if (samePrefillCode || samePrefillName || samePrefillPhone) {
+        return prefilledAppointment;
+      }
+    }
+
+    const tryFindByCode = async () => {
+      if (!patientCode) return null;
+      const appts = await searchAppointmentsRaw({
+        MaBenhNhan: patientCode,
+        TrangThai: APPT_STATUS.DA_CHECKIN,
+        FromDate: today,
+        ToDate: today,
+        Page: 1,
+        PageSize: 200,
+      });
+      return Array.isArray(appts) && appts.length ? pickLatestAppointment(appts) : null;
+    };
+
+    const matchCandidate = (appt) => {
+      const apptCode = String(readAppointmentPatientCode(appt) || "").trim();
+      const apptName = toSearchableText(readAppointmentPatientName(appt));
+      const apptPhone = toDigits(readAppointmentPhone(appt));
+
+      if (patientCode && apptCode && apptCode === String(patientCode).trim()) return true;
+      if (patientPhone && apptPhone && apptPhone === patientPhone) return true;
+      if (patientName && apptName && apptName === patientName) return true;
+      if (patientName && apptName && (apptName.includes(patientName) || patientName.includes(apptName))) {
+        return !patientPhone || !apptPhone || apptPhone === patientPhone;
+      }
+      return false;
+    };
+
+    const byCode = await tryFindByCode();
+    if (byCode) return byCode;
+
+    const broadList = await searchAppointmentsRaw({
+      TrangThai: APPT_STATUS.DA_CHECKIN,
+      FromDate: today,
+      ToDate: today,
+      Page: 1,
+      PageSize: 200,
+    });
+
+    if (!Array.isArray(broadList) || broadList.length === 0) return null;
+
+    const matched = broadList.filter(matchCandidate);
+    return matched.length ? pickLatestAppointment(matched) : null;
+  }
 
   const [processPrefill, setProcessPrefill] = useState(null);
 
@@ -373,22 +503,18 @@ export default function Patients() {
 
     (async () => {
       try {
-        // Call API search appointments với MaBenhNhan + TrangThai "da_checkin"
-        apiLogger.log({
-          endpoint: '/appointments/search',
-          params: { MaBenhNhan: highlightPid, TrangThai: APPT_STATUS.DA_CHECKIN },
-          source: 'Patients.highlightPid.useEffect',
-          fromCache: false,
-        });
+        const targetPatient =
+          items.find(
+            (entry) =>
+              (entry?.id ||
+                entry?.maBenhNhan ||
+                entry?.ma_benh_nhan ||
+                entry?.MaBenhNhan ||
+                entry?.pid) === highlightPid
+          ) || { id: highlightPid, MaBenhNhan: highlightPid };
 
-        const appts = await searchAppointmentsRaw({
-          MaBenhNhan: highlightPid,
-          TrangThai: APPT_STATUS.DA_CHECKIN,
-        });
-
-        if (Array.isArray(appts) && appts.length > 0) {
-          // Lấy lịch hẹn mới nhất
-          const latest = pickLatestAppointment(appts);
+        const latest = await findLatestCheckedInAppointmentForPatient(targetPatient);
+        if (latest) {
           
           // Lưu vào store patientPrefill
           const currentPrefill = useUIStore.getState().patientPrefill;
@@ -418,7 +544,7 @@ export default function Patients() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightPid]);
+  }, [highlightPid, items]);
 
   // ❌ REMOVED: Separate useEffect to reset ref - causes duplicate execution
   // Reset is now handled inside the main useEffect when highlightPid is cleared
@@ -612,32 +738,13 @@ export default function Patients() {
         todayStatus === STATUSES.WAIT_INTAKE_SVC;
 
       if (pid && !isServiceWait) {
-        const today = todayStr();
-
         // 1. Search lịch hẹn đã check-in mới nhất hôm nay
         try {
-          apiLogger.log({
-            endpoint: '/appointments/search',
-            params: { MaBenhNhan: pid, TrangThai: APPT_STATUS.DA_CHECKIN, FromDate: today, ToDate: today },
-            source: 'Patients.handleAction.intake',
-            fromCache: false,
-          });
-
-          const appts = await searchAppointmentsRaw({
-            MaBenhNhan: pid,
-            TrangThai: APPT_STATUS.DA_CHECKIN,
-            FromDate: today,
-            ToDate: today,
-          });
-
-          if (Array.isArray(appts) && appts.length > 0) {
-            const latest = pickLatestAppointment(appts);
-            setExamPrefillAppointment(latest || null);
-          } else {
-            setExamPrefillAppointment(null);
-          }
+          const latest = await findLatestCheckedInAppointmentForPatient(p);
+          setExamPrefillAppointment(latest || null);
         } catch (err) {
           console.warn("[Patients] searchAppointmentsRaw check-in error:", err);
+          setExamPrefillAppointment(null);
         }
 
         // 2. Search phiếu khám LS đang thực hiện (dang_thuc_hien)
@@ -783,9 +890,9 @@ export default function Patients() {
               },
             });
             
-            // ✅ Clear prefill và flash ngay sau khi mở modal
+            // Giữ patientPrefill qua bước tạo bệnh nhân để sau khi lưu
+            // còn nối lại được lịch hẹn vừa check-in với Mã BN mới.
             if (hasPrefill) {
-              clearPatientPrefill();
               ackFlashAdd();
             }
           } : undefined}
@@ -877,6 +984,7 @@ export default function Patients() {
             onSaved={(p) => {
               // đóng modal
               const wasAddMode = modal.mode === "add";
+              const createdFromAppointment = modal.patient?.latestAppointment || null;
               setModal({ open: false, mode: "view", patient: null });
 
               // điều hướng + focus vào BN vừa thao tác
@@ -896,9 +1004,33 @@ export default function Patients() {
                 } catch {}
               }
 
-              // Nếu modal là Add thì clear prefill sau khi tạo thành công
+              // Nếu tạo bệnh nhân từ lịch hẹn check-in, giữ lại prefill và gắn Mã BN mới
+              // để bước "Lập phiếu" ngay sau đó lấy được đúng lịch hẹn.
               if (wasAddMode) {
-                clearPatientPrefill();
+                if (createdFromAppointment && pid) {
+                  setPatientPrefill({
+                    name:
+                      p?.name ||
+                      p?.HoTen ||
+                      p?.hoTen ||
+                      modal.patient?.name ||
+                      patientPrefill?.name ||
+                      "",
+                    phone:
+                      p?.phone ||
+                      p?.DienThoai ||
+                      p?.dienThoai ||
+                      modal.patient?.phone ||
+                      patientPrefill?.phone ||
+                      "",
+                    code: pid,
+                    maBenhNhan: pid,
+                    latestAppointment: createdFromAppointment,
+                    linkedAt: Date.now(),
+                  });
+                } else {
+                  clearPatientPrefill();
+                }
               }
             }}
                      onSave={async (data) => {

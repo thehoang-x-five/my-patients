@@ -17,6 +17,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "./http.js";
 import { ensureStarted, on } from "./realtime.js";
+import { formatStatus } from "../utils/textFormatters.js";
 
 /* ========= Helpers chung ========= */
 
@@ -355,7 +356,7 @@ function normalizeStaffOverview(dto, maKhoa) {
     role: dto.VaiTro || dto.vaiTro || "bac_si",
     waiting: dto.SoBenhNhanDangCho ?? dto.soBenhNhanDangCho ?? 0,
     appointments: dto.SoLichHenHomNay ?? dto.soLichHenHomNay ?? 0,
-    status: "dang_cong_tac",
+    status: formatStatus("dang_cong_tac"),
     deptCode: maKhoa || "",
   };
 }

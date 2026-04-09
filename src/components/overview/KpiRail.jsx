@@ -25,6 +25,14 @@ export default function KpiRail({ kpi, role = "default", services }) {
   const examCounts = examKpi?.counts || {};
   const diagnosisCounts = safe.diagnoses?.counts || {};
   const resultCounts = safe.results?.counts || {};
+  const visibleExamTotal =
+    (examCounts.pending ?? 0) +
+    (examCounts.done ?? 0) +
+    (examCounts.cancelled ?? 0);
+  const displayExamValue =
+    examKpi?.counts && Object.keys(examCounts).length > 0
+      ? String(visibleExamTotal)
+      : examKpi?.value;
 
   const patientTitle = isCls
     ? "Bệnh nhân CLS hôm nay"
@@ -40,7 +48,7 @@ export default function KpiRail({ kpi, role = "default", services }) {
 
   const thirdCard = {
     title: isCls ? "Lượt CLS hôm nay" : isClinical ? "Lượt khám LS hôm nay" : "Lượt khám hôm nay",
-    value: examKpi?.value,
+    value: displayExamValue,
     delta: examKpi?.delta,
     deltaTone: "info",
     meta: examMeta,

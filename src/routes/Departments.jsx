@@ -32,6 +32,7 @@ import {
 import { useAdminUsers } from "../api/admin.js";
 import { useAuthStore, useUIStore } from "../components/stores/appStore.js";
 import { isAdmin as checkIsAdmin } from "../utils/permissions.js";
+import { useUI } from "../context/UIContext.jsx";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -249,6 +250,15 @@ export default function Departments() {
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
   const user = useAuthStore((s) => s.user);
   const userIsAdmin = checkIsAdmin(user);
+  const { lang } = useUI();
+  const deptUi = useMemo(
+    () => ({
+      pageTitle: lang === "en" ? "Departments" : "Quản lý phòng khám",
+      adminAction: lang === "en" ? "Manage" : "Quản trị",
+      loading: lang === "en" ? "Loading room data." : "Đang tải dữ liệu phòng khoa.",
+    }),
+    [lang]
+  );
 
   const todayKey = dayKeyToday();
 
@@ -572,11 +582,11 @@ export default function Departments() {
   const handleCreateService = (payload) => {
     createService.mutate(payload, {
       onSuccess: () => {
-        toast.success("Tao dich vu moi thanh cong");
+        toast.success("Tạo dịch vụ mới thành công");
         setShowAdminModal(false);
       },
       onError: (error) =>
-        toast.error(error?.message || "Khong the tao dich vu"),
+        toast.error(error?.message || "Không thể tạo dịch vụ"),
     });
   };
 
@@ -585,11 +595,11 @@ export default function Departments() {
       { id, data: payload },
       {
         onSuccess: () => {
-          toast.success("Cap nhat dich vu thanh cong");
+          toast.success("Cập nhật dịch vụ thành công");
           setShowAdminModal(false);
         },
         onError: (error) =>
-          toast.error(error?.message || "Khong the cap nhat dich vu"),
+          toast.error(error?.message || "Không thể cập nhật dịch vụ"),
       }
     );
   };
@@ -601,7 +611,7 @@ export default function Departments() {
       exit={{ opacity: 0, y: -8 }}
       className="px-4 pb-3 pt-1 min-h-0 overflow-hidden"
       role="main"
-      aria-label="Quản lý phòng khám"
+      aria-label={deptUi.pageTitle}
     >
       <div
         className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
@@ -630,14 +640,14 @@ export default function Departments() {
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-500 px-3 py-1.5 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px"
               >
                 <span className="text-base leading-none">+</span>
-                <span>Quản trị</span>
+                <span>{deptUi.adminAction}</span>
               </button>
             </div>
           )}
         </div>
         {depRoomsLoading ? (
           <section className="card mt-3 p-4 h-full  rounded-2xl bg-white ring-1 ring-slate-200/60 text-sm text-slate-500 min-h-[320px] flex items-center justify-center">
-            Đang tải dữ liệu phòng khoa.
+            {deptUi.loading}
           </section>
         ) : (
           <div className="card mt-2.5 p-1 pt-0 flex-1 min-h-0 flex flex-col">

@@ -2,6 +2,12 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import Avatar from "../ui/Avatar.jsx";
+import {
+  formatNurseTypeLabel,
+  formatRoleLabel,
+  formatWorkStatusLabel,
+} from "../../utils/textFormatters.js";
+import { getDemoPublicImage } from "../../utils/demoPublicImages.js";
 
 const ROLE_LABELS = {
   admin: "Admin",
@@ -45,7 +51,7 @@ const STATUS_BADGE = {
 
 function StatusBadge({ status }) {
   const info = STATUS_BADGE[status] || {
-    label: status || "—",
+    label: formatWorkStatusLabel(status, "—"),
     cls: "bg-slate-50 text-slate-500 ring-slate-200",
   };
 
@@ -53,7 +59,7 @@ function StatusBadge({ status }) {
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${info.cls}`}
     >
-      {info.label}
+      {formatWorkStatusLabel(status, info.label || "—")}
     </span>
   );
 }
@@ -70,7 +76,8 @@ function ActionMenu({
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const buttonRef = useRef(null);
-  const isLocked = item.trangThai === "khoa" || item.trangThaiTaiKhoan === "khoa";
+  const isLocked =
+    item.trangThai === "khoa" || item.trangThaiTaiKhoan === "khoa";
 
   const updateMenuPosition = () => {
     const rect = buttonRef.current?.getBoundingClientRect();
@@ -265,7 +272,7 @@ export default function StaffTable({
             >
               <td className="px-3 py-2.5">
                 <div className="flex items-center gap-2.5">
-                  <Avatar item={item} size={32} />
+                  <Avatar src={getDemoPublicImage(item)} item={item} size={32} />
                   <div className="min-w-0">
                     <div className="truncate font-semibold text-slate-800">
                       {item.name || item.hoTen || "—"}
@@ -300,17 +307,11 @@ export default function StaffTable({
                   </td>
                   <td className="px-3 py-2.5">
                     <span className="inline-flex rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700 ring-1 ring-teal-200">
-                      {ROLE_LABELS[item.role || item.vaiTro] ||
-                        item.role ||
-                        item.vaiTro ||
-                        "—"}
+                      {formatRoleLabel(item.role || item.vaiTro, "—")}
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-[12px] text-slate-500">
-                    {NURSE_TYPE_LABELS[item.nurseType || item.loaiYTa] ||
-                      item.nurseType ||
-                      item.loaiYTa ||
-                      "—"}
+                    {formatNurseTypeLabel(item.nurseType || item.loaiYTa, "—")}
                   </td>
                   <td className="px-3 py-2.5">
                     <StatusBadge
@@ -327,9 +328,7 @@ export default function StaffTable({
 
               <td className="px-3 py-2.5">
                 <StatusBadge
-                  status={
-                    item.status || item.trangThaiCongTac || "dang_cong_tac"
-                  }
+                  status={item.status || item.trangThaiCongTac || "dang_cong_tac"}
                 />
               </td>
 

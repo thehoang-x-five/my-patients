@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
+import { useUI } from "../../context/UIContext.jsx";
 
 function normalizeOptions(options) {
   return (Array.isArray(options) ? options : []).map((option) => {
@@ -26,7 +27,7 @@ export default function PopoverSelect({
   value,
   onChange,
   options = [],
-  placeholder = "Chon...",
+  placeholder,
   disabled = false,
   required = false,
   name,
@@ -34,10 +35,11 @@ export default function PopoverSelect({
   buttonClassName = "",
   panelClassName = "",
   searchable,
-  searchPlaceholder = "Tim lua chon...",
-  emptyText = "Khong co lua chon phu hop.",
+  searchPlaceholder,
+  emptyText,
   ariaLabel,
 }) {
+  const { lang } = useUI();
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
   const searchRef = useRef(null);
@@ -45,8 +47,18 @@ export default function PopoverSelect({
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState({ top: 72, left: 16, width: 240 });
 
+  const fallbackPlaceholder = lang === "en" ? "Select..." : "Chọn...";
+  const fallbackSearchPlaceholder =
+    lang === "en" ? "Search options..." : "Tìm lựa chọn...";
+  const fallbackEmptyText =
+    lang === "en"
+      ? "No matching options found."
+      : "Không có lựa chọn phù hợp.";
+
   const normalizedOptions = useMemo(() => normalizeOptions(options), [options]);
-  const selected = normalizedOptions.find((option) => String(option.value) === String(value));
+  const selected = normalizedOptions.find(
+    (option) => String(option.value) === String(value)
+  );
   const canSearch = searchable ?? normalizedOptions.length > 8;
 
   const filteredOptions = useMemo(() => {
@@ -84,7 +96,7 @@ export default function PopoverSelect({
 
   useLayoutEffect(() => {
     if (open) computePosition();
-  }, [open, normalizedOptions.length]);
+  }, [open, normalizedOptions.length, canSearch]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -145,7 +157,7 @@ export default function PopoverSelect({
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={ariaLabel || placeholder}
+        aria-label={ariaLabel || placeholder || fallbackPlaceholder}
         onClick={() => {
           if (disabled) return;
           setOpen((prev) => !prev);
@@ -158,10 +170,14 @@ export default function PopoverSelect({
         ].join(" ")}
       >
         <span className={selected ? "truncate" : "truncate text-slate-400"}>
-          {selected?.label || placeholder}
+          {selected?.label || placeholder || fallbackPlaceholder}
         </span>
-        <span className={`text-xs text-slate-400 transition ${open ? "rotate-180" : ""}`}>
-          v
+        <span
+          className={`text-xs text-slate-400 transition ${
+            open ? "rotate-180" : ""
+          }`}
+        >
+          ▾
         </span>
       </button>
 
@@ -191,7 +207,9 @@ export default function PopoverSelect({
                           ref={searchRef}
                           value={query}
                           onChange={(event) => setQuery(event.target.value)}
-                          placeholder={searchPlaceholder}
+                          placeholder={
+                            searchPlaceholder || fallbackSearchPlaceholder
+                          }
                           className="w-full rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-800 ring-1 ring-slate-200 outline-none transition focus:bg-white focus:ring-2 focus:ring-teal-500"
                         />
                       </div>
@@ -200,7 +218,8 @@ export default function PopoverSelect({
                     <div className="max-h-72 overflow-y-auto p-1.5">
                       {filteredOptions.length ? (
                         filteredOptions.map((option) => {
-                          const active = String(option.value) === String(value);
+                          const active =
+                            String(option.value) === String(value);
                           return (
                             <button
                               key={`${option.value}`}
@@ -232,13 +251,17 @@ export default function PopoverSelect({
                                   </span>
                                 ) : null}
                               </span>
-                              {active ? <span className="text-xs font-semibold text-teal-600">✓</span> : null}
+                              {active ? (
+                                <span className="text-xs font-semibold text-teal-600">
+                                  ✓
+                                </span>
+                              ) : null}
                             </button>
                           );
                         })
                       ) : (
                         <div className="px-3 py-6 text-center text-sm text-slate-500">
-                          {emptyText}
+                          {emptyText || fallbackEmptyText}
                         </div>
                       )}
                     </div>

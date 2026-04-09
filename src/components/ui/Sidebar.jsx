@@ -1,30 +1,27 @@
 import React, { useMemo, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
+import { NavLink, useLocation } from "react-router-dom";
 import Button from "../ui/Button.jsx";
 import { useUI } from "../../context/UIContext.jsx";
 import { useAuthStore } from "../stores/appStore.js";
 import { TAB_VISIBILITY } from "../../utils/permissions.js";
 
-// Định nghĩa tất cả links + key phân quyền theo TAB_VISIBILITY (Week 4 RBAC)
 const allLinks = [
-  ["/", "Tổng quan", "index", "overview"],
-  ["/appointments", "Lịch hẹn", "appointments", "appointments"],
-  ["/patients", "Bệnh nhân", "patients", "patients"],
-  ["/examination", "Khám bệnh", "examinations", "examination"],
-  ["/departments", "Khoa phòng", "departments", "departments"],
-  ["/staff", "Nhân sự", "staff", "staff"],
-  // ❌ QL Nhân viên trang riêng ĐÃ HỦY — admin quản lý qua Staff page (toggle Table + actions)
-  // ["/admin/users", "QL Nhân viên", "admin_users", "userManagement"],
-  ["/prescriptions", "Đơn thuốc", "prescriptions", "prescriptions"],
-  ["/history", "Lịch sử", "history", "history"],
-  ["/notifications", "Thông báo", "notifications", "notifications"],
-  ["/reports", "Báo cáo", "reports", "reports"],
+  ["/", "Overview", "index", "overview"],
+  ["/appointments", "Appointments", "appointments", "appointments"],
+  ["/patients", "Patients", "patients", "patients"],
+  ["/examination", "Examination", "examinations", "examination"],
+  ["/departments", "Departments", "departments", "departments"],
+  ["/staff", "Staff", "staff", "staff"],
+  ["/prescriptions", "Prescriptions", "prescriptions", "prescriptions"],
+  ["/history", "History", "history", "history"],
+  ["/notifications", "Notifications", "notifications", "notifications"],
+  ["/reports", "Reports", "reports", "reports"],
 ];
 
 const iconMap = {
   index: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <path
         d="M4 11h16M4 17h10M10 5h10"
         stroke="currentColor"
@@ -35,7 +32,7 @@ const iconMap = {
     </svg>
   ),
   appointments: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <rect
         x="3"
         y="4"
@@ -54,7 +51,7 @@ const iconMap = {
     </svg>
   ),
   patients: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <circle
         cx="12"
         cy="8"
@@ -71,7 +68,7 @@ const iconMap = {
     </svg>
   ),
   examinations: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <rect
         x="4"
         y="4"
@@ -90,7 +87,7 @@ const iconMap = {
     </svg>
   ),
   departments: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <path
         d="M4 11h6V4H4v7Zm10 9h6v-7h-6v7Zm0-9h6V4h-6v7Zm-10 9h6v-7H4v7Z"
         stroke="currentColor"
@@ -100,7 +97,7 @@ const iconMap = {
     </svg>
   ),
   staff: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <circle
         cx="8"
         cy="8"
@@ -123,26 +120,8 @@ const iconMap = {
       />
     </svg>
   ),
-  admin_users: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
-      <circle cx="12" cy="7" r="3" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M5 19c1-3 3.5-5 7-5s6 2 7 5"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-      <path
-        d="M19 14l1.5 1.5L19 17"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
   prescriptions: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <rect
         x="5"
         y="3"
@@ -161,7 +140,7 @@ const iconMap = {
     </svg>
   ),
   history: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <circle
         cx="12"
         cy="12"
@@ -179,7 +158,7 @@ const iconMap = {
     </svg>
   ),
   notifications: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <path
         d="M6 10a6 6 0 0 1 12 0v4.5l1.5 2.5H4.5L6 14.5V10Z"
         stroke="currentColor"
@@ -196,7 +175,7 @@ const iconMap = {
     </svg>
   ),
   reports: () => (
-    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
       <rect
         x="4"
         y="4"
@@ -217,44 +196,47 @@ const iconMap = {
   ),
 };
 
-
 export default function Sidebar() {
-  const { collapsed, setCollapsed, t, lang, setLang, theme, setTheme } =
-    useUI();
+  const {
+    collapsed,
+    setCollapsed,
+    t,
+    tr,
+    lang,
+    setLang,
+    theme,
+    setTheme,
+  } = useUI();
   const { pathname } = useLocation();
   const [hovered, setHovered] = useState(null);
-  const user = useAuthStore((s) => s.user);
+  const user = useAuthStore((state) => state.user);
 
-  // Lọc menu theo vai trò user đang đăng nhập (TAB_VISIBILITY)
   const links = useMemo(
-    () => allLinks.filter(([, , , permKey]) => {
-      const checker = TAB_VISIBILITY[permKey];
-      return checker ? checker(user) : true;
-    }),
+    () =>
+      allLinks.filter(([, , , permissionKey]) => {
+        const checker = TAB_VISIBILITY[permissionKey];
+        return checker ? checker(user) : true;
+      }),
     [user]
   );
 
   const activeKey = useMemo(
     () => links.find(([to]) => to === pathname)?.[0] || null,
-    [pathname, links]
+    [links, pathname]
   );
 
   return (
     <aside
-      className="fixed inset-y-0 left-0 bg-white/90 dark:bg-slate-950/95 
-                 border-r border-slate-200/80 dark:border-slate-800/80 
-                 shadow-xl shadow-sky-100/60 dark:shadow-black/40
-                 backdrop-blur-xl z-10 transition-[width] duration-200 sidebar-w"
-      aria-label="Thanh điều hướng"
+      className="sidebar-w fixed inset-y-0 left-0 z-10 border-r border-slate-200/80 bg-white/90 shadow-xl shadow-sky-100/60 backdrop-blur-xl transition-[width] duration-200 dark:border-slate-800/80 dark:bg-slate-950/95 dark:shadow-black/40"
+      aria-label={tr("menu")}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 pt-3 pb-2">
+      <div className="flex items-center justify-between px-3 pb-2 pt-3">
         {!collapsed && (
           <div className="flex items-center gap-3 px-1">
             <div className="relative">
-              <div className="absolute inset-0 blur-md bg-gradient-to-tr from-cyan-400 via-sky-500 to-rose-300 opacity-70" />
-              <div className="relative w-8 h-8 rounded-2xl bg-slate-950/90 flex items-center justify-center text-sky-100">
-                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
+              <div className="absolute inset-0 bg-gradient-to-tr from-cyan-400 via-sky-500 to-rose-300 opacity-70 blur-md" />
+              <div className="relative flex h-8 w-8 items-center justify-center rounded-2xl bg-slate-950/90 text-sky-100">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
                   <circle
                     cx="12"
                     cy="12"
@@ -271,12 +253,13 @@ export default function Sidebar() {
                 </svg>
               </div>
             </div>
+
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
                 <b className="text-sm tracking-tight">HealthCare</b>
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/70 bg-emerald-50 text-[10px] font-medium px-2 py-0.5 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/40 dark:text-emerald-200">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/70 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                  {tr("live")}
                 </span>
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -287,17 +270,17 @@ export default function Sidebar() {
         )}
 
         <Button
-          aria-label={collapsed ? "Mở menu" : "Thu gọn menu"}
-          title={collapsed ? "Mở menu" : "Thu gọn menu"}
+          aria-label={collapsed ? tr("openMenu") : tr("collapseMenu")}
+          title={collapsed ? tr("openMenu") : tr("collapseMenu")}
           variant="ghost"
-          className="!p-1.5 rounded-xl hover:bg-slate-100/80 dark:hover:bg-slate-800/80"
-          onClick={() => setCollapsed((v) => !v)}
+          className="rounded-xl !p-1.5 hover:bg-slate-100/80 dark:hover:bg-slate-800/80"
+          onClick={() => setCollapsed((value) => !value)}
         >
           <svg
             width="20"
             height="20"
             viewBox="0 0 24 24"
-            className={`${collapsed ? "" : "rotate-180"} transition`}
+            className={collapsed ? "" : "rotate-180 transition"}
           >
             <path
               d="M9 6l6 6-6 6"
@@ -312,23 +295,22 @@ export default function Sidebar() {
 
       {!collapsed && (
         <div className="flex items-center justify-between px-3 pb-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-          <span>{t.menu}</span>
-          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-200 border border-sky-100 dark:border-sky-600/40">
+          <span>{tr("menu")}</span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-sky-100 bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700 dark:border-sky-600/40 dark:bg-sky-500/10 dark:text-sky-200">
             <span className="h-1 w-1 rounded-full bg-sky-400" />
-            Today flow
+            {tr("todayFlow")}
           </span>
         </div>
       )}
 
-      {/* Nav */}
       {!collapsed && (
         <nav
-          className="overflow-y-auto scrollbar-none h-[calc(100%-190px)] px-2 pt-1"
+          className="scrollbar-none h-[calc(100%-190px)] overflow-y-auto px-2 pt-1"
           role="navigation"
-          aria-label={t.menu}
+          aria-label={tr("menu")}
         >
-          <ul className="flex flex-col gap-2 relative">
-            {links.map(([to, label, key]) => {
+          <ul className="relative flex flex-col gap-2">
+            {links.map(([to, fallbackLabel, key]) => {
               const isActive = activeKey === to;
               const isHover = hovered === to;
               const Icon = iconMap[key];
@@ -340,11 +322,10 @@ export default function Sidebar() {
                   onMouseEnter={() => setHovered(to)}
                   onMouseLeave={() => setHovered(null)}
                 >
-                  {/* ACTIVE blob */}
                   {isActive && (
                     <motion.span
                       layoutId="nav-active"
-                      className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-tr from-cyan-400/95 via-sky-300/100 to-cyan-100 shadow-[0_18px_45px_rgba(56,189,248,0.45)] z-0"
+                      className="pointer-events-none absolute inset-0 z-0 rounded-2xl bg-gradient-to-tr from-cyan-400/95 via-sky-300 to-cyan-100 shadow-[0_18px_45px_rgba(56,189,248,0.45)]"
                       transition={{
                         type: "spring",
                         stiffness: 520,
@@ -354,11 +335,10 @@ export default function Sidebar() {
                     />
                   )}
 
-                  {/* HOVER film */}
                   {isHover && !isActive && (
                     <motion.span
                       layoutId="nav-hover"
-                      className="pointer-events-none absolute inset-0 rounded-2xl bg-sky-50/80 ring-1 ring-sky-100 dark:bg-slate-800/50 dark:ring-slate-600/60 z-10"
+                      className="pointer-events-none absolute inset-0 z-10 rounded-2xl bg-sky-50/80 ring-1 ring-sky-100 dark:bg-slate-800/50 dark:ring-slate-600/60"
                       transition={{
                         type: "spring",
                         stiffness: 640,
@@ -371,23 +351,21 @@ export default function Sidebar() {
                   <NavLink
                     to={to}
                     end
-                    className={({ isActive: active }) =>
+                    className={({ isActive: routeActive }) =>
                       [
-                        "relative z-20 btn w-full justify-start px-3 py-2.5 rounded-2xl border border-slate-100/80 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/60",
-                        active || isHover
+                        "btn relative z-20 w-full justify-start rounded-2xl border border-slate-100/80 bg-slate-50/70 px-3 py-2.5 transition-all duration-150 dark:border-slate-800/80 dark:bg-slate-900/60",
+                        routeActive || isHover
                           ? "!border-transparent !bg-transparent"
-                          : "hover:bg-slate-100/90 dark:hover:bg-slate-800/80",
-                        active
+                          : "hover:-translate-y-0.5 hover:bg-slate-100/90 dark:hover:bg-slate-800/80",
+                        routeActive
                           ? "text-white"
                           : isHover
                             ? "text-brand-700"
                             : "text-slate-700 dark:text-slate-100",
-                        !active && !isHover ? "hover:-translate-y-0.5" : "",
-                        "transition-all duration-150",
                       ].join(" ")
                     }
                   >
-                    <div className="flex items-center gap-3 w-full">
+                    <div className="flex w-full items-center gap-3">
                       <span
                         className={[
                           "flex h-8 w-8 items-center justify-center rounded-xl text-xs transition-all",
@@ -395,22 +373,21 @@ export default function Sidebar() {
                             ? "bg-white/95 text-sky-500 shadow-md shadow-sky-200/80"
                             : isHover
                               ? "bg-white text-sky-500 shadow-sm"
-                              : "bg-slate-100 dark:bg-slate-800 text-slate-500",
+                              : "bg-slate-100 text-slate-500 dark:bg-slate-800",
                         ].join(" ")}
                       >
                         {Icon && <Icon />}
                       </span>
 
-                      <div className="flex flex-col min-w-0 flex-1">
+                      <div className="min-w-0 flex-1">
                         <span
                           className={[
-                            "text-sm font-medium truncate",
+                            "truncate text-sm font-medium",
                             isActive ? "text-white" : "",
                           ].join(" ")}
                         >
-                          {t[key] || label}
+                          {t[key] || fallbackLabel}
                         </span>
-
                       </div>
 
                       <motion.span
@@ -424,7 +401,7 @@ export default function Sidebar() {
                       >
                         <svg
                           viewBox="0 0 24 24"
-                          className="w-3.5 h-3.5"
+                          className="h-3.5 w-3.5"
                           fill="none"
                         >
                           <path
@@ -445,31 +422,30 @@ export default function Sidebar() {
         </nav>
       )}
 
-      {/* Footer: ngôn ngữ + theme + trạng thái nhỏ */}
       {!collapsed && (
-        <div className="absolute left-2 right-2 bottom-2">
-
-
-          <div className="flex items-center justify-between gap-2 rounded-2xl  px-3 py-2.5 shadow-sm">
+        <div className="absolute bottom-2 left-2 right-2">
+          <div className="flex items-center justify-between gap-2 rounded-2xl px-3 py-2.5 shadow-sm">
             <div className="flex flex-col gap-1">
               <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                Ngôn ngữ
+                {tr("language")}
               </span>
-              <div className="flex gap-1.5" role="group" aria-label="Chọn ngôn ngữ">
+              <div className="flex gap-1.5" role="group" aria-label={tr("language")}>
                 <Button
-                  className={`px-2.5 py-1 text-[11px] rounded-xl border ${lang === "vi"
-                      ? "btn-primary bg-sky-500 text-white font-bold border-sky-500 shadow-sm shadow-sky-300/70"
-                      : "bg-white/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-600"
-                    }`}
+                  className={`rounded-xl border px-2.5 py-1 text-[11px] ${
+                    lang === "vi"
+                      ? "btn-primary border-sky-500 bg-sky-500 font-bold text-white shadow-sm shadow-sky-300/70"
+                      : "border-slate-200 bg-white/90 dark:border-slate-600 dark:bg-slate-800/90"
+                  }`}
                   onClick={() => setLang("vi")}
                 >
                   VI
                 </Button>
                 <Button
-                  className={`px-2.5 py-1 text-[11px] rounded-xl border ${lang === "en"
-                      ? "btn-primary bg-sky-500 text-white font-bold border-sky-500 shadow-sm shadow-sky-300/70"
-                      : "bg-white/90 dark:bg-slate-800/90 border-slate-200 dark:border-slate-600"
-                    }`}
+                  className={`rounded-xl border px-2.5 py-1 text-[11px] ${
+                    lang === "en"
+                      ? "btn-primary border-sky-500 bg-sky-500 font-bold text-white shadow-sm shadow-sky-300/70"
+                      : "border-slate-200 bg-white/90 dark:border-slate-600 dark:bg-slate-800/90"
+                  }`}
                   onClick={() => setLang("en")}
                 >
                   EN
@@ -479,18 +455,18 @@ export default function Sidebar() {
 
             <div className="flex flex-col items-end gap-1">
               <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                Giao diện
+                {tr("theme")}
               </span>
               <Button
-                aria-label="Đổi giao diện sáng/tối"
-                title="Chuyển giao diện"
+                aria-label={tr("switchTheme")}
+                title={tr("switchTheme")}
                 variant="ghost"
-                className="!px-2.5 !py-1 rounded-xl border border-slate-200 dark:border-slate-600 bg-white/90 dark:bg-slate-800/90 text-xs flex items-center gap-1.5"
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 !px-2.5 !py-1 text-xs dark:border-slate-600 dark:bg-slate-800/90"
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               >
                 <span>{theme === "dark" ? "🌙" : "☀️"}</span>
                 <span className="text-[11px]">
-                  {theme === "dark" ? "Dark" : "Light"}
+                  {theme === "dark" ? tr("darkMode") : tr("lightMode")}
                 </span>
               </Button>
             </div>

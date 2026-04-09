@@ -2,14 +2,7 @@ import React from 'react';
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Avatar from "../ui/Avatar.jsx";
-const avatar=[];
-function randomInRange(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-for (let i = 1; i <= 6; i++) {
-  avatar[i]="../../../public/"+i.toString()+".jpg";
-}
+import { getDemoPublicImage } from "../../utils/demoPublicImages.js";
 function isClsType(type) {
   const v = String(type || "").toLowerCase();
   return (
@@ -71,6 +64,7 @@ const detailVariants = {
 
 export default function DeptCard({ dept, onOpenDetail, onOpenSchedule, pulse = false }) {
   const room = dept.room || { number: "—", status: false };
+  const deptImage = getDemoPublicImage(dept, room.number || dept.name);
   const isActive = !!room.status;
  
   const waiting = dept.waitingPatients || 0;
@@ -99,7 +93,7 @@ export default function DeptCard({ dept, onOpenDetail, onOpenSchedule, pulse = f
       {/* Header */}
       <motion.header variants={detailVariants} className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-        <Avatar src={avatar[randomInRange(1, 6)]} item={dept} size={40} />
+        <Avatar src={deptImage} item={dept} size={40} />
           <div className="flex-1">
             <b className="leading-5 text-[15px] text-slate-900 block">Phòng {room.number}</b>
             <div className="text-slate-500 text-xs mt-0.5">

@@ -353,7 +353,7 @@ export default function Examination() {
         err?.response?.data?.title ||
         err?.response?.data?.detail ||
         err?.message ||
-        "Khong the lay thong tin hang doi.";
+        "Không thể lấy thông tin hàng đợi.";
       toast.error(msg);
       return;
     }

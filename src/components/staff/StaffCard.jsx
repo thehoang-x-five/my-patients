@@ -4,14 +4,12 @@ import React from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Avatar from "../ui/Avatar.jsx";
-const avatar=[];
-function randomInRange(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-for (let i = 1; i <= 6; i++) {
-  avatar[i]="../../../public/"+i.toString()+".jpg";
-}
+import {
+  formatDisplayText,
+  formatPresenceStatusLabel,
+  formatVietnameseText,
+} from "../../utils/textFormatters.js";
+import { getDemoPublicImage } from "../../utils/demoPublicImages.js";
 
 const NURSE_WORK_ROLE_LABEL = {
   lam_sang: "Y tá lâm sàng",
@@ -45,18 +43,18 @@ const getStatusVisual = (statusRaw) => {
 
   if (status == "online") {
     return {
-      label: "online",
+      label: formatPresenceStatusLabel("online"),
       className: "bg-emerald-50 text-emerald-600 ring-emerald-200/60",
     };
   }
   if (status == "pause") {
     return {
-      label: "pause",
+      label: formatPresenceStatusLabel("pause"),
       className: "bg-amber-50 text-amber-600 ring-amber-200/60",
     };
   }
   return {
-    label: "offline",
+    label: formatPresenceStatusLabel("offline"),
     className: "bg-slate-50 text-slate-400 ring-slate-200/60",
   };
 };
@@ -101,10 +99,11 @@ const getNurseWorkRole = (item) => {
   if (!key && item?.roleType == "clinical") key = "lam_sang";
   if (!key && item?.roleType == "administrative") key = "hanh_chinh";
 
-  return NURSE_WORK_ROLE_LABEL[key] || "—";
+  return NURSE_WORK_ROLE_LABEL[key] || formatVietnameseText(key, "—");
 };
 export default function StaffCard({ item, role, onDetail, onSchedule }) {
   const statusView = getStatusVisual(item.status);
+  const staffImage = getDemoPublicImage(item, role);
   const apptCount =
     item?.apptCount ??
     item?.appointmentsToday ??
@@ -176,11 +175,11 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
       </div>
 
       <header className="flex items-start gap-3">
-        <Avatar src={avatar[randomInRange(1, 6)]} item={item} size={40} />
+        <Avatar src={staffImage} item={item} size={40} />
         <div className="flex-1 min-w-0 pr-24">
           <div className="flex items-center gap-2">
             <h3 className="text-[15px] font-semibold text-slate-900 truncate">
-              {item.name}
+              {formatDisplayText(item.name, item.name || "—")}
             </h3>
             {item.degree && (
               <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[13px] text-slate-600 ring-1 ring-slate-200">
@@ -189,7 +188,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
             )}
           </div>
           <p className="mt-0.5 text-[13px] text-slate-600 flex items-center gap-1">
-            <span>{item.dept || "Chưa gán khoa"}</span>
+            <span>{formatDisplayText(item.dept, "Chưa gán khoa")}</span>
             {item.specialties?.length ? (
               <>
                 <span className="text-slate-400">•</span>
@@ -244,13 +243,13 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
         <div className="rounded-xl ring-1 ring-slate-100 p-2 bg-white/60 group-hover:bg-teal-50/50 group-hover:ring-teal-100 transition">
           <div className="text-slate-500 text-xs">{primaryLabel}</div>
           <div className="text-sm font-bold text-slate-900">
-            {primaryValue}
+            {formatDisplayText(primaryValue, primaryValue)}
           </div>
         </div>
         <div className="rounded-xl ring-1 ring-slate-100 p-2 bg-white/60 group-hover:bg-teal-50/50 group-hover:ring-teal-100 transition">
           <div className="text-slate-500 text-xs">{secondaryLabel}</div>
           <div className="text-sm font-bold text-slate-900">
-            {secondaryValue}
+            {formatDisplayText(secondaryValue, secondaryValue)}
           </div>
         </div>
       </div>

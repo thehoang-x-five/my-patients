@@ -4,6 +4,11 @@ import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import Chip from "../ui/Chip.jsx";
+import {
+  formatDisplayText,
+  formatPaymentMethodLabel,
+  formatStatus,
+} from "../../utils/textFormatters.js";
 
 const STATUS_TONES = {
   da_thu: { tone: "emerald", dot: "emerald", label: "Đã thu" },
@@ -107,6 +112,7 @@ export default function PatientTransactions({ transactions = [], highlightItems 
           <tbody className="divide-y divide-slate-100">
             {sorted.map((t, i) => {
               const badge = STATUS_TONES[t.status] || STATUS_TONES.da_thu;
+              const statusLabel = badge.label || formatStatus(t.status, "—");
               const isHighlighted = highlightItems && i < 3;
               return (
                 <motion.tr
@@ -127,20 +133,25 @@ export default function PatientTransactions({ transactions = [], highlightItems 
                   <td className="px-4 py-2.5 text-slate-700 whitespace-nowrap">{formatDate(t.date)}</td>
                   <td className="px-4 py-2.5">
                     <Chip tone="slate" className="text-xs">
-                      {t.type === "kham_lam_sang" ? "Khám LS" :
-                       t.type === "can_lam_sang" ? "CLS" :
-                       t.type === "thuoc" ? "Thuốc" : t.type}
+                      {t.type === "kham_lam_sang"
+                        ? "Khám LS"
+                        : t.type === "can_lam_sang"
+                          ? "CLS"
+                          : t.type === "thuoc"
+                            ? "Thuốc"
+                            : formatDisplayText(t.type, t.type || "—")}
                     </Chip>
                   </td>
                   <td className="px-4 py-2.5 text-right font-bold text-slate-800 tabular-nums whitespace-nowrap">
                     {Number(t.amount).toLocaleString("vi-VN")}đ
                   </td>
                   <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">
-                    {PAYMENT_LABEL[t.method] || t.method}
+                    {PAYMENT_LABEL[t.method] ||
+                      formatPaymentMethodLabel(t.method, "—")}
                   </td>
                   <td className="px-4 py-2.5">
                     <Chip tone={badge.tone} dot={badge.dot} className="text-xs">
-                      {badge.label}
+                      {statusLabel}
                     </Chip>
                   </td>
                   <td className="px-4 py-2.5 text-slate-600 max-w-[200px] truncate">

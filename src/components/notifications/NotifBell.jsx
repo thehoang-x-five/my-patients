@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNotificationsStore } from "../stores/appStore";
 import { useNotifications } from "../../api/notifications.js";
+import { useUI } from "../../context/UIContext.jsx";
 
 function BellIcon({ className = "" }) {
   return (
@@ -30,19 +31,22 @@ function BellIcon({ className = "" }) {
   );
 }
 
-function getTypeLabel(type) {
-  if (type === "lich_hen") return "Lich hen";
-  if (type === "reminder") return "Nhac nho";
-  if (type === "result") return "Ket qua";
-  return "Thong bao";
+function getTypeLabel(type, lang) {
+  if (type === "lich_hen") return lang === "en" ? "Appointment" : "Lịch hẹn";
+  if (type === "reminder") return lang === "en" ? "Reminder" : "Nhắc nhở";
+  if (type === "result") return lang === "en" ? "Result" : "Kết quả";
+  if (type === "thanh_toan") return lang === "en" ? "Payment" : "Thanh toán";
+  return lang === "en" ? "Notification" : "Thông báo";
 }
 
 export default function NotifBell() {
+  const { lang } = useUI();
   const rootRef = useRef(null);
   const { data } = useNotifications({ params: { take: 5 } });
 
   const items = useMemo(() => {
     if (!data) return [];
+    if (Array.isArray(data.Items)) return data.Items;
     if (Array.isArray(data.items)) return data.items;
     if (Array.isArray(data.data)) return data.data;
     if (Array.isArray(data)) return data;
@@ -81,6 +85,23 @@ export default function NotifBell() {
     };
   }, [open, setOpen]);
 
+  const t =
+    lang === "en"
+      ? {
+          button: "Notifications",
+          title: "Recent notifications",
+          viewAll: "View all",
+          empty: "No notifications.",
+        }
+      : {
+          button: "Thông báo",
+          title: "Thông báo gần đây",
+          viewAll: "Xem tất cả",
+          empty: "Không có thông báo.",
+        };
+
+  const locale = lang === "en" ? "en-US" : "vi-VN";
+
   return (
     <div className="relative" ref={rootRef}>
       <motion.button
@@ -89,7 +110,7 @@ export default function NotifBell() {
         whileTap={{ scale: 0.96, y: 0 }}
         className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-sky-600 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-sky-50/40 hover:ring-sky-200"
         onClick={() => setOpen(!open)}
-        aria-label="Thong bao"
+        aria-label={t.button}
       >
         <BellIcon className="h-5 w-5" />
         {unread > 0 && (
@@ -111,20 +132,20 @@ export default function NotifBell() {
             <div className="flex items-center justify-between border-b border-sky-100 bg-sky-50/40 px-3 py-2">
               <span className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-700">
                 <BellIcon className="h-4 w-4 text-sky-500" />
-                Thong bao gan day
+                {t.title}
               </span>
               <a
                 href="/notifications"
                 className="text-[12px] text-sky-600 hover:text-sky-700"
               >
-                Xem tat ca
+                {t.viewAll}
               </a>
             </div>
 
             <div className="max-h-80 overflow-y-auto scrollbar-none">
               {items.length === 0 ? (
                 <div className="px-3 py-4 text-center text-sm text-slate-500">
-                  Khong co thong bao.
+                  {t.empty}
                 </div>
               ) : (
                 <ul className="flex flex-col gap-1 px-2 py-2">
@@ -153,13 +174,16 @@ export default function NotifBell() {
                             {item.title || item.message}
                           </p>
                           <p className="mt-0.5 text-[11px] text-slate-500">
-                            {getTypeLabel(item.type)}
+                            {getTypeLabel(item.type, lang)}
                             {" • "}
                             {item.createdAt
-                              ? new Date(item.createdAt).toLocaleTimeString("vi-VN", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
+                              ? new Date(item.createdAt).toLocaleTimeString(
+                                  locale,
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  }
+                                )
                               : ""}
                           </p>
                         </div>

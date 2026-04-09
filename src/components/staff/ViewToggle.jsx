@@ -1,19 +1,27 @@
-// src/components/staff/ViewToggle.jsx
-// Week 4 — Toggle Card ↔ Table view (admin only)
 import React from "react";
 import { motion } from "framer-motion";
+import { useUI } from "../../context/UIContext.jsx";
 
 export default function ViewToggle({ mode, onChange }) {
+  const { lang } = useUI();
   const options = [
-    { key: "card", icon: "▦", label: "Dạng ô" },
-    { key: "table", icon: "☰", label: "Dạng dòng" },
+    {
+      key: "card",
+      icon: "◫",
+      label: lang === "en" ? "Cards" : "Dạng ô",
+    },
+    {
+      key: "table",
+      icon: "☰",
+      label: lang === "en" ? "Rows" : "Dạng dòng",
+    },
   ];
 
   return (
     <div
-      className="relative inline-flex p-0.5 overflow-hidden rounded-xl ring-1 ring-teal-200/80 bg-white"
+      className="relative inline-flex overflow-hidden rounded-xl bg-white p-0.5 ring-1 ring-teal-200/80"
       role="radiogroup"
-      aria-label="Chế độ xem"
+      aria-label={lang === "en" ? "View mode" : "Chế độ xem"}
     >
       {options.map((opt) => {
         const active = mode === opt.key;

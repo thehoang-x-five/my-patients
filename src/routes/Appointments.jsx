@@ -568,12 +568,24 @@ export default function Appointments() {
             // ✅ Lưu thông tin follow-up vào localStorage để CreateDrawer đọc
             if (hasFollowupContext && followupContextData) {
               try {
+                const followupExamDate = String(followupContextData.examDate || "");
                 localStorage.setItem("appt-prefill", JSON.stringify({
                   patient: followupContextData.patientName,
                   code: followupContextData.patientId,
                   type: "follow_up",
                   doctor: followupContextData.doctorName,
                   date: panelDate || TODAY,
+                  dept: followupContextData.deptName || "",
+                  note: followupContextData.note || "",
+                  lastVisit: {
+                    patientName: followupContextData.patientName,
+                    patientCode: followupContextData.patientId,
+                    doctorName: followupContextData.doctorName,
+                    deptName: followupContextData.deptName || "",
+                    note: followupContextData.note || "",
+                    date: followupExamDate ? followupExamDate.slice(0, 10) : "",
+                    time: followupExamDate ? followupExamDate.slice(11, 16) : "",
+                  },
                 }));
                 console.log("[Appointments] Saved prefill to localStorage");
               } catch (err) {

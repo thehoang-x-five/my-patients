@@ -1,7 +1,8 @@
-// /src/components/notifications/NotificationsToolbar.jsx
 import React from "react";
 import { motion } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
+import { useUI } from "../../context/UIContext.jsx";
+
 export default function NotificationsToolbar({
   tab,
   setTab,
@@ -11,42 +12,68 @@ export default function NotificationsToolbar({
   filterBtnRef,
   hideTabs = false,
 }) {
+  const { lang } = useUI();
   const total = stats?.total ?? 0;
   const unread = stats?.unread ?? 0;
   const today = stats?.today ?? 0;
   const priority = stats?.priorityHigh ?? stats?.priority ?? 0;
 
+  const t =
+    lang === "en"
+      ? {
+          total: "Total",
+          unread: "Unread",
+          priority: "Priority",
+          today: "Today",
+          reset: "Reset filters",
+          filter: "Filters",
+          tabsLabel: "Select display mode",
+          all: "All",
+          unreadTab: "Unread",
+          todayTab: "Today",
+        }
+      : {
+          total: "Tổng",
+          unread: "Chưa đọc",
+          priority: "Ưu tiên",
+          today: "Hôm nay",
+          reset: "Làm mới bộ lọc",
+          filter: "Bộ lọc",
+          tabsLabel: "Chọn chế độ hiển thị",
+          all: "Tất cả",
+          unreadTab: "Chưa đọc",
+          todayTab: "Hôm nay",
+        };
+
   const tabs = [
-    { key: "all", label: "Tất cả" },
-    { key: "unread", label: "Chưa đọc" },
-    { key: "today", label: "Hôm nay" },
+    { key: "all", label: t.all },
+    { key: "unread", label: t.unreadTab },
+    { key: "today", label: t.todayTab },
   ];
 
   return (
     <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      {/* Left: stats chips */}
       <div className="flex flex-wrap items-center gap-1.5">
         <Chip dot="violet">
-          Tổng:&nbsp;<b>{total}</b>
+          {t.total}:&nbsp;<b>{total}</b>
         </Chip>
         <Chip dot="rose">
-          Chưa đọc:&nbsp;<b>{unread}</b>
+          {t.unread}:&nbsp;<b>{unread}</b>
         </Chip>
         <Chip dot="emerald">
-          Ưu tiên:&nbsp;<b>{priority}</b>
+          {t.priority}:&nbsp;<b>{priority}</b>
         </Chip>
         <Chip dot="sky">
-          Hôm nay:&nbsp;<b>{today}</b>
+          {t.today}:&nbsp;<b>{today}</b>
         </Chip>
       </div>
 
-      {/* Right: filter + tabs */}
       <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
         <button
           type="button"
           onClick={onResetFilters}
-          title="Làm mới bộ lọc"
-          className="inline-flex items-center justify-center rounded-2xl bg-white ring-1 ring-slate-200 px-3 py-1.5 text-[12px] text-slate-600 hover:ring-violet-400 hover:text-violet-700 transition"
+          title={t.reset}
+          className="inline-flex items-center justify-center rounded-2xl bg-white px-3 py-1.5 text-[12px] text-slate-600 ring-1 ring-slate-200 transition hover:text-violet-700 hover:ring-violet-400"
         >
           ⟲
         </button>
@@ -56,38 +83,33 @@ export default function NotificationsToolbar({
           type="button"
           onClick={onOpenFilter}
           data-popover-anchor="notif-filter"
-          className="
-            flex items-center gap-1.5 px-3 py-1.5 rounded-xl
-            bg-white ring-1 ring-violet-200 hover:ring-violet-400
-            text-[13px] shadow-sm
-          "
+          className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-[13px] shadow-sm ring-1 ring-violet-200 hover:ring-violet-400"
         >
           <span className="text-violet-600">🔍</span>
-          <span>Bộ lọc</span>
+          <span>{t.filter}</span>
         </button>
 
-        {/* Segmented tabs */}
         {!hideTabs && (
           <div
-            className="relative inline-flex p-0.5 overflow-hidden rounded-xl ring-1 ring-violet-200/70 bg-white"
+            className="relative inline-flex overflow-hidden rounded-xl bg-white p-0.5 ring-1 ring-violet-200/70"
             role="tablist"
-            aria-label="Chọn chế độ hiển thị"
+            aria-label={t.tabsLabel}
           >
-            {tabs.map((t) => {
-              const active = tab === t.key;
+            {tabs.map((item) => {
+              const active = tab === item.key;
               return (
                 <button
-                  key={t.key}
+                  key={item.key}
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  onClick={() => setTab(t.key)}
+                  onClick={() => setTab(item.key)}
                   className={`relative z-10 px-3 py-1.5 text-[13px] font-semibold transition-colors ${
                     active
                       ? "text-violet-700"
                       : "text-slate-700 hover:text-violet-700"
                   }`}
-                  title={t.label}
+                  title={item.label}
                 >
                   {active && (
                     <motion.span
@@ -96,7 +118,7 @@ export default function NotificationsToolbar({
                       transition={{ type: "spring", stiffness: 420, damping: 30 }}
                     />
                   )}
-                  <span className="relative">{t.label}</span>
+                  <span className="relative">{item.label}</span>
                 </button>
               );
             })}
@@ -106,5 +128,3 @@ export default function NotificationsToolbar({
     </header>
   );
 }
-
-

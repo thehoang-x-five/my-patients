@@ -22,50 +22,83 @@ export const STATUSES = {
 
 export const ACCOUNT_STATUSES = ["hoat_dong", "khong_hoat_dong", "da_xoa"];
 
-export const TODAY_STATUS_MAP = {
-  cho_tiep_nhan: "Chờ tiếp nhận",
-  cho_tiep_nhan_dv: "Chờ tiếp nhận (dịch vụ)",
-  cho_kham: "Chờ khám",
-  cho_kham_dv: "Chờ khám (dịch vụ)",
-  dang_kham: "Đang khám",
-  dang_kham_dv: "Đang khám (dịch vụ)",
-  cho_xu_ly: "Chờ xử lý",
-  cho_xu_ly_dv: "Chờ xử lý (dịch vụ)",
-  da_huy: "Đã hủy",
-  hoan_tat: "Hoàn thành",
+export const TODAY_STATUS_LABELS = {
+  cho_tiep_nhan: { vi: "Chờ tiếp nhận", en: "Waiting intake" },
+  cho_tiep_nhan_dv: { vi: "Chờ tiếp nhận (dịch vụ)", en: "Waiting intake (service)" },
+  cho_kham: { vi: "Chờ khám", en: "Waiting examination" },
+  cho_kham_dv: { vi: "Chờ khám (dịch vụ)", en: "Waiting examination (service)" },
+  dang_kham: { vi: "Đang khám", en: "In examination" },
+  dang_kham_dv: { vi: "Đang khám (dịch vụ)", en: "In examination (service)" },
+  cho_xu_ly: { vi: "Chờ xử lý", en: "Waiting processing" },
+  cho_xu_ly_dv: { vi: "Chờ xử lý (dịch vụ)", en: "Waiting processing (service)" },
+  da_huy: { vi: "Đã hủy", en: "Cancelled" },
+  huy: { vi: "Đã hủy", en: "Cancelled" },
+  hoan_tat: { vi: "Hoàn thành", en: "Completed" },
+  hoan_thanh: { vi: "Hoàn thành", en: "Completed" },
 };
+
+export const TODAY_STATUS_MAP = Object.fromEntries(
+  Object.entries(TODAY_STATUS_LABELS).map(([key, label]) => [key, label.vi])
+);
+
+const TODAY_STATUS_ALIASES = {
+  huy: "da_huy",
+  cancelled: "da_huy",
+  cancel: "da_huy",
+  hoan_thanh: "hoan_tat",
+  completed: "hoan_tat",
+};
+
+export function normalizeTodayStatusCode(codeOrLabel) {
+  if (!codeOrLabel) return "";
+  const low = String(codeOrLabel).trim().toLowerCase();
+  return TODAY_STATUS_ALIASES[low] || low;
+}
+
+export function getTodayStatusLabel(codeOrLabel, lang = "vi") {
+  if (!codeOrLabel) return "";
+  const low = normalizeTodayStatusCode(codeOrLabel);
+  const entry = TODAY_STATUS_LABELS[low];
+  if (!entry) return codeOrLabel;
+  return lang === "en" ? entry.en : entry.vi;
+}
 
 export function mapTodayStatusLabel(codeOrLabel) {
-  if (!codeOrLabel) return "";
-  const low = String(codeOrLabel).toLowerCase();
-  return TODAY_STATUS_MAP[low] || codeOrLabel;
+  return getTodayStatusLabel(codeOrLabel, "vi");
 }
 
-// Gender display map
-const GENDER_MAP = {
-  nam: "Nam",
-  nu: "Nữ",
-  nữ: "Nữ",
-  khac: "Khác",
-  other: "Khác",
-  male: "Nam",
-  female: "Nữ",
+const GENDER_LABELS = {
+  nam: { vi: "Nam", en: "Male" },
+  male: { vi: "Nam", en: "Male" },
+  nu: { vi: "Nữ", en: "Female" },
+  nữ: { vi: "Nữ", en: "Female" },
+  female: { vi: "Nữ", en: "Female" },
+  khac: { vi: "Khác", en: "Other" },
+  khác: { vi: "Khác", en: "Other" },
+  other: { vi: "Khác", en: "Other" },
 };
 
-export function mapGenderLabel(value) {
+export function getGenderLabel(value, lang = "vi") {
   if (!value && value !== 0) return "";
-  const t = String(value).trim().toLowerCase();
-  return GENDER_MAP[t] || (t ? t[0].toUpperCase() + t.slice(1) : "");
+  const key = String(value).trim().toLowerCase();
+  const entry = GENDER_LABELS[key];
+  if (!entry) {
+    return key ? key[0].toUpperCase() + key.slice(1) : "";
+  }
+  return lang === "en" ? entry.en : entry.vi;
 }
 
-// Account status labels
+export function mapGenderLabel(value) {
+  return getGenderLabel(value, "vi");
+}
+
 const ACCOUNT_STATUS_LABELS = {
-  hoat_dong: "Hoạt động",
-  khong_hoat_dong: "Không hoạt động",
-  da_xoa: "Đã xóa",
-  active: "Hoạt động",
-  inactive: "Không hoạt động",
-  deleted: "Đã xóa",
+  hoat_dong: { vi: "Hoạt động", en: "Active" },
+  khong_hoat_dong: { vi: "Không hoạt động", en: "Inactive" },
+  da_xoa: { vi: "Đã xóa", en: "Deleted" },
+  active: { vi: "Hoạt động", en: "Active" },
+  inactive: { vi: "Không hoạt động", en: "Inactive" },
+  deleted: { vi: "Đã xóa", en: "Deleted" },
 };
 
 // Chuẩn hóa mã trạng thái tài khoản về canonical code
@@ -81,7 +114,16 @@ function mapAccountStatusCode(codeOrLabel) {
 export function mapAccountStatusLabel(codeOrLabel) {
   if (!codeOrLabel) return "";
   const low = String(codeOrLabel).toLowerCase();
-  return ACCOUNT_STATUS_LABELS[low] || codeOrLabel;
+  const entry = ACCOUNT_STATUS_LABELS[low];
+  return entry?.vi || codeOrLabel;
+}
+
+export function getAccountStatusLabel(codeOrLabel, lang = "vi") {
+  if (!codeOrLabel) return "";
+  const low = String(codeOrLabel).trim().toLowerCase();
+  const entry = ACCOUNT_STATUS_LABELS[low];
+  if (!entry) return codeOrLabel;
+  return lang === "en" ? entry.en : entry.vi;
 }
 
 // Visit type map (history)
@@ -185,6 +227,7 @@ function normalizePatientFields(dto = {}) {
   const address = dto.DiaChi || dto.diaChi || "";
 
   const statusCode = dto.TrangThaiHomNay || dto.trangThaiHomNay || "";
+  const normalizedStatusCode = normalizeTodayStatusCode(statusCode);
   const statusDate = dto.NgayTrangThai || dto.ngayTrangThai || null;
 
   // Detail DTO có TrangThaiTaiKhoan, summary có thể không → default "hoat_dong"
@@ -235,12 +278,12 @@ function normalizePatientFields(dto = {}) {
     trangThaiTaiKhoan: accountStatus, // keep code for filters
     trangThaiTaiKhoanLabel: accountStatusLabel,
 
-    statusCode,
-    status: mapTodayStatusLabel(statusCode),
-    statusLabel: mapTodayStatusLabel(statusCode),
-    trang_thai_hom_nay: mapTodayStatusLabel(statusCode),
-    trang_thai_hom_nay_code: statusCode,
-    trangThaiHomNay: statusCode,
+    statusCode: normalizedStatusCode,
+    status: mapTodayStatusLabel(normalizedStatusCode),
+    statusLabel: mapTodayStatusLabel(normalizedStatusCode),
+    trang_thai_hom_nay: mapTodayStatusLabel(normalizedStatusCode),
+    trang_thai_hom_nay_code: normalizedStatusCode,
+    trangThaiHomNay: normalizedStatusCode,
     ngay_trang_thai: statusDate,
     statusDate,
   };

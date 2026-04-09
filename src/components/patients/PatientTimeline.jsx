@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import Chip from "../ui/Chip.jsx";
+import { formatStatus } from "../../utils/textFormatters.js";
 
 const EVENT_CONFIG = {
   kham_lam_sang: { label: "Khám lâm sàng", tone: "emerald", dot: "emerald" },
@@ -110,7 +111,8 @@ export default function PatientTimeline({ visits = [], highlightItems = false, p
 
         <div className="space-y-3">
           {filtered.map((event, idx) => {
-            const statusLabel = STATUS_LABEL[event.status] || event.status;
+            const statusLabel =
+              STATUS_LABEL[event.status] || formatStatus(event.status, "");
             const isHighlighted = highlightItems && idx < 3;
 
             return (

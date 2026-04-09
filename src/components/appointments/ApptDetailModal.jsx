@@ -102,7 +102,7 @@ export default function ApptDetailModal({
   return (
     <AnimatePresence>
       {open && (
-        <>
+        <React.Fragment key={`appt-detail-${appt.id || appt.code || appt.patientCode || "modal"}`}>
           <motion.div
             className="fixed inset-0 bg-black/40 backdrop-blur-[1px] z-40"
             initial={{ opacity: 0 }}
@@ -326,11 +326,12 @@ export default function ApptDetailModal({
               </div>
             </motion.section>
           </motion.div>
-        </>
+        </React.Fragment>
       )}
 
       {/* Confirm Modal */}
       <ConfirmModal
+        key="appt-detail-confirm-cancel"
         open={confirmCancel}
         onClose={() => setConfirmCancel(false)}
         onConfirm={() => doUpdate({ status: APPT_STATUS.DA_HUY })}

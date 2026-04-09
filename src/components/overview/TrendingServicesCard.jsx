@@ -51,7 +51,7 @@ export default function TrendingServicesCard({
         </span>
       </div>
 
-      <div className={`flex flex-col gap-1.5 p-1 ${maxBodyClass}`}>
+      <div className={`flex flex-col gap-2 p-1 ${maxBodyClass}`}>
         {loading ? (
           <div className="flex items-center justify-center py-8 text-slate-400 text-sm gap-2">
             <span className="w-4 h-4 border-2 border-violet-300 border-t-transparent rounded-full animate-spin" />
@@ -76,19 +76,19 @@ export default function TrendingServicesCard({
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.04 }}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2.5 py-1"
               >
                 {/* Service name */}
-                <div className="w-[40%] min-w-0 flex items-center gap-1.5" title={r.name}>
-                  <span className="text-[12px] shrink-0">{typeIcon}</span>
-                  <span className="truncate text-[12px] font-medium text-slate-700">
+                <div className="w-[40%] min-w-0 flex items-center gap-2" title={r.name}>
+                  <span className="text-[13px] shrink-0">{typeIcon}</span>
+                  <span className="truncate text-[13px] font-medium leading-5 text-slate-700">
                     {r.name}
                   </span>
                 </div>
 
                 {/* Bar */}
                 <div className="flex-1 min-w-0">
-                  <div className={`h-5 rounded-md ${tier.light} overflow-hidden`}>
+                  <div className={`h-6 rounded-md ${tier.light} overflow-hidden`}>
                     <motion.div
                       className={`h-full rounded-md ${tier.bg}`}
                       initial={{ width: 0 }}
@@ -99,7 +99,7 @@ export default function TrendingServicesCard({
                 </div>
 
                 {/* Count */}
-                <span className={`text-[12px] font-bold w-8 text-right ${tier.text}`}>
+                <span className={`text-[13px] font-bold w-9 text-right ${tier.text}`}>
                   {r.count}
                 </span>
               </motion.div>

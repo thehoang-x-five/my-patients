@@ -8,20 +8,8 @@ import React, {
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
-
-const STATUS_SEG = [
-  { code: "all", label: "Tất cả", dot: "bg-slate-400" },
-  { code: "online", label: "Online", dot: "bg-emerald-500" },
-  { code: "pause", label: "Pause", dot: "bg-amber-500" },
-  { code: "offline", label: "Offline", dot: "bg-slate-500" },
-];
-
-const NURSE_TYPES = [
-  { code: "all", label: "Tất cả" },
-  { code: "hanh_chinh", label: "Hành chính" },
-  { code: "can_lam_sang", label: "Cận lâm sàng" },
-  { code: "lam_sang", label: "Lâm sàng" },
-];
+import { useUI } from "../../context/UIContext.jsx";
+import { formatDisplayText } from "../../utils/textFormatters.js";
 
 function FilterPill({ active = false, onClick, children, className = "" }) {
   return (
@@ -59,6 +47,18 @@ function StatusPill({ active = false, dot, onClick, children }) {
   );
 }
 
+function getRoleLabel(key, lang, fallback = "") {
+  const dict = {
+    all: { vi: "Tất cả", en: "All" },
+    doctor: { vi: "Bác sĩ", en: "Doctors" },
+    nurse: { vi: "Y tá", en: "Nurses" },
+    technician: { vi: "KTV", en: "Technicians" },
+    adminRole: { vi: "Admin", en: "Admin" },
+  };
+
+  return dict[key]?.[lang] || fallback || key;
+}
+
 export default function StaffFilterPopover({
   open,
   onClose,
@@ -71,9 +71,73 @@ export default function StaffFilterPopover({
   departments = [],
   onReset,
 }) {
+  const { lang } = useUI();
   const boxRef = useRef(null);
   const kwRef = useRef(null);
   const justOpenedRef = useRef(false);
+
+  const t =
+    lang === "en"
+      ? {
+          dialog: "Staff filters",
+          title: "Staff filters",
+          keyword: "Keyword",
+          keywordPlaceholder: "Name / code / department / title...",
+          clearSearch: "Clear search",
+          role: "Role",
+          nurseType: "Nurse type",
+          dept: "Department / room",
+          status: "Work status",
+          allDepartments: "All departments",
+          statusAll: "All",
+          statusOnline: "Online",
+          statusPause: "Paused",
+          statusOffline: "Offline",
+          nurseTypeAll: "All",
+          nurseTypeAdministrative: "Administrative",
+          nurseTypeCls: "Paraclinical",
+          nurseTypeClinical: "Clinical",
+        }
+      : {
+          dialog: "Bộ lọc nhân sự",
+          title: "Bộ lọc nhân sự",
+          keyword: "Từ khóa",
+          keywordPlaceholder: "Tên / mã / khoa / chức vụ...",
+          clearSearch: "Xóa tìm kiếm",
+          role: "Vai trò",
+          nurseType: "Loại y tá",
+          dept: "Khoa / phòng",
+          status: "Trạng thái làm việc",
+          allDepartments: "Tất cả khoa",
+          statusAll: "Tất cả",
+          statusOnline: "Online",
+          statusPause: "Tạm nghỉ",
+          statusOffline: "Offline",
+          nurseTypeAll: "Tất cả",
+          nurseTypeAdministrative: "Hành chính",
+          nurseTypeCls: "Cận lâm sàng",
+          nurseTypeClinical: "Lâm sàng",
+        };
+
+  const statusSegments = useMemo(
+    () => [
+      { code: "all", label: t.statusAll, dot: "bg-slate-400" },
+      { code: "online", label: t.statusOnline, dot: "bg-emerald-500" },
+      { code: "pause", label: t.statusPause, dot: "bg-amber-500" },
+      { code: "offline", label: t.statusOffline, dot: "bg-slate-500" },
+    ],
+    [t]
+  );
+
+  const nurseTypes = useMemo(
+    () => [
+      { code: "all", label: t.nurseTypeAll },
+      { code: "hanh_chinh", label: t.nurseTypeAdministrative },
+      { code: "can_lam_sang", label: t.nurseTypeCls },
+      { code: "lam_sang", label: t.nurseTypeClinical },
+    ],
+    [t]
+  );
 
   const anchorNode =
     anchorEl && anchorEl.current ? anchorEl.current : anchorEl || null;
@@ -104,13 +168,14 @@ export default function StaffFilterPopover({
           d.ten_phong ||
           d.label ||
           "";
+
         if (!value || !label) return null;
-        return { value, label };
+        return { value, label: formatDisplayText(label, label) };
       })
       .filter(Boolean);
 
-    return [{ value: "", label: "Tất cả khoa" }, ...mapped];
-  }, [departments]);
+    return [{ value: "", label: t.allDepartments }, ...mapped];
+  }, [departments, t.allDepartments]);
 
   const keyword = values?.keyword ?? "";
   const status = values?.status ?? "all";
@@ -153,7 +218,7 @@ export default function StaffFilterPopover({
     };
 
     document.addEventListener("keydown", onKey, true);
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       justOpenedRef.current = false;
       document.addEventListener("click", onClickOutside, true);
     }, 0);
@@ -161,7 +226,7 @@ export default function StaffFilterPopover({
     return () => {
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("click", onClickOutside, true);
-      clearTimeout(t);
+      clearTimeout(timer);
     };
   }, [open, onClose, anchorNode]);
 
@@ -170,20 +235,20 @@ export default function StaffFilterPopover({
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const preferredWidth = role === "nurse" ? 372 : 340;
-    const W = Math.min(preferredWidth, vw - 24);
+    const width = Math.min(preferredWidth, vw - 24);
     const el =
       anchorNode && anchorNode.getBoundingClientRect ? anchorNode : null;
-    const r = el ? el.getBoundingClientRect() : null;
+    const rect = el ? el.getBoundingClientRect() : null;
 
-    let left = Math.min(Math.max(r ? r.right - W : 16, 12), vw - W - 12);
-    let top = (r ? r.bottom : 64) + gap;
+    let left = Math.min(Math.max(rect ? rect.right - width : 16, 12), vw - width - 12);
+    let top = (rect ? rect.bottom : 64) + gap;
 
     const estH = role === "nurse" ? 440 : 380;
-    if (top + estH > vh - 12 && r) {
-      top = Math.max(12, r.top - gap - estH);
+    if (top + estH > vh - 12 && rect) {
+      top = Math.max(12, rect.top - gap - estH);
     }
 
-    setWidthPx(W);
+    setWidthPx(width);
     setPos({ top, left });
     setMaxH(Math.min(vh - top - 12, role === "nurse" ? 520 : 470));
   }
@@ -230,7 +295,7 @@ export default function StaffFilterPopover({
             ref={boxRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Bộ lọc nhân sự"
+            aria-label={t.dialog}
             className="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-emerald-200/70"
             style={{ maxHeight: maxH }}
           >
@@ -239,19 +304,19 @@ export default function StaffFilterPopover({
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-lg bg-emerald-100 ring-1 ring-emerald-200">
                   🧩
                 </span>
-                Bộ lọc nhân sự
+                {t.title}
               </div>
             </div>
 
             <div className="grid gap-2 overflow-y-auto p-2.5 text-[13px] text-slate-700">
               <label className="text-[13px]">
-                Từ khóa
+                {t.keyword}
                 <div className="relative mt-1">
                   <input
                     ref={kwRef}
                     value={keyword}
                     onChange={(e) => apply({ keyword: e.target.value || "" })}
-                    placeholder="Tên / mã / khoa / chức vụ..."
+                    placeholder={t.keywordPlaceholder}
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pl-9 text-[13px] shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-400/30"
                   />
                   <span className="absolute left-3 top-2.5 text-emerald-600">
@@ -260,7 +325,7 @@ export default function StaffFilterPopover({
                   {keyword && (
                     <button
                       type="button"
-                      aria-label="Xóa tìm kiếm"
+                      aria-label={t.clearSearch}
                       onClick={() => apply({ keyword: "" })}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                     >
@@ -272,7 +337,7 @@ export default function StaffFilterPopover({
 
               {roleOptions.length > 0 && (
                 <div className="text-[13px]">
-                  Vai trò
+                  {t.role}
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {roleOptions.map((item) => (
                       <FilterPill
@@ -280,7 +345,7 @@ export default function StaffFilterPopover({
                         active={role === item.key}
                         onClick={() => applyRole(item.key)}
                       >
-                        {item.label}
+                        {getRoleLabel(item.key, lang, item.label)}
                       </FilterPill>
                     ))}
                   </div>
@@ -289,9 +354,9 @@ export default function StaffFilterPopover({
 
               {role === "nurse" && (
                 <div className="text-[13px]">
-                  Loại y tá
+                  {t.nurseType}
                   <div className="mt-1 flex flex-wrap gap-1.5">
-                    {NURSE_TYPES.map((item) => (
+                    {nurseTypes.map((item) => (
                       <FilterPill
                         key={item.code}
                         active={nurseType === item.code}
@@ -305,7 +370,7 @@ export default function StaffFilterPopover({
               )}
 
               <div className="text-[13px]">
-                Khoa / phòng
+                {t.dept}
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {deptList.map((item) => (
                     <FilterPill
@@ -320,9 +385,9 @@ export default function StaffFilterPopover({
               </div>
 
               <div className="text-[13px]">
-                Trạng thái làm việc
+                {t.status}
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {STATUS_SEG.map((item) => (
+                  {statusSegments.map((item) => (
                     <StatusPill
                       key={item.code}
                       active={status === item.code}

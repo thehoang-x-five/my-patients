@@ -1,230 +1,220 @@
-// src/utils/permissions.js
-// Ma trận phân quyền 7 tầng — Week 4 RBAC upgrade
-// Tầng 1: Menu Visibility (TAB_VISIBILITY)
-// Tầng 2: Route Guard (ProtectedRoute)
-// Tầng 3: Page-level permission
-// Tầng 4: Component-level permission
-// Tầng 5: Action-level permission (canCreate*, canEdit*, canDelete*)
-// Tầng 6-7: Data scope (BE xử lý, FE hiện hint)
-
-import { VAI_TRO, LOAI_Y_TA } from '../constants/enums.js';
-
-// ==================== ROLE GETTERS ====================
+import { VAI_TRO, LOAI_Y_TA } from "../constants/enums.js";
+import { getCurrentLanguage, pickLocalizedLabel } from "./i18n.js";
+import { formatDisplayText, normalizeEnumKey } from "./textFormatters.js";
 
 export const ROLES = VAI_TRO;
 export const NURSE_TYPES = LOAI_Y_TA;
 
-/** Lấy vai trò từ user object — tương thích cả model cũ (ChucVu) lẫn mới (VaiTro) */
-export const getUserRole = (user) => {
-  const r = user?.VaiTro || user?.vaiTro || user?.vai_tro
-         || user?.ChucVu || user?.chucVu || user?.role || "";
-  return r.toString().toLowerCase().trim();
-};
+export function getUserRole(user) {
+  const role =
+    user?.VaiTro ||
+    user?.vaiTro ||
+    user?.vai_tro ||
+    user?.ChucVu ||
+    user?.chucVu ||
+    user?.role ||
+    "";
+  return String(role).toLowerCase().trim();
+}
 
-/** Lấy loại y tá — tương thích cả snake_case JWT claim lẫn camelCase store */
-export const getNurseType = (user) => {
-  const t = user?.LoaiYTa || user?.loaiYTa || user?.loai_y_ta
-         || user?.nurseType || "";
-  return t.toString().toLowerCase().replace(/_/g, "").trim();
-};
+export function getNurseType(user) {
+  const nurseType =
+    user?.LoaiYTa ||
+    user?.loaiYTa ||
+    user?.loai_y_ta ||
+    user?.nurseType ||
+    "";
+  return normalizeEnumKey(nurseType).replace(/_/g, "");
+}
 
-// ==================== ROLE CHECKS ====================
+export function isAdmin(user) {
+  const role = getUserRole(user);
+  return role === "admin" || role === "quan_tri_vien";
+}
 
-export const isAdmin = (user) => {
-  const r = getUserRole(user);
-  return r === "admin" || r === "quan_tri_vien";
-};
+export function isDoctor(user) {
+  const role = getUserRole(user);
+  return role === "bac_si" || role === "doctor";
+}
 
-export const isDoctor = (user) => {
-  const r = getUserRole(user);
-  return r === "bac_si" || r === "doctor";
-};
+export function isNurse(user) {
+  const role = getUserRole(user);
+  return role === "y_ta" || role === "nurse";
+}
 
-export const isNurse = (user) => {
-  const r = getUserRole(user);
-  return r === "y_ta" || r === "nurse";
-};
+export function isReceptionNurse(user) {
+  const nurseType = getNurseType(user);
+  return isNurse(user) && (nurseType === "hanhchinh" || nurseType === "hc");
+}
 
-export const isReceptionNurse = (user) => {
-  const t = getNurseType(user);
-  return isNurse(user) && (t === "hanhchinh" || t === "hc");
-};
+export function isClinicalNurse(user) {
+  const nurseType = getNurseType(user);
+  return (
+    isNurse(user) &&
+    (nurseType === "phongkham" ||
+      nurseType === "lamsang" ||
+      nurseType === "pk" ||
+      nurseType === "ls")
+  );
+}
 
-export const isClinicalNurse = (user) => {
-  const t = getNurseType(user);
-  return isNurse(user) && (t === "phongkham" || t === "lamsang" || t === "pk" || t === "ls");
-};
+export function isClsNurse(user) {
+  const nurseType = getNurseType(user);
+  return isNurse(user) && (nurseType === "canlamsang" || nurseType === "cls");
+}
 
-export const isClsNurse = (user) => {
-  const t = getNurseType(user);
-  return isNurse(user) && (t === "canlamsang" || t === "cls");
-};
-
-export const isTechnician = (user) => {
-  const r = getUserRole(user);
-  return r === "ky_thuat_vien" || r === "kythuatvien" || r === "ktv" || r === "technician";
-};
-
-// ==================== TẦNG 1: TAB / MENU VISIBILITY ====================
-// Quy tắc theo prompt.txt Section II — ma trận mới
+export function isTechnician(user) {
+  const role = getUserRole(user);
+  return (
+    role === "ky_thuat_vien" ||
+    role === "kythuatvien" ||
+    role === "ktv" ||
+    role === "technician"
+  );
+}
 
 export const TAB_VISIBILITY = {
-  overview:       () => true,                                                       // Tất cả
-  appointments:   (u) => isReceptionNurse(u) || isAdmin(u),                         // Y tá HC + Admin
-  patients:       () => true,                                                       // Tất cả
-  examination:    () => true,                                                       // Tất cả
-  departments:    () => true,                                                       // Tất cả
-  staff:          () => true,                                                       // Tất cả
-  adminUsers:     (u) => isAdmin(u),                                                // Chỉ admin
-  // userManagement: ❌ HỦY — gộp vào staff page (admin toggle Card↔Table)
-  prescriptions:  () => true,                                                       // Tất cả
-  history:        () => true,                                                       // Tất cả
-  notifications:  () => true,                                                       // Tất cả
-  reports:        (u) => isAdmin(u) || isDoctor(u) || isReceptionNurse(u),          // Admin + Bác sĩ + Y tá HC
-  settings:       () => true,                                                       // Tất cả
+  overview: () => true,
+  appointments: (user) => isReceptionNurse(user) || isAdmin(user),
+  patients: () => true,
+  examination: () => true,
+  departments: () => true,
+  staff: () => true,
+  adminUsers: (user) => isAdmin(user),
+  prescriptions: () => true,
+  history: () => true,
+  notifications: () => true,
+  reports: (user) =>
+    isAdmin(user) || isDoctor(user) || isReceptionNurse(user),
+  settings: () => true,
 };
 
-// ==================== TẦNG 5: ACTION-LEVEL PERMISSIONS ====================
+export const canCreateAppointment = (user) => isReceptionNurse(user);
+export const canEditAppointment = (user) => isReceptionNurse(user);
+export const canViewAppointment = (user) =>
+  isReceptionNurse(user) || isAdmin(user);
 
-// -- Lịch hẹn --
-export const canCreateAppointment = (u) => isReceptionNurse(u);
-export const canEditAppointment   = (u) => isReceptionNurse(u);
-export const canViewAppointment   = (u) => isReceptionNurse(u) || isAdmin(u);
+export const canCreatePatient = (user) => isReceptionNurse(user);
+export const canEditPatient = (user) => isReceptionNurse(user);
 
-// -- Bệnh nhân --
-// ✅ Admin KHÔNG tạo/sửa BN — chỉ YTHC thao tác nghiệp vụ
-export const canCreatePatient = (u) => isReceptionNurse(u);
-export const canEditPatient   = (u) => isReceptionNurse(u);
+export const canManageClinical = (user) =>
+  isDoctor(user) || isClinicalNurse(user);
+export const canManageCls = (user) => isTechnician(user) || isClsNurse(user);
+export const canCallPatient = (user) =>
+  canManageClinical(user) || canManageCls(user);
+export const canCancelClinicalVisit = (user) =>
+  isDoctor(user) || isClinicalNurse(user);
+export const canCancelClsOrder = (user) =>
+  isDoctor(user) || isClinicalNurse(user);
+export const canEnterExamData = (user) =>
+  isDoctor(user) || isClinicalNurse(user);
+export const canEnterClsResult = (user) =>
+  isClsNurse(user) || isTechnician(user);
 
-// -- Khám bệnh --
-export const canManageClinical = (u) => isDoctor(u) || isClinicalNurse(u);
-export const canManageCls      = (u) => isTechnician(u) || isClsNurse(u);
-// ✅ Chỉ nhân viên lâm sàng/CLS mới gọi BN — Admin/YTHC chỉ giám sát
-export const canCallPatient    = (u) => canManageClinical(u) || canManageCls(u);
-export const canCancelClinicalVisit = (u) => isDoctor(u) || isClinicalNurse(u);
-export const canCancelClsOrder = (u) => isDoctor(u) || isClinicalNurse(u);
+export const canEditDepartment = (user) => isAdmin(user);
 
-// ✅ Y tá LS được nhập liệu hỗ trợ BS (chẩn đoán, xuất CLS, hoàn tất)
-export const canEnterExamData  = (u) => isDoctor(u) || isClinicalNurse(u);
-// ✅ Y tá CLS / KTV nhập kết quả CLS
-export const canEnterClsResult = (u) => isClsNurse(u) || isTechnician(u);
+export const canManageStaff = (user) => isAdmin(user);
+export const canViewStaffAuth = (user) => isAdmin(user);
+export const canToggleStaffView = (user) => isAdmin(user);
+export const canLockUnlockStaff = (user) => isAdmin(user);
+export const canResetStaffPassword = (user) => isAdmin(user);
 
-// -- Khoa phòng --
-export const canEditDepartment = (u) => isAdmin(u);
+export const canPrescribe = (user) => isDoctor(user);
+export const canDispenseMedicine = (user) =>
+  isReceptionNurse(user) || isAdmin(user);
+export const canCancelPrescription = (user) =>
+  isAdmin(user) || isReceptionNurse(user) || isDoctor(user);
+export const canEditStock = (user) =>
+  isReceptionNurse(user) || isAdmin(user);
 
-// -- Nhân sự / Staff page --
-export const canManageStaff = (u) => isAdmin(u);
-export const canViewStaffAuth = (u) => isAdmin(u);           // Thấy auth fields (username, vai trò, trạng thái TK)
-export const canToggleStaffView = (u) => isAdmin(u);         // Toggle Card ↔ Table view
-export const canLockUnlockStaff = (u) => isAdmin(u);         // Khóa/Mở khóa tài khoản
-export const canResetStaffPassword = (u) => isAdmin(u);      // Reset mật khẩu
+export const canViewReports = (user) =>
+  isAdmin(user) || isDoctor(user) || isReceptionNurse(user);
+export const canViewRevenueReport = (user) =>
+  isAdmin(user) || isDoctor(user);
+export const canViewVisitReport = (user) => canViewReports(user);
+export const canViewStaffReport = (user) => isAdmin(user);
 
-// -- Đơn thuốc --
-export const canPrescribe = (u) => isDoctor(u);
-export const canDispenseMedicine = (u) => isReceptionNurse(u) || isAdmin(u);
-// ✅ Hủy đơn: Admin + YTHC (phát thuốc) + BS
-export const canCancelPrescription = (u) =>
-  isAdmin(u) || isReceptionNurse(u) || isDoctor(u);
-// ✅ Quản lý kho: Admin + YTHC
-export const canEditStock = (u) => isReceptionNurse(u) || isAdmin(u);
+export const canManageReception = (user) => isReceptionNurse(user);
+export const canManageNotifications = (user) => isAdmin(user);
 
-// -- Báo cáo --
-// ✅ Y tá hành chính được xem báo cáo y khoa, nhưng không xem doanh thu
-export const canViewReports      = (u) => isAdmin(u) || isDoctor(u) || isReceptionNurse(u);
-export const canViewRevenueReport = (u) => isAdmin(u) || isDoctor(u);
-export const canViewVisitReport   = (u) => canViewReports(u);
-export const canViewStaffReport   = (u) => isAdmin(u);
-
-// -- Tiếp nhận (composite) --
-export const canManageReception = (u) => isReceptionNurse(u);
-
-// -- Thông báo --
-export const canManageNotifications = (u) => isAdmin(u);
-
-// ==================== COMPONENT HELPERS ====================
-
-/** Kiểm tra user có quyền read-only trên module không */
-export const isReadOnly = (u, module) => {
+export function isReadOnly(user, module) {
   switch (module) {
-    case 'appointments':
-      return !isReceptionNurse(u); // ✅ Chỉ YTHC thao tác — Admin chỉ xem
-    case 'patients':
-      return !canEditPatient(u); // Chỉ YTHC sửa
-    case 'departments':
-      return !isAdmin(u);
-    case 'staff':
-      return !isAdmin(u);
-    case 'prescriptions':
-      // Admin: quản trị thuốc/kho. BS: kê đơn. YTHC: phát thuốc + quản kho. Còn lại: read-only
-      return !isAdmin(u) && !isDoctor(u) && !isReceptionNurse(u);
+    case "appointments":
+      return !isReceptionNurse(user);
+    case "patients":
+      return !canEditPatient(user);
+    case "departments":
+      return !isAdmin(user);
+    case "staff":
+      return !isAdmin(user);
+    case "prescriptions":
+      return !isAdmin(user) && !isDoctor(user) && !isReceptionNurse(user);
     default:
       return false;
   }
-};
+}
 
-/** User có global data scope không? (Admin + Y tá HC = toàn phòng khám) */
-export const hasGlobalScope = (u) => isAdmin(u) || isReceptionNurse(u);
+export const hasGlobalScope = (user) =>
+  isAdmin(user) || isReceptionNurse(user);
 
 const DEPARTMENT_LABELS = {
-  KHOA_XN: "Khoa xét nghiệm",
-  KHOA_NOI: "Khoa nội",
-  KHOA_NGOAI: "Khoa ngoại",
-  KHOA_TM: "Khoa tim mạch",
-  KHOA_NHI: "Khoa nhi",
-  KHOA_SAN: "Khoa sản",
-  KHOA_MAT: "Khoa mắt",
-  KHOA_TMH: "Khoa tai mũi họng",
-  KHOA_RHM: "Khoa răng hàm mặt",
-  KHOA_DL: "Khoa da liễu",
-  KHOA_CLS: "Khoa cận lâm sàng",
-  XN: "Khoa xét nghiệm",
-  CLS: "Khoa cận lâm sàng",
+  khoa_xn: { vi: "Khoa xét nghiệm", en: "Laboratory department" },
+  khoa_tq: { vi: "Khoa tổng quát", en: "General department" },
+  khoa_noi: { vi: "Khoa nội", en: "Internal medicine department" },
+  khoa_ngoai: { vi: "Khoa ngoại", en: "Surgery department" },
+  khoa_tm: { vi: "Khoa tim mạch", en: "Cardiology department" },
+  khoa_nhi: { vi: "Khoa nhi", en: "Pediatrics department" },
+  khoa_san: { vi: "Khoa sản", en: "Obstetrics department" },
+  khoa_mat: { vi: "Khoa mắt", en: "Ophthalmology department" },
+  khoa_tmh: { vi: "Khoa tai mũi họng", en: "ENT department" },
+  khoa_rhm: { vi: "Khoa răng hàm mặt", en: "Dental department" },
+  khoa_dl: { vi: "Khoa da liễu", en: "Dermatology department" },
+  khoa_cls: { vi: "Khoa cận lâm sàng", en: "Paraclinical department" },
+  khoa_cdha: { vi: "Khoa chẩn đoán hình ảnh", en: "Imaging department" },
+  khoa_duoc: { vi: "Khoa dược", en: "Pharmacy department" },
+  tq: { vi: "Khoa tổng quát", en: "General department" },
+  xn: { vi: "Khoa xét nghiệm", en: "Laboratory department" },
+  cls: { vi: "Khoa cận lâm sàng", en: "Paraclinical department" },
+  cdha: { vi: "Khoa chẩn đoán hình ảnh", en: "Imaging department" },
+  duoc: { vi: "Khoa dược", en: "Pharmacy department" },
 };
 
-export const formatDepartmentLabel = (value) => {
+export function formatDepartmentLabel(
+  value,
+  lang = getCurrentLanguage()
+) {
   if (!value) return null;
+
   const raw = String(value).trim();
   if (!raw) return null;
 
-  if (/\s/.test(raw) && /[a-zA-ZÀ-ỹ]/.test(raw)) {
-    return raw;
-  }
-
-  const normalized = raw
-    .replace(/-/g, "_")
-    .replace(/\s+/g, "_")
-    .toUpperCase();
+  const normalized = normalizeEnumKey(raw);
 
   if (DEPARTMENT_LABELS[normalized]) {
-    return DEPARTMENT_LABELS[normalized];
+    return pickLocalizedLabel(DEPARTMENT_LABELS[normalized], lang);
   }
 
-  const compact = normalized.replace(/^KHOA_/, "");
+  const compact = normalized.replace(/^khoa_/, "");
   if (DEPARTMENT_LABELS[compact]) {
-    return DEPARTMENT_LABELS[compact];
+    return pickLocalizedLabel(DEPARTMENT_LABELS[compact], lang);
   }
 
-  const humanized = normalized
-    .replace(/^KHOA_/, "")
-    .split("_")
-    .filter(Boolean)
-    .map((part) => {
-      const lower = part.toLowerCase();
-      if (lower === "xn") return "xét nghiệm";
-      if (lower === "cls") return "cận lâm sàng";
-      if (lower === "tmh") return "tai mũi họng";
-      if (lower === "rhm") return "răng hàm mặt";
-      if (lower === "dl") return "da liễu";
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
-    .join(" ");
+  return formatDisplayText(raw, raw, lang);
+}
 
-  return humanized ? `Khoa ${humanized}` : raw;
-};
+export function getScopeLabel(user) {
+  if (hasGlobalScope(user)) return null;
 
-/** Lấy tên scope hiển thị cho user */
-export const getScopeLabel = (u) => {
-  if (hasGlobalScope(u)) return null; // Không cần badge
-  const khoa = u?.TenKhoa || u?.tenKhoa || u?.MaKhoa || u?.maKhoa || null;
-  return khoa ? `Khoa: ${khoa}` : 'Giới hạn theo phân quyền';
-};
+  const lang = getCurrentLanguage();
+  const department =
+    user?.TenKhoa || user?.tenKhoa || user?.MaKhoa || user?.maKhoa || null;
+
+  if (!department) {
+    return lang === "en"
+      ? "Restricted by permission scope"
+      : "Giới hạn theo phân quyền";
+  }
+
+  const label = formatDepartmentLabel(department, lang);
+  return lang === "en" ? `Department: ${label}` : `Khoa: ${label}`;
+}

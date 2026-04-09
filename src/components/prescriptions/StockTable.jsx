@@ -2,6 +2,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
+import { formatStatus } from "../../utils/textFormatters.js";
 
 const DEFAULT_NEAR_EXPIRY_DAYS = 30;
 const LOW_STOCK_QTY = 10;

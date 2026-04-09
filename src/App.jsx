@@ -16,8 +16,10 @@ import {
 import { useAuthStore } from "./components/stores/appStore.js";
 import { queryClient } from "./components/lib/queryClient.js";
 import { initStaffRealtime } from "./api/realtime.js";
+import { useUI } from "./context/UIContext.jsx";
 
 export default function App() {
+  const { lang } = useUI();
   const { LoaiNguoiNhan, MaNguoiNhan, TenNguoiNhan, VaiTro } =
   inferRecipientFromToken() || {};
 
@@ -156,7 +158,7 @@ export default function App() {
         <main className="overflow-auto scrollbar-none">
           <ErrorBoundary>
             <AnimatePresence mode="wait">
-              <Outlet key={location.pathname} />
+              <Outlet key={`${location.pathname}:${lang}`} />
             </AnimatePresence>
           </ErrorBoundary>
         </main>

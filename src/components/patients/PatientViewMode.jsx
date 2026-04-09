@@ -5,6 +5,7 @@ import Chip from "../ui/Chip.jsx";
 import { ANIMATION_CONFIG, StatusPill } from "./Shared.jsx";
 import { mapTodayStatusLabel, mapGenderLabel, mapVisitTypeLabel } from "../../api/patients";
 import { useMedicalHistory } from "../../api/history.js";
+import { formatStatus } from "../../utils/textFormatters.js";
 
 // ===== NEW TABS =====
 import PatientTimeline from "./PatientTimeline.jsx";
@@ -227,7 +228,10 @@ export default function PatientViewMode({
                       const dateText = t.date || t.Date || t.ngay || t.Ngay || "";
                       const itemText = t.item || t.Item || t.noiDung || t.NoiDung || "";
                       const amountVal = t.amount || t.Amount || t.soTien || t.SoTien || 0;
-                      const statusText = t.statusLabel || t.status || t.Status || t.trangThai || t.TrangThai || "";
+                      const statusText = formatStatus(
+                        t.statusLabel || t.status || t.Status || t.trangThai || t.TrangThai || "",
+                        "—"
+                      );
                       return (
                         <motion.div key={`${t.ref || t.Ref || i}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                           className="rounded-xl p-3 bg-cyan-50/50 ring-1 ring-cyan-100/50 hover:shadow-sm transition">

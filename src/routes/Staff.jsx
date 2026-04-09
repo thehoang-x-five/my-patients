@@ -30,6 +30,7 @@ import PromptModal from "../components/ui/PromptModal.jsx";
 import useMediaQuery from "../hooks/useMediaQuery.js";
 import useViewportVH from "../hooks/useViewportVH.js";
 import { useAuthStore } from "../components/stores/appStore.js";
+import { useUI } from "../context/UIContext.jsx";
 
 import {
   useStaff,
@@ -70,6 +71,14 @@ export default function Staff() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const userIsAdmin = checkIsAdmin(user);
+  const { lang } = useUI();
+  const staffUi = useMemo(
+    () => ({
+      addStaff: lang === "en" ? "Add staff" : "Thêm nhân viên",
+      pageTitle: lang === "en" ? "Staff" : "Nhân sự",
+    }),
+    [lang]
+  );
 
   // ====== VIEW MODE (Card / Table) — chỉ admin toggle ======
   const [viewMode, setViewMode] = useState(() =>
@@ -267,6 +276,26 @@ export default function Staff() {
   }, [depsData]);
   const roomCatalog = roomCatalogRes?.items || [];
 
+  const localizedRoleTabs = useMemo(
+    () =>
+      userIsAdmin
+        ? [
+            { key: "all", label: lang === "en" ? "All" : "Tất cả" },
+            { key: "doctor", label: lang === "en" ? "Doctors" : "Bác sĩ" },
+            { key: "nurse", label: lang === "en" ? "Nurses" : "Y tá" },
+            {
+              key: "technician",
+              label: lang === "en" ? "Technicians" : "KTV",
+            },
+            { key: "adminRole", label: "Admin" },
+          ]
+        : [
+            { key: "doctor", label: lang === "en" ? "Doctors" : "Bác sĩ" },
+            { key: "nurse", label: lang === "en" ? "Nurses" : "Y tá" },
+          ],
+    [lang, userIsAdmin]
+  );
+
   const roleTabs = useMemo(
     () =>
       userIsAdmin
@@ -431,11 +460,11 @@ export default function Staff() {
         { id: staffId, data: payload },
         {
           onSuccess: () => {
-            toast.success("Da cap nhat lich lam thanh cong");
+            toast.success("Đã cập nhật lịch làm thành công");
             closeSchedule();
           },
           onError: (error) => {
-            toast.error(error?.message || "Khong the cap nhat lich lam");
+            toast.error(error?.message || "Không thể cập nhật lịch làm");
           },
         }
       );
@@ -475,7 +504,7 @@ export default function Staff() {
       exit={{ opacity: 0, y: -8 }}
       className="px-4 pb-3 pt-1 min-h-0 overflow-hidden"
       role="main"
-      aria-label="Nhân sự"
+      aria-label={staffUi.pageTitle}
     >
       <div
         className="mt-2 flex flex-col min-h-0 h-[calc(var(--app-dvh)-var(--topbar-h)+1px)]"
@@ -505,7 +534,7 @@ export default function Staff() {
                   className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-tr from-teal-600 via-teal-500 to-cyan-500 px-3 py-1.5 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px"
                 >
                   <span className="text-base leading-none">+</span>
-                  <span>Thêm nhân viên</span>
+                  <span>{staffUi.addStaff}</span>
                 </button>
               )}
             </div>
@@ -587,7 +616,7 @@ export default function Staff() {
         anchorEl={filterBtnRef}
         role={role}
         setRole={setRole}
-        roleOptions={roleTabs}
+        roleOptions={localizedRoleTabs}
         values={filters}
         setValues={setFilters}
         departments={departments}

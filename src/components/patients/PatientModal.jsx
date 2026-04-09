@@ -202,6 +202,7 @@ export default function PatientModal({
   }, [statusBag, isSvcProcessingStatus]);
 
   const navigate = useNavigate();
+  const examPrefillAppointment = useExamStore((s) => s.prefillAppointment);
 
   // ================= EXAM TEMPLATE / BOOKING =================
 
@@ -274,7 +275,13 @@ export default function PatientModal({
       !!tpl?.id && mode !== "edit" && mode !== "add" && mode === "exam" && !isServiceIntake,
   });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, []);
 
   const [exam, setExam] = useState({
     type: "",
@@ -290,6 +297,106 @@ export default function PatientModal({
     price: 0,
     doctor: "",
     dept: "",
+  });
+
+  const currentPatientCode =
+    patient?.MaBenhNhan ||
+    patient?.maBenhNhan ||
+    patient?.id ||
+    form?.MaBenhNhan ||
+    form?.maBenhNhan ||
+    form?.id ||
+    "";
+
+  const currentPatientName =
+    form?.name ||
+    form?.HoTen ||
+    form?.hoTen ||
+    patient?.HoTen ||
+    patient?.hoTen ||
+    patient?.name ||
+    "";
+
+  const currentPatientPhone =
+    form?.phone ||
+    form?.DienThoai ||
+    form?.dienThoai ||
+    patient?.DienThoai ||
+    patient?.dienThoai ||
+    patient?.phone ||
+    "";
+
+  const normalizeText = (value) =>
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  const normalizeDigits = (value) => String(value || "").replace(/\D/g, "");
+
+  const readAppointmentPatientCode = (appt) =>
+    appt?.MaBenhNhan ||
+    appt?.maBenhNhan ||
+    appt?.patientCode ||
+    appt?.code ||
+    appt?.patient_code ||
+    "";
+
+  const readAppointmentId = (appt) =>
+    appt?.MaLichHen || appt?.maLichHen || appt?.appointmentCode || appt?.id || "";
+
+  const readAppointmentType = (appt) =>
+    appt?.LoaiHen || appt?.loaiHen || appt?.apptType || appt?.appointmentType || "";
+
+  const readAppointmentPatientName = (appt) =>
+    appt?.TenBenhNhan ||
+    appt?.tenBenhNhan ||
+    appt?.HoTen ||
+    appt?.hoTen ||
+    appt?.patientName ||
+    appt?.patient ||
+    "";
+
+  const readAppointmentPhone = (appt) =>
+    appt?.SoDienThoai ||
+    appt?.soDienThoai ||
+    appt?.DienThoai ||
+    appt?.dienThoai ||
+    appt?.phone ||
+    "";
+
+  const mapAppointmentToBooking = (appt) => ({
+    appointmentCode: readAppointmentId(appt),
+    MaLichHen: readAppointmentId(appt),
+    maLichHen: readAppointmentId(appt),
+    LoaiHen: readAppointmentType(appt),
+    loaiHen: readAppointmentType(appt),
+    appointmentType: readAppointmentType(appt),
+    apptType: readAppointmentType(appt),
+    date:
+      appt?.NgayHen ||
+      appt?.ngayHen ||
+      appt?.date ||
+      appt?.appointmentDate ||
+      today,
+    time:
+      appt?.GioHen ||
+      appt?.gioHen ||
+      appt?.time ||
+      "",
+    doctor:
+      appt?.TenBacSiKham ||
+      appt?.tenBacSiKham ||
+      appt?.doctorName ||
+      appt?.doctor ||
+      "",
+    dept:
+      appt?.KhoaKham ||
+      appt?.khoaKham ||
+      appt?.deptName ||
+      appt?.dept ||
+      "",
   });
   // Override service items when prefetched from CLS orders
   const [servicePrefill, setServicePrefill] = useState([]);
@@ -890,6 +997,68 @@ const visits = useMemo(() => {
   return [];
 }, [patientForView]);
 
+const normalizeVisitDate = (value) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  if (!str) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+};
+
+const normalizeVisitTime = (value) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  if (!str) return "";
+  if (/^\d{2}:\d{2}/.test(str)) return str.slice(0, 5);
+  const isoMatch = str.match(/T(\d{2}:\d{2})/);
+  if (isoMatch) return isoMatch[1];
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+};
+
+const latestVisitForAppointmentPrefill = useMemo(() => {
+  if (!Array.isArray(visits) || !visits.length) return null;
+
+  const latestVisit = [...visits].sort((a, b) => {
+    const aTime = new Date(a?.date || a?.Date || 0).getTime();
+    const bTime = new Date(b?.date || b?.Date || 0).getTime();
+    return bTime - aTime;
+  })[0];
+
+  if (!latestVisit) return null;
+
+  const pid =
+    patientForView?.MaBenhNhan ||
+    patientForView?.maBenhNhan ||
+    patient?.MaBenhNhan ||
+    patient?.maBenhNhan ||
+    patient?.id ||
+    form?.id ||
+    "";
+  const name =
+    patientForView?.HoTen ||
+    patientForView?.hoTen ||
+    patientForView?.name ||
+    patient?.HoTen ||
+    patient?.hoTen ||
+    patient?.name ||
+    form?.name ||
+    "";
+
+  return {
+    date: normalizeVisitDate(latestVisit.date || latestVisit.Date),
+    time: normalizeVisitTime(latestVisit.date || latestVisit.Date),
+    patientName: name,
+    patientCode: pid,
+    doctorName: latestVisit.doctor || latestVisit.Doctor || "",
+    deptName: latestVisit.dept || latestVisit.Dept || "",
+    note: latestVisit.note || latestVisit.Note || "",
+  };
+}, [visits, patientForView, patient, form]);
+
 // Lịch sử giao dịch từ PatientDetail
 const transactions = useMemo(() => {
   const p = patientForView;
@@ -1041,6 +1210,59 @@ const transactions = useMemo(() => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode]);
+
+  useEffect(() => {
+    if (!open || mode !== "exam") return;
+
+    const patientAppointment = patient?.latestAppointment || patientForView?.latestAppointment;
+    const matchesCurrentPatient = (appt) => {
+      if (!appt) return false;
+
+      const apptCode = String(readAppointmentPatientCode(appt) || "").trim();
+      const apptName = normalizeText(readAppointmentPatientName(appt));
+      const apptPhone = normalizeDigits(readAppointmentPhone(appt));
+      const patientCode = String(currentPatientCode || "").trim();
+      const patientName = normalizeText(currentPatientName);
+      const patientPhone = normalizeDigits(currentPatientPhone);
+
+      if (patientCode && apptCode && apptCode === patientCode) return true;
+      if (patientPhone && apptPhone && apptPhone === patientPhone) return true;
+      if (patientName && apptName && apptName === patientName) return true;
+
+      return false;
+    };
+
+    const appointmentCandidate = patientAppointment || [examPrefillAppointment].find(matchesCurrentPatient);
+
+    if (!appointmentCandidate) return;
+
+    const nextBooking = mapAppointmentToBooking(appointmentCandidate);
+    if (!nextBooking.MaLichHen) return;
+
+    setBooking((prev) => ({
+      ...prev,
+      ...nextBooking,
+      date: nextBooking.date || prev.date,
+      time: nextBooking.time || prev.time,
+      doctor: nextBooking.doctor || prev.doctor,
+      dept: nextBooking.dept || prev.dept,
+    }));
+
+    setExam((prev) => ({
+      ...prev,
+      hinhThucTiepNhan: "appointment",
+      dept: nextBooking.dept || prev.dept,
+    }));
+  }, [
+    open,
+    mode,
+    patient,
+    patientForView,
+    currentPatientCode,
+    currentPatientName,
+    currentPatientPhone,
+    examPrefillAppointment,
+  ]);
 
   // ---- UI ghi chú từng dịch vụ (nếu intake dịch vụ) ----
   const serviceItems = useMemo(() => {
@@ -1949,6 +2171,12 @@ const transactions = useMemo(() => {
         MaNguoiLap: maNguoiLap,
         MaDichVuKham: maDichVuKham,
         HinhThucTiepNhan: hinhThucTiepNhan,
+        MaLichHen:
+          booking?.MaLichHen ||
+          booking?.maLichHen ||
+          booking?.appointmentCode ||
+          booking?.id ||
+          null,
         LoaiPhieuKham: exam.type || null,
         TrieuChung: exam.symptoms || "",
         GhiChu: examNote,
@@ -2246,6 +2474,8 @@ const transactions = useMemo(() => {
             doctorCode: currentUserInfo.code || "",
             doctorName: currentUserInfo.name || currentUser || "",
             examDate: new Date().toISOString(),
+            deptName: booking.dept || exam.dept || "",
+            note: d.advice || exam.note || "",
           });
           console.log("[Follow-up] Context saved to localStorage");
         } catch (err) {
@@ -2442,7 +2672,11 @@ const transactions = useMemo(() => {
           sourcePatient?.address ||
           "",
         type: "follow_up",
-        lastVisit: { patientName: name, patientCode: pid },
+        lastVisit:
+          latestVisitForAppointmentPrefill || {
+            patientName: name,
+            patientCode: pid,
+          },
       };
       
       // Lưu vào localStorage

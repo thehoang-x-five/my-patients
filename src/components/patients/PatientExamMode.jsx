@@ -44,11 +44,15 @@ export default function PatientExamMode({
     booking?.appointmentCode ||
     booking?.maLichHen ||
     booking?.MaLichHen ||
+    booking?.id ||
     booking?.code ||
     "";
 
   const appointmentType =
-    booking?.loaiHen || booking?.LoaiHen || booking?.appointmentType;
+    booking?.loaiHen ||
+    booking?.LoaiHen ||
+    booking?.appointmentType ||
+    booking?.apptType;
 
   const isAppointmentFollowup = appointmentType === "tai_kham";
 

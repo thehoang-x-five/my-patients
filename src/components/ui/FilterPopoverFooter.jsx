@@ -1,4 +1,5 @@
 import React from "react";
+import { useUI } from "../../context/UIContext.jsx";
 
 const ACCENT_STYLES = {
   emerald: {
@@ -31,11 +32,15 @@ const ACCENT_STYLES = {
 export default function FilterPopoverFooter({
   onReset,
   onClose,
-  resetLabel = "Reset bộ lọc",
-  closeLabel = "Đóng",
+  resetLabel,
+  closeLabel,
   accent = "emerald",
 }) {
+  const { lang } = useUI();
   const styles = ACCENT_STYLES[accent] || ACCENT_STYLES.emerald;
+
+  const defaultResetLabel = lang === "en" ? "Reset filters" : "Đặt lại bộ lọc";
+  const defaultCloseLabel = lang === "en" ? "Close" : "Đóng";
 
   return (
     <div className="flex items-center justify-between gap-2 border-t border-slate-200 bg-slate-50/80 px-3 py-2">
@@ -44,14 +49,14 @@ export default function FilterPopoverFooter({
         onClick={onReset}
         className={`inline-flex items-center gap-2 rounded-xl bg-white px-3 py-1.5 text-[13px] font-medium text-slate-700 ring-1 ring-slate-200 transition ${styles.reset}`}
       >
-        {resetLabel}
+        {resetLabel || defaultResetLabel}
       </button>
       <button
         type="button"
         onClick={onClose}
         className={`inline-flex items-center rounded-xl px-3 py-1.5 text-[13px] font-semibold text-white transition ${styles.close}`}
       >
-        {closeLabel}
+        {closeLabel || defaultCloseLabel}
       </button>
     </div>
   );

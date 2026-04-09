@@ -5,11 +5,92 @@ import Button from "../ui/Button.jsx";
 import Chip from "../ui/Chip.jsx";
 import PopoverSelect from "../ui/PopoverSelect.jsx";
 import { toast } from "react-toastify";
+import { formatStatus } from "../../utils/textFormatters.js";
 // ✅ Dùng API layer (TanStack Query) — KHÔNG còn data/*
 import {
   useDepartments,            // GET /master-data/departments
   useDoctorQueueByDept,      // (custom) GET /master-data/staff?maKhoa=...&vaiTro=bac_si
 } from "../../api/departments.js";
+import { useFindLastAppointment } from "../../api/appointments.js";
+
+const normalizeDateValue = (value) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  if (!str) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+};
+
+const normalizeTimeValue = (value) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  if (!str) return "";
+  if (/^\d{2}:\d{2}/.test(str)) return str.slice(0, 5);
+  const isoMatch = str.match(/T(\d{2}:\d{2})/);
+  if (isoMatch) return isoMatch[1];
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+};
+
+const buildLastVisitSnapshot = (src = {}, fallback = {}) => {
+  const merged = { ...fallback, ...src };
+  const snapshot = {
+    date: normalizeDateValue(
+      merged.lastVisitDate ??
+        merged.date ??
+        merged.Date ??
+        merged.NgayKham ??
+        merged.ngay_kham
+    ),
+    time: normalizeTimeValue(
+      merged.lastVisitTime ??
+        merged.time ??
+        merged.Time ??
+        merged.GioKham ??
+        merged.gio_kham
+    ),
+    patientName:
+      merged.patientName ??
+      merged.patient ??
+      merged.TenBenhNhan ??
+      fallback.patientName ??
+      "",
+    patientCode:
+      merged.patientCode ??
+      merged.code ??
+      merged.MaBenhNhan ??
+      fallback.patientCode ??
+      "",
+    doctorName:
+      merged.doctorName ??
+      merged.doctor ??
+      merged.Doctor ??
+      merged.TenBacSiKham ??
+      fallback.doctorName ??
+      "",
+    deptName:
+      merged.deptName ??
+      merged.dept ??
+      merged.Dept ??
+      merged.TenKhoa ??
+      merged.KhoaKham ??
+      merged.khoa_kham ??
+      fallback.deptName ??
+      "",
+    note:
+      merged.note ??
+      merged.Note ??
+      merged.GhiChu ??
+      fallback.note ??
+      "",
+  };
+
+  const hasAnyField = Object.values(snapshot).some(Boolean);
+  return hasAnyField ? snapshot : null;
+};
 
 
 
@@ -81,7 +162,7 @@ export default function CreateDrawer({
    // Lần khám gần nhất cho flow "Tái khám"
   // - Nếu mở từ Patients → đã có defaultValues là 1 dòng lịch sử khám
   // - Không gọi lại /appointments/search để khỏi nhầm với LỊCH HẸN
-  const lastVisit = useMemo(() => {
+  const providedLastVisit = useMemo(() => {
     if (apType !== "follow_up") return null;
 
     const dv = defaultValues || {};
@@ -127,6 +208,49 @@ export default function CreateDrawer({
     return result;
   }, [apType, defaultValues, patientName, patientCode]);
 
+  const fallbackLookupCode =
+    patientCode ||
+    defaultValues?.code ||
+    defaultValues?.patientCode ||
+    defaultValues?.MaBenhNhan ||
+    "";
+  const fallbackLookupName =
+    patientName ||
+    defaultValues?.patient ||
+    defaultValues?.patientName ||
+    defaultValues?.TenBenhNhan ||
+    "";
+
+  const { data: lastAppointmentFallback, isFetching: isFetchingLastVisit } =
+    useFindLastAppointment(
+      {
+        code: fallbackLookupCode,
+        name: fallbackLookupName,
+      },
+      {
+        enabled:
+          open &&
+          apType === "follow_up" &&
+          !!(fallbackLookupCode || fallbackLookupName) &&
+          !(providedLastVisit?.date || providedLastVisit?.time),
+      }
+    );
+
+  const lastVisit = useMemo(() => {
+    if (apType !== "follow_up") return null;
+    const snapshot = buildLastVisitSnapshot(lastAppointmentFallback, providedLastVisit || {
+      patientName,
+      patientCode,
+    });
+    if (!(snapshot?.date || snapshot?.time)) return null;
+    return snapshot;
+  }, [
+    apType,
+    lastAppointmentFallback,
+    providedLastVisit,
+    patientName,
+    patientCode,
+  ]);
 
   const availableDoctors = useMemo(() => {
     if (!selectedDeptCode) return [];
@@ -217,7 +341,12 @@ export default function CreateDrawer({
   
     // Nếu là Tái khám nhưng không tìm thấy bất kỳ lịch sử khám nào
     // → Không cho tạo lịch tái khám, bắt buộc user chọn lại "Khám mới" hoặc đi từ hồ sơ bệnh nhân.
-    if (apType === "follow_up" && !lastVisit) {
+    if (apType === "follow_up" && isFetchingLastVisit && !(lastVisit?.date || lastVisit?.time)) {
+      toast.info("Đang tìm lịch sử khám gần nhất. Vui lòng thử lại sau ít giây.");
+      return;
+    }
+
+    if (apType === "follow_up" && !(lastVisit?.date || lastVisit?.time)) {
       toast.warn(
         "Không tìm thấy lịch sử khám để tạo lịch tái khám. Vui lòng kiểm tra lại Mã BN/Họ tên hoặc chọn 'Khám mới'."
       );
@@ -462,6 +591,10 @@ export default function CreateDrawer({
                           <b>Ghi chú:</b>{" "}
                           {lastVisit.note || <i className="text-slate-400">—</i>}
                         </div>
+                      </div>
+                    ) : isFetchingLastVisit ? (
+                      <div className="mt-2 text-sm text-slate-600">
+                        Đang tìm lịch sử khám gần nhất theo <b>Mã BN</b> / họ tên...
                       </div>
                     ) : (
                       <div className="mt-2 text-sm text-slate-600">

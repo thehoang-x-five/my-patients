@@ -1,66 +1,95 @@
-// src/components/Topbar.jsx
 import React, { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
 import NotifBell from "../notifications/NotifBell.jsx";
 import { inferRecipientFromToken } from "../../api/notifications.js";
 import { useAuthStore } from "../stores/appStore.js";
+import { useUI } from "../../context/UIContext.jsx";
 import {
   canCreateAppointment,
   canViewAppointment,
   formatDepartmentLabel,
   hasGlobalScope,
 } from "../../utils/permissions.js";
+import { formatDisplayText } from "../../utils/textFormatters.js";
 
-function formatNow(d = new Date()) {
-  const fmtDate = d.toLocaleDateString("vi-VN", {
+function formatNow(locale, date = new Date()) {
+  const formattedDate = date.toLocaleDateString(locale, {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
-  const fmtTime = d.toLocaleTimeString("vi-VN", {
+  const formattedTime = date.toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
   });
-  return `${fmtDate} • ${fmtTime}`;
+  return `${formattedDate} • ${formattedTime}`;
 }
 
 export default function Topbar() {
-  const [now, setNow] = useState(() => formatNow());
+  const { locale, tr, lang } = useUI();
+  const location = useLocation();
+  const user = useAuthStore((state) => state.user);
+  const { TenNguoiNhan } = inferRecipientFromToken() || {};
+  const [now, setNow] = useState(() => formatNow(locale));
   const [qaOpen, setQaOpen] = useState(false);
   const qaRef = useRef(null);
-  const loc = useLocation();
-  const user = useAuthStore((s) => s.user);
-  const { TenNguoiNhan } = inferRecipientFromToken() || {};
+
+  const displayNameRaw =
+    TenNguoiNhan ||
+    user?.TenNhanSu ||
+    user?.tenNhanSu ||
+    user?.HoTen ||
+    user?.hoTen ||
+    tr("userFallback");
+
+  const displayName = formatDisplayText(
+    displayNameRaw,
+    tr("userFallback"),
+    lang
+  );
+
   const scopeLabel = !hasGlobalScope(user)
     ? formatDepartmentLabel(
-        user?.TenKhoa || user?.tenKhoa || user?.MaKhoa || user?.maKhoa || null
+        user?.TenKhoa || user?.tenKhoa || user?.MaKhoa || user?.maKhoa || null,
+        lang
       )
     : null;
+
   const canViewAppt = canViewAppointment(user);
   const canCreateAppt = canCreateAppointment(user);
 
   useEffect(() => {
-    const t = setInterval(() => setNow(formatNow()), 30_000);
-    return () => clearInterval(t);
-  }, []);
+    setNow(formatNow(locale));
+    const timer = setInterval(() => setNow(formatNow(locale)), 30_000);
+    return () => clearInterval(timer);
+  }, [locale]);
 
   useEffect(() => {
     setQaOpen(false);
-  }, [loc.pathname]);
+  }, [location.pathname]);
 
   useEffect(() => {
-    if (!qaOpen) return;
-    const onDown = (e) => {
-      if (qaRef.current && !qaRef.current.contains(e.target)) setQaOpen(false);
+    if (!qaOpen) return undefined;
+
+    const onMouseDown = (event) => {
+      if (qaRef.current && !qaRef.current.contains(event.target)) {
+        setQaOpen(false);
+      }
     };
-    const onKey = (e) => e.key === "Escape" && setQaOpen(false);
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setQaOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("keydown", onKeyDown);
     };
   }, [qaOpen]);
 
@@ -69,23 +98,25 @@ export default function Topbar() {
       ? {
           to: "/appointments",
           icon: "📅",
-          title: canCreateAppt ? "Tạo lịch hẹn" : "Xem lịch hẹn",
+          title: canCreateAppt
+            ? tr("quickCreateAppointment")
+            : tr("quickViewAppointments"),
           desc: canCreateAppt
-            ? "Chuyển tới trang Lịch hẹn"
-            : "Xem danh sách lịch hẹn",
+            ? tr("quickAppointmentDescCreate")
+            : tr("quickAppointmentDescView"),
         }
       : null,
     {
       to: "/patients",
       icon: "➕",
-      title: "Thêm bệnh nhân",
-      desc: "Mở trang Bệnh nhân",
+      title: tr("quickCreatePatient"),
+      desc: tr("quickCreatePatientDesc"),
     },
     {
       to: "/notifications",
       icon: "🔔",
-      title: "Xem thông báo",
-      desc: "Xem danh sách thông báo",
+      title: tr("quickViewNotifications"),
+      desc: tr("quickViewNotificationsDesc"),
     },
   ].filter(Boolean);
 
@@ -95,21 +126,24 @@ export default function Topbar() {
     <header
       className="card sticky top-0 z-20 mx-4 mt-4 flex items-center justify-between gap-3 bg-white/90 px-4 py-2 backdrop-blur"
       role="banner"
-      aria-label="Thanh trên"
+      aria-label={tr("topbarBanner")}
     >
       <div className="flex items-center gap-2">
         <img
           src="/avata.png"
-          alt="Admin User"
+          alt={tr("avatarAlt")}
           className="h-10 w-10 rounded-full"
-          onError={({ currentTarget: t }) => (t.style.display = "none")}
+          onError={({ currentTarget }) => {
+            currentTarget.style.display = "none";
+          }}
         />
+
         <div className="flex min-w-0 flex-col">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-slate-500">
-              Xin chào,{" "}
-              <b>{TenNguoiNhan || user?.TenNhanSu || user?.tenNhanSu || "User"}</b>
+              {tr("topbarGreeting")}, <b>{displayName}</b>
             </span>
+
             {scopeLabel && (
               <span className="inline-flex max-w-[14rem] items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200/80">
                 <span className="truncate">{scopeLabel}</span>
@@ -120,7 +154,10 @@ export default function Topbar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="inline-flex h-8 items-center gap-2 rounded-full bg-slate-100 px-2 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
+        <span
+          className="inline-flex h-8 items-center gap-2 rounded-full bg-slate-100 px-2 py-2 text-xs text-slate-600 ring-1 ring-slate-200"
+          title={tr("topbarClock")}
+        >
           <i className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           {now}
         </span>
@@ -136,8 +173,8 @@ export default function Topbar() {
             className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/85 text-emerald-600 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-emerald-50/10 hover:ring-slate-200"
             aria-haspopup="menu"
             aria-expanded={qaOpen}
-            onClick={() => setQaOpen((v) => !v)}
-            title="Hành động nhanh"
+            title={tr("quickActions")}
+            onClick={() => setQaOpen((value) => !value)}
           >
             <span className="text-lg">✨</span>
           </motion.button>
@@ -151,7 +188,7 @@ export default function Topbar() {
                 transition={{ type: "spring", stiffness: 420, damping: 28 }}
                 className="absolute right-0 mt-2 w-72"
                 role="menu"
-                aria-label="Hành động nhanh"
+                aria-label={tr("quickActions")}
               >
                 <div className="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-emerald-200/70">
                   <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50/40 px-4 py-2">
@@ -159,17 +196,17 @@ export default function Topbar() {
                       ⚡
                     </span>
                     <div className="text-[13px] font-semibold text-slate-700">
-                      Hành động nhanh
+                      {tr("quickActions")}
                     </div>
                   </div>
 
                   <ul className="space-y-1 p-2">
-                    {actions.map((item, idx) => (
+                    {actions.map((item, index) => (
                       <motion.li
-                        key={idx}
+                        key={`${item.to}:${index}`}
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.03 }}
+                        transition={{ delay: index * 0.03 }}
                         whileHover={{
                           y: -1,
                           scale: 1.01,
@@ -210,16 +247,14 @@ export default function Topbar() {
         <NotifBell />
 
         <MotionLink
-          type="button"
           whileHover={{
             y: -1,
             boxShadow: "0 8px 18px rgba(250, 109, 205, 0.3)",
           }}
           whileTap={{ scale: 0.96, y: 0 }}
-          as={Link}
           to="/settings"
           className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/80 px-1 text-slate-600 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-pink-50/10 hover:ring-slate-200"
-          title="Cài đặt"
+          title={tr("settings")}
         >
           ⚙️
         </MotionLink>

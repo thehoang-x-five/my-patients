@@ -4,14 +4,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import { useStaffDetailQuery } from "../../api/staff.js";
 import Avatar from "../ui/Avatar.jsx";
-const avatar=[];
-function randomInRange(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-for (let i = 1; i <= 6; i++) {
-  avatar[i]="../../../public/"+i.toString()+".jpg";
-}
+import {
+  formatDisplayText,
+  formatPresenceStatusLabel,
+  formatRoleLabel,
+  formatVietnameseText,
+} from "../../utils/textFormatters.js";
+import { getDemoPublicImage } from "../../utils/demoPublicImages.js";
 
 const NURSE_WORK_ROLE_LABEL = {
   lam_sang: "Y tá lâm sàng",
@@ -24,18 +23,18 @@ const getStatusVisual = (statusRaw) => {
 
   if (status == "online") {
     return {
-      label: "online",
+      label: formatPresenceStatusLabel("online"),
       className: "bg-emerald-50 text-emerald-600 ring-emerald-200/60",
     };
   }
   if (status == "pause") {
     return {
-      label: "pause",
+      label: formatPresenceStatusLabel("pause"),
       className: "bg-amber-50 text-amber-600 ring-amber-200/60",
     };
   }
   return {
-    label: "offline",
+    label: formatPresenceStatusLabel("offline"),
     className: "bg-slate-50 text-slate-400 ring-slate-200/60",
   };
 };
@@ -80,7 +79,7 @@ const getNurseWorkRole = (item) => {
     if (!key && item?.roleType == "clinical") key = "lam_sang";
     if (!key && item?.roleType == "administrative") key = "hanh_chinh";
   
-    return NURSE_WORK_ROLE_LABEL[key] || "—";
+    return NURSE_WORK_ROLE_LABEL[key] || formatVietnameseText(key, "—");
   };
   export default function StaffDetail({
       open,
@@ -141,16 +140,17 @@ const getNurseWorkRole = (item) => {
         0;
     
       const statusView = getStatusVisual(view.status);
+      const staffImage = getDemoPublicImage(view, role);
       const managedRooms = view.managedRooms || [];
 
   const isDoctor = role == "doctor"|| role =="bac_si";
   const isNurse = role == "nurse"|| role =="y_ta";
 
   const roleLabel = isDoctor
-    ? "Bác sĩ"
+    ? formatRoleLabel("bac_si")
     : isNurse
-    ? "Y tá"
-    : "Nhân sự y tế";
+      ? formatRoleLabel("y_ta")
+      : "Nhân sự y tế";
 
 
   // Số ca trực tuần này cho Y tá: đếm ca != "Nghỉ" / "—"
@@ -228,16 +228,16 @@ const getNurseWorkRole = (item) => {
             >
               {/* HEADER */}
               <header className="sticky top-0 z-10 backdrop-blur-sm bg-gradient-to-r from-teal-50/80 to-cyan-50/80 border-b border-slate-200 p-4 flex items-start gap-3">
-                <Avatar src={avatar[randomInRange(1, 6)]} item={view} size="lg" />
+                <Avatar src={staffImage} item={view} size="lg" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <h2 className="text-[17px] font-semibold text-slate-900 truncate">
-                        {view.name}
+                        {formatDisplayText(view.name, view.name || "—")}
                       </h2>
                       <p className="text-[13px] text-slate-500 truncate">
                         {view.degree ? view.degree + " • " : ""}
-                        {view.dept || "Chưa gán khoa"}
+                        {formatDisplayText(view.dept, "Chưa gán khoa")}
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
@@ -271,14 +271,17 @@ const getNurseWorkRole = (item) => {
                         Thông tin hành chính
                       </h3>
                       <div className="grid grid-cols-2 gap-2">
-                        <Tile label="Họ tên" value={view.name} />
+                        <Tile
+                          label="Họ tên"
+                          value={formatDisplayText(view.name, view.name || "—")}
+                        />
                         <Tile
                           label="Mã nhân viên"
                           value={view.ma_nhan_vien || view.maNhanVien || "—"}
                         />
                         <Tile
                           label="Khoa"
-                          value={view.dept || "Chưa gán khoa"}
+                          value={formatDisplayText(view.dept, "Chưa gán khoa")}
                         />
                         <Tile label="Vai trò" value={roleLabel} />
                       </div>

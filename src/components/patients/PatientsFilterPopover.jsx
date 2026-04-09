@@ -1,8 +1,13 @@
-// src/components/patients/PatientsFilterPopover.jsx
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
-import { STATUSES, ACCOUNT_STATUSES, mapTodayStatusLabel } from "../../api/patients";
+import {
+  ACCOUNT_STATUSES,
+  STATUSES,
+  getAccountStatusLabel,
+  getTodayStatusLabel,
+} from "../../api/patients";
+import { useUI } from "../../context/UIContext.jsx";
 import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
 
 const TODAY_SEG = [
@@ -19,19 +24,6 @@ const TODAY_SEG = [
   STATUSES.CANCELLED,
 ];
 
-const ACC_LABELS = {
-  hoat_dong: "Hoạt động",
-  khong_hoat_dong: "Không hoạt động",
-  da_xoa: "Đã xóa",
-};
-const ACCOUNT_OPTIONS = [
-  { value: "all", label: "Tất cả" },
-  ...ACCOUNT_STATUSES.map((code) => ({
-    value: code,
-    label: ACC_LABELS[code] || code,
-  })),
-];
-
 export default function PatientsFilterPopover({
   open,
   onClose,
@@ -42,6 +34,7 @@ export default function PatientsFilterPopover({
   onChangeSort,
   onReset,
 }) {
+  const { lang } = useUI();
   const boxRef = useRef(null);
   const kwRef = useRef(null);
   const justOpenedRef = useRef(false);
@@ -53,17 +46,64 @@ export default function PatientsFilterPopover({
   const todayStatus = values?.todayStatus ?? "all";
   const accountStatus = values?.accountStatus ?? "all";
 
-  // esc / click ngoài
+  const t =
+    lang === "en"
+      ? {
+          title: "Patient Filters",
+          keyword: "Keyword",
+          keywordPlaceholder: "Patient ID / name / phone / email…",
+          clearSearch: "Clear search",
+          todayStatus: "Today's status",
+          accountStatus: "Account status",
+          all: "All",
+          sort: "Sort by",
+          sortPriority: "Status priority",
+          sortName: "Name",
+          sortDate: "Status date",
+          todayStatusAria: "Filter by today's status",
+          accountStatusAria: "Filter by account status",
+        }
+      : {
+          title: "Bộ lọc bệnh nhân",
+          keyword: "Từ khóa",
+          keywordPlaceholder: "Mã BN / Họ tên / SĐT / Email…",
+          clearSearch: "Xóa tìm kiếm",
+          todayStatus: "Trạng thái hôm nay",
+          accountStatus: "Trạng thái tài khoản",
+          all: "Tất cả",
+          sort: "Sắp xếp",
+          sortPriority: "Ưu tiên trạng thái",
+          sortName: "Theo tên",
+          sortDate: "Theo ngày trạng thái",
+          todayStatusAria: "Lọc theo trạng thái hôm nay",
+          accountStatusAria: "Lọc theo trạng thái tài khoản",
+        };
+
+  const accountOptions = [
+    { value: "all", label: t.all },
+    ...ACCOUNT_STATUSES.map((code) => ({
+      value: code,
+      label: getAccountStatusLabel(code, lang),
+    })),
+  ];
+
+  const sortOptions = [
+    { value: "priority", label: t.sortPriority },
+    { value: "name", label: t.sortName },
+    { value: "date", label: t.sortDate },
+  ];
+
   useEffect(() => {
     if (!open) return;
     justOpenedRef.current = true;
 
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose?.();
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose?.();
     };
-    const onClickOutside = (e) => {
+
+    const onClickOutside = (event) => {
       if (justOpenedRef.current) return;
-      const target = e.target;
+      const target = event.target;
       const onAnchorBtn = !!target?.closest?.(
         '[data-popover-anchor="patients-filter"]'
       );
@@ -75,7 +115,7 @@ export default function PatientsFilterPopover({
     };
 
     document.addEventListener("keydown", onKey, true);
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       justOpenedRef.current = false;
       document.addEventListener("click", onClickOutside, true);
     }, 0);
@@ -83,11 +123,10 @@ export default function PatientsFilterPopover({
     return () => {
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("click", onClickOutside, true);
-      clearTimeout(t);
+      clearTimeout(timer);
     };
   }, [open, onClose, anchorNode]);
 
-  // position bottom-end + shrink to fit
   const [pos, setPos] = useState({ top: 72, left: 16 });
   const [maxH, setMaxH] = useState(520);
   const [widthPx, setWidthPx] = useState(360);
@@ -97,20 +136,20 @@ export default function PatientsFilterPopover({
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    const W = Math.min(355, vw - 24);
+    const width = Math.min(355, vw - 24);
     const el =
       anchorNode && anchorNode.getBoundingClientRect ? anchorNode : null;
-    const r = el ? el.getBoundingClientRect() : null;
+    const rect = el ? el.getBoundingClientRect() : null;
 
-    let left = Math.min(Math.max(r ? r.right - W : 16, 12), vw - W - 12);
-    let top = (r ? r.bottom : 64) + gap;
+    const left = Math.min(Math.max(rect ? rect.right - width : 16, 12), vw - width - 12);
+    let top = (rect ? rect.bottom : 64) + gap;
 
-    const estH = 360;
-    if (top + estH > vh - 12 && r) {
-      top = Math.max(12, r.top - gap - estH);
+    const estimatedHeight = 360;
+    if (top + estimatedHeight > vh - 12 && rect) {
+      top = Math.max(12, rect.top - gap - estimatedHeight);
     }
 
-    setWidthPx(W);
+    setWidthPx(width);
     setPos({ top, left });
     setMaxH(Math.min(vh - top - 12, 520));
   }
@@ -121,6 +160,7 @@ export default function PatientsFilterPopover({
 
   useEffect(() => {
     if (!open) return;
+
     const handler = () => computePosition();
     window.addEventListener("resize", handler, { passive: true });
     window.addEventListener("scroll", handler, { passive: true });
@@ -128,7 +168,9 @@ export default function PatientsFilterPopover({
       window.visualViewport.addEventListener("resize", handler);
       window.visualViewport.addEventListener("scroll", handler);
     }
+
     setTimeout(() => kwRef.current?.focus(), 0);
+
     return () => {
       window.removeEventListener("resize", handler);
       window.removeEventListener("scroll", handler);
@@ -156,41 +198,35 @@ export default function PatientsFilterPopover({
             ref={boxRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Bộ lọc bệnh nhân"
-            className="rounded-2xl bg-white shadow-2xl ring-1 ring-emerald-200/70 overflow-hidden"
+            aria-label={t.title}
+            className="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-emerald-200/70"
             style={{ maxHeight: maxH }}
           >
-            {/* Header */}
-            <div className="px-3 py-2 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-b border-emerald-100">
-              <div className="text-[13px] font-extrabold tracking-tight text-emerald-800 flex items-center gap-2">
-                <span className="inline-flex w-5 h-5 rounded-lg bg-emerald-100 ring-1 ring-emerald-200 items-center justify-center">
+            <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 px-3 py-2">
+              <div className="flex items-center gap-2 text-[13px] font-extrabold tracking-tight text-emerald-800">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-lg bg-emerald-100 ring-1 ring-emerald-200">
                   🔎
                 </span>
-                Bộ lọc
+                {t.title}
               </div>
             </div>
 
-            <div className="p-2 grid gap-2 overflow-y-auto">
-              {/* Từ khóa */}
+            <div className="grid gap-2 overflow-y-auto p-2">
               <label className="text-[13px]">
-                Từ khóa
+                {t.keyword}
                 <div className="relative mt-1">
                   <input
                     ref={kwRef}
                     value={kw}
-                    onChange={(e) =>
-                      setValues({ keyword: e.target.value })
-                    }
-                    placeholder="Mã BN / Họ tên / SĐT / Email…"
-                    className="w-full rounded-xl px-3 py-2 pl-9 bg-white ring-1 ring-slate-200/80 focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm text-[13px]"
+                    onChange={(event) => setValues({ keyword: event.target.value })}
+                    placeholder={t.keywordPlaceholder}
+                    className="w-full rounded-xl bg-white px-3 py-2 pl-9 text-[13px] shadow-sm ring-1 ring-slate-200/80 outline-none focus:ring-2 focus:ring-emerald-500"
                   />
-                  <span className="absolute left-2 top-2.5 text-emerald-600">
-                    🔎
-                  </span>
+                  <span className="absolute left-2 top-2.5 text-emerald-600">🔎</span>
                   {kw && (
                     <button
                       type="button"
-                      aria-label="Xóa tìm kiếm"
+                      aria-label={t.clearSearch}
                       onClick={() => setValues({ keyword: "" })}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                     >
@@ -200,60 +236,51 @@ export default function PatientsFilterPopover({
                 </div>
               </label>
 
-              {/* Trạng thái hôm nay */}
               <div className="text-[13px]">
-                Trạng thái hôm nay
+                {t.todayStatus}
                 <div
                   role="radiogroup"
-                  aria-label="Lọc theo trạng thái hôm nay"
-                  className="mt-1 gap-1.5 relative flex flex-wrap w-full p-1 rounded-xl ring-1 ring-emerald-100 bg-gradient-to-b from-white to-emerald-50/40 overflow-x-auto overflow-y-visible"
-                  onKeyDown={(e) => {
-                    const idx = TODAY_SEG.findIndex((x) => x === todayStatus);
-                    if (e.key === "ArrowRight") {
-                      e.preventDefault();
-                      const next =
-                        TODAY_SEG[(idx + 1) % TODAY_SEG.length];
+                  aria-label={t.todayStatusAria}
+                  className="mt-1 flex w-full flex-wrap gap-1.5 overflow-x-auto overflow-y-visible rounded-xl bg-gradient-to-b from-white to-emerald-50/40 p-1 ring-1 ring-emerald-100"
+                  onKeyDown={(event) => {
+                    const index = TODAY_SEG.findIndex((value) => value === todayStatus);
+                    if (event.key === "ArrowRight") {
+                      event.preventDefault();
+                      const next = TODAY_SEG[(index + 1) % TODAY_SEG.length];
                       setValues({ todayStatus: next });
-                    } else if (e.key === "ArrowLeft") {
-                      e.preventDefault();
+                    } else if (event.key === "ArrowLeft") {
+                      event.preventDefault();
                       const prev =
-                        TODAY_SEG[
-                          (idx - 1 + TODAY_SEG.length) % TODAY_SEG.length
-                        ];
+                        TODAY_SEG[(index - 1 + TODAY_SEG.length) % TODAY_SEG.length];
                       setValues({ todayStatus: prev });
                     }
                   }}
                 >
-                  {TODAY_SEG.map((s) => {
-                    const active = todayStatus === s;
-                    const label = s === "all" ? "Tất cả" : mapTodayStatusLabel(s) || s;
+                  {TODAY_SEG.map((status) => {
+                    const active = todayStatus === status;
+                    const label =
+                      status === "all"
+                        ? t.all
+                        : getTodayStatusLabel(status, lang) || status;
                     return (
                       <button
-                        key={s}
+                        key={status}
                         role="radio"
                         aria-checked={active}
-                        onClick={() => setValues({ todayStatus: s })}
+                        onClick={() => setValues({ todayStatus: status })}
                         className={[
-                          "relative z-10 px-3 py-1 text-[12px] font-semibold whitespace-nowrap rounded-lg",
-                          "transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
+                          "relative z-10 rounded-lg px-3 py-1 text-[12px] font-semibold whitespace-nowrap ring-1 transition",
+                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
                           active
-                            ? "text-teal-800"
-                            : "text-slate-700 hover:text-emerald-800",
-                          "ring-1",
-                          active
-                            ? "ring-emerald-300 bg-teal-50"
-                            : "ring-slate-200 hover:ring-emerald-200 bg-white",
+                            ? "bg-teal-50 text-teal-800 ring-emerald-300"
+                            : "bg-white text-slate-700 ring-slate-200 hover:text-emerald-800 hover:ring-emerald-200",
                         ].join(" ")}
                       >
                         {active && (
                           <motion.span
                             layoutId="patientsSegPillPopoverToday"
                             className="absolute inset-0 rounded-lg bg-teal-50"
-                            transition={{
-                              type: "spring",
-                              stiffness: 420,
-                              damping: 30,
-                            }}
+                            transition={{ type: "spring", stiffness: 420, damping: 30 }}
                           />
                         )}
                         <span className="relative">{label}</span>
@@ -263,90 +290,69 @@ export default function PatientsFilterPopover({
                 </div>
               </div>
 
-              {/* Trạng thái tài khoản */}
               <div className="text-[13px]">
-                Trạng thái tài khoản
+                {t.accountStatus}
                 <div
                   role="radiogroup"
-                  aria-label="Lọc theo trạng thái tài khoản"
-                  className="mt-1 gap-1.5 relative flex flex-wrap w-full p-1 rounded-xl ring-1 ring-emerald-100 bg-gradient-to-b from-white to-emerald-50/40"
+                  aria-label={t.accountStatusAria}
+                  className="mt-1 flex w-full flex-wrap gap-1.5 rounded-xl bg-gradient-to-b from-white to-emerald-50/40 p-1 ring-1 ring-emerald-100"
                 >
-                  {ACCOUNT_OPTIONS.map((opt) => {
-                    const active = accountStatus === opt.value;
+                  {accountOptions.map((option) => {
+                    const active = accountStatus === option.value;
                     return (
                       <button
-                        key={opt.value}
+                        key={option.value}
                         role="radio"
                         aria-checked={active}
-                        onClick={() =>
-                          setValues({ accountStatus: opt.value })
-                        }
+                        onClick={() => setValues({ accountStatus: option.value })}
                         className={[
-                          "relative z-10 px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap rounded-lg",
-                          "transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
+                          "relative z-10 rounded-lg px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap ring-1 transition",
+                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400",
                           active
-                            ? "text-teal-800"
-                            : "text-slate-700 hover:text-emerald-800",
-                          "ring-1",
-                          active
-                            ? "ring-emerald-300 bg-teal-50"
-                            : "ring-slate-200 hover:ring-emerald-200 bg-white",
+                            ? "bg-teal-50 text-teal-800 ring-emerald-300"
+                            : "bg-white text-slate-700 ring-slate-200 hover:text-emerald-800 hover:ring-emerald-200",
                         ].join(" ")}
                       >
                         {active && (
                           <motion.span
                             layoutId="patientsSegPillPopoverAcc"
                             className="absolute inset-0 rounded-lg bg-teal-50"
-                            transition={{
-                              type: "spring",
-                              stiffness: 420,
-                              damping: 30,
-                            }}
+                            transition={{ type: "spring", stiffness: 420, damping: 30 }}
                           />
                         )}
-                        <span className="relative">{opt.label}</span>
+                        <span className="relative">{option.label}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Sort */}
-              <div className="mt-4 text-[13px]">
-                Sắp xếp
+              <div className="mt-2 text-[13px]">
+                {t.sort}
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {[
-                    { value: "priority", label: "Ưu tiên trạng thái" },
-                    { value: "name", label: "Theo tên" },
-                    { value: "date", label: "Theo ngày trạng thái" },
-                  ].map((opt) => {
-                    const active = sort === opt.value;
+                  {sortOptions.map((option) => {
+                    const active = sort === option.value;
                     return (
                       <button
-                        key={opt.value}
+                        key={option.value}
                         type="button"
-                        onClick={() => onChangeSort?.(opt.value)}
+                        onClick={() => onChangeSort?.(option.value)}
                         className={[
-                          "px-2.5 py-1 rounded-full text-[12px] font-semibold border",
+                          "rounded-full border px-2.5 py-1 text-[12px] font-semibold transition",
                           active
-                            ? "bg-emerald-100 border-emerald-400 text-emerald-800"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50",
+                            ? "border-emerald-400 bg-emerald-100 text-emerald-800"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
                         ].join(" ")}
                       >
-                        {opt.label}
+                        {option.label}
                       </button>
                     );
                   })}
                 </div>
               </div>
             </div>
-            <FilterPopoverFooter
-              onReset={() => onReset?.()}
-              onClose={onClose}
-              resetLabel="Reset bộ lọc"
-              closeLabel="Đóng"
-              accent="emerald"
-            />
+
+            <FilterPopoverFooter onReset={() => onReset?.()} onClose={onClose} accent="emerald" />
           </div>
         </motion.div>
       )}

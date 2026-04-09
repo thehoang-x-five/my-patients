@@ -7,31 +7,9 @@ import React, {
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
+import { useUI } from "../../context/UIContext.jsx";
 
-const STATUS_SEG = [
-  { code: "all", label: "Tat ca", dot: "bg-slate-400" },
-  { code: "online", label: "Online", dot: "bg-emerald-500" },
-  { code: "offline", label: "Offline", dot: "bg-slate-500" },
-];
-
-const ROOM_TYPES = [
-  { code: "all", label: "Tat ca loai phong", dot: "bg-slate-400" },
-  { code: "ls", label: "Phong kham (LS)", dot: "bg-emerald-500" },
-  { code: "cls", label: "Phong CLS / DV", dot: "bg-indigo-500" },
-];
-
-const SORT_SEG = [
-  { code: "none", label: "Khong sap xep" },
-  { code: "capacity_asc", label: "Tai phong ↑" },
-  { code: "capacity_desc", label: "Tai phong ↓" },
-];
-
-function FilterPill({
-  active = false,
-  onClick,
-  children,
-  dot,
-}) {
+function FilterPill({ active = false, onClick, children, dot }) {
   return (
     <button
       type="button"
@@ -57,9 +35,69 @@ export default function DeptFilterPopover({
   setValues,
   onReset,
 }) {
+  const { lang } = useUI();
   const boxRef = useRef(null);
   const kwRef = useRef(null);
   const justOpenedRef = useRef(false);
+
+  const t =
+    lang === "en"
+      ? {
+          dialog: "Room filters",
+          title: "Room filters",
+          keyword: "Keyword",
+          keywordPlaceholder: "Room / department / lead doctor...",
+          clearSearch: "Clear search",
+          status: "Operating status",
+          roomType: "Room type",
+          sort: "Sort by capacity",
+          statusAll: "All",
+          statusOnline: "Online",
+          statusOffline: "Offline",
+          roomTypeAll: "All room types",
+          roomTypeClinical: "Exam room (clinical)",
+          roomTypeCls: "CLS / service room",
+          sortNone: "No sorting",
+          sortAsc: "Room load ↑",
+          sortDesc: "Room load ↓",
+        }
+      : {
+          dialog: "Bộ lọc phòng khám",
+          title: "Bộ lọc phòng khám",
+          keyword: "Từ khóa",
+          keywordPlaceholder: "Tên phòng / khoa / bác sĩ phụ trách...",
+          clearSearch: "Xóa tìm kiếm",
+          status: "Trạng thái hoạt động",
+          roomType: "Loại phòng",
+          sort: "Sắp xếp theo sức chứa",
+          statusAll: "Tất cả",
+          statusOnline: "Online",
+          statusOffline: "Offline",
+          roomTypeAll: "Tất cả loại phòng",
+          roomTypeClinical: "Phòng khám (LS)",
+          roomTypeCls: "Phòng CLS / DV",
+          sortNone: "Không sắp xếp",
+          sortAsc: "Tải phòng ↑",
+          sortDesc: "Tải phòng ↓",
+        };
+
+  const statusSegments = [
+    { code: "all", label: t.statusAll, dot: "bg-slate-400" },
+    { code: "online", label: t.statusOnline, dot: "bg-emerald-500" },
+    { code: "offline", label: t.statusOffline, dot: "bg-slate-500" },
+  ];
+
+  const roomTypes = [
+    { code: "all", label: t.roomTypeAll, dot: "bg-slate-400" },
+    { code: "ls", label: t.roomTypeClinical, dot: "bg-emerald-500" },
+    { code: "cls", label: t.roomTypeCls, dot: "bg-indigo-500" },
+  ];
+
+  const sortSegments = [
+    { code: "none", label: t.sortNone },
+    { code: "capacity_asc", label: t.sortAsc },
+    { code: "capacity_desc", label: t.sortDesc },
+  ];
 
   const anchorNode =
     anchorEl && anchorEl.current ? anchorEl.current : anchorEl || null;
@@ -102,7 +140,7 @@ export default function DeptFilterPopover({
     };
 
     document.addEventListener("keydown", onKey, true);
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       justOpenedRef.current = false;
       document.addEventListener("click", onClickOutside, true);
     }, 0);
@@ -110,7 +148,7 @@ export default function DeptFilterPopover({
     return () => {
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("click", onClickOutside, true);
-      clearTimeout(t);
+      clearTimeout(timer);
     };
   }, [open, onClose, anchorNode]);
 
@@ -118,21 +156,20 @@ export default function DeptFilterPopover({
     const gap = 8;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-
-    const W = Math.min(336, vw - 24);
+    const width = Math.min(336, vw - 24);
     const el =
       anchorNode && anchorNode.getBoundingClientRect ? anchorNode : null;
-    const r = el ? el.getBoundingClientRect() : null;
+    const rect = el ? el.getBoundingClientRect() : null;
 
-    let left = Math.min(Math.max(r ? r.right - W : 16, 12), vw - W - 12);
-    let top = (r ? r.bottom : 64) + gap;
+    let left = Math.min(Math.max(rect ? rect.right - width : 16, 12), vw - width - 12);
+    let top = (rect ? rect.bottom : 64) + gap;
 
     const estH = 340;
-    if (top + estH > vh - 12 && r) {
-      top = Math.max(12, r.top - gap - estH);
+    if (top + estH > vh - 12 && rect) {
+      top = Math.max(12, rect.top - gap - estH);
     }
 
-    setWidthPx(W);
+    setWidthPx(width);
     setPos({ top, left });
     setMaxH(Math.min(vh - top - 12, 460));
   }
@@ -179,7 +216,7 @@ export default function DeptFilterPopover({
             ref={boxRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Bo loc phong kham"
+            aria-label={t.dialog}
             className="overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-emerald-200/70"
             style={{ maxHeight: maxH }}
           >
@@ -188,19 +225,19 @@ export default function DeptFilterPopover({
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-lg bg-emerald-100 ring-1 ring-emerald-200">
                   🧭
                 </span>
-                Bo loc phong kham
+                {t.title}
               </div>
             </div>
 
             <div className="grid gap-2 overflow-y-auto p-2.5 text-[13px] text-slate-700">
               <label className="text-[13px]">
-                Tu khoa
+                {t.keyword}
                 <div className="relative mt-1">
                   <input
                     ref={kwRef}
                     value={keyword}
                     onChange={(e) => apply({ keyword: e.target.value || "" })}
-                    placeholder="Ten phong / khoa / bac si phu trach..."
+                    placeholder={t.keywordPlaceholder}
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pl-9 text-[13px] shadow-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-500"
                   />
                   <span className="absolute left-3 top-2.5 text-emerald-600">
@@ -209,7 +246,7 @@ export default function DeptFilterPopover({
                   {keyword && (
                     <button
                       type="button"
-                      aria-label="Xoa tim kiem"
+                      aria-label={t.clearSearch}
                       onClick={() => apply({ keyword: "" })}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                     >
@@ -220,9 +257,9 @@ export default function DeptFilterPopover({
               </label>
 
               <div className="text-[13px]">
-                Trang thai hoat dong
+                {t.status}
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {STATUS_SEG.map((item) => (
+                  {statusSegments.map((item) => (
                     <FilterPill
                       key={item.code}
                       active={status === item.code}
@@ -236,9 +273,9 @@ export default function DeptFilterPopover({
               </div>
 
               <div className="text-[13px]">
-                Loai phong
+                {t.roomType}
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {ROOM_TYPES.map((item) => (
+                  {roomTypes.map((item) => (
                     <FilterPill
                       key={item.code}
                       active={roomType === item.code}
@@ -252,9 +289,9 @@ export default function DeptFilterPopover({
               </div>
 
               <div className="text-[13px]">
-                Sap xep theo suc chua
+                {t.sort}
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {SORT_SEG.map((item) => (
+                  {sortSegments.map((item) => (
                     <FilterPill
                       key={item.code}
                       active={sort === item.code}
