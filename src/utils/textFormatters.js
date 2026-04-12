@@ -50,6 +50,7 @@ const LOCALIZED_LABELS = {
   da_phat: { vi: "Đã phát", en: "Dispensed" },
   chua_thu: { vi: "Chưa thu", en: "Unpaid" },
   da_thu: { vi: "Đã thu", en: "Paid" },
+  bao_luu: { vi: "Bảo lưu", en: "Reserved" },
   cho_ve: { vi: "Cho về", en: "Discharge home" },
   cho_thuoc_ve: { vi: "Cho thuốc về", en: "Home medication" },
 
@@ -158,6 +159,14 @@ function resolveLabel(raw, lang) {
     return pickLocalizedLabel(LOCALIZED_LABELS.chan_doan_hinh_anh, lang);
   }
 
+  if (normalized === "da_xac_nhan") {
+    return pickLocalizedLabel({ vi: "Đã xác nhận", en: "Confirmed" }, lang);
+  }
+
+  if (normalized === "da_checkin") {
+    return pickLocalizedLabel({ vi: "Đã check-in", en: "Checked in" }, lang);
+  }
+
   return "";
 }
 
@@ -249,4 +258,64 @@ export function formatPaymentMethodLabel(
   lang = getCurrentLanguage()
 ) {
   return formatLocalizedText(method, fallback, lang);
+}
+
+export function formatLocalizedMessage(
+  message,
+  fallback = "",
+  lang = getCurrentLanguage()
+) {
+  if (message == null || message === "") return fallback;
+
+  const raw = String(message);
+  if (!raw.trim()) return fallback;
+
+  const normalizeToken = (token) => {
+    const formatted = formatLocalizedText(token, "", lang);
+    return formatted && formatted !== token ? formatted : token;
+  };
+
+  return raw
+    .replace(/'([^']+)'/g, (_, token) => `'${normalizeToken(token)}'`)
+    .replace(/\b[a-z0-9]+(?:_[a-z0-9]+)+\b/gi, (token) => normalizeToken(token));
+}
+
+// Format currency to Vietnamese format
+export function formatCurrency(amount) {
+  if (amount == null || isNaN(amount)) return "0đ";
+  return `${Number(amount).toLocaleString("vi-VN")}đ`;
+}
+
+// Format date to Vietnamese format
+export function formatDate(dateString) {
+  if (!dateString) return "—";
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "—";
+    return date.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  } catch {
+    return "—";
+  }
+}
+
+// Format datetime to Vietnamese format
+export function formatDateTime(dateString) {
+  if (!dateString) return "—";
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "—";
+    return date.toLocaleString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
 }

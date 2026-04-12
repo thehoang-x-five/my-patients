@@ -24,6 +24,7 @@ import {
   useCreateExamOrder,
   useCreateDiagnosis,
   useCancelVisit,
+  useCancelWaitingClinicalQueue,
   useCancelClsOrder,
 } from "../api/examination.js";
 import { useCreateHistoryVisit } from "../api/history.js";
@@ -205,6 +206,11 @@ export default function Examination() {
     onError: (err) => toast.error(err?.response?.data?.Message || err?.message || "Không thể hủy lượt khám"),
   });
 
+  const cancelWaitingClinicalMut = useCancelWaitingClinicalQueue({
+    onSuccess: () => toast.success("Đã hủy ca đang chờ thành công"),
+    onError: (err) => toast.error(err?.response?.data?.Message || err?.response?.data?.message || err?.message || "Không thể hủy ca đang chờ"),
+  });
+
   // === Cancel CLS mutation ===
   const cancelClsMut = useCancelClsOrder({
     onSuccess: () => toast.success("Đã hủy phiếu Cận lâm sàng thành công"),
@@ -347,6 +353,13 @@ export default function Examination() {
       queueItem = await getQueueById(key);
     } catch (err) {
       console.error("[Examination] getQueueById error:", err);
+      
+      // ✅ Xử lý riêng cho lỗi 403 Forbidden
+      if (err?.response?.status === 403) {
+        toast.error("Bạn không có quyền truy cập hàng đợi này. Vui lòng kiểm tra lịch trực hoặc phòng được phân công.");
+        return;
+      }
+      
       const msg =
         err?.response?.data?.Message ||
         err?.response?.data?.message ||
@@ -813,6 +826,11 @@ export default function Examination() {
                       onCancelVisit={
                         canCancelVisitAction
                           ? (maLuot) => cancelVisitMut.mutate(maLuot)
+                          : undefined
+                      }
+                      onCancelWaitingClinical={
+                        canCancelVisitAction
+                          ? (maHangDoi) => cancelWaitingClinicalMut.mutate(maHangDoi)
                           : undefined
                       }
                       onCancelClsOrder={

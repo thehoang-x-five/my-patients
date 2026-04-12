@@ -47,11 +47,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
   const Row = ({ children, i, isHighlighted }) => (
     <motion.tr
       initial={{ opacity: 0, y: 6 }}
-      animate={
-        isHighlighted
-          ? { opacity: 1, y: 0 }
-          : { opacity: 1, y: 0, backgroundColor: i % 2 === 0 ? "transparent" : "rgb(248 250 252 / 0.4)" }
-      }
+      animate={{ opacity: 1, y: 0 }}
       transition={{ delay: i * 0.02, duration: 0.2 }}
       whileHover={{ y: -2 }}
       className={`
@@ -80,6 +76,13 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
       return (
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 ring-1 ring-rose-200">
           Đã hủy
+        </span>
+      );
+    }
+    if (v === "bao_luu" || v === "reserved") {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+          Bảo lưu
         </span>
       );
     }

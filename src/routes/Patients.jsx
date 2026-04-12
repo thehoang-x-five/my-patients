@@ -9,6 +9,8 @@ import PatientModal from "../components/patients/PatientModal.jsx";
 import Pagination from "../components/ui/Pagination.jsx";
 
 import {
+  getPatientDetail,
+  listPatients,
   usePatientsList,
   useCreatePatient,
   useUpdatePatient,
@@ -36,6 +38,13 @@ const PATIENT_TOAST_IDS = {
   flashAddReady: "patients-flash-add-ready",
   flashAddLoadError: "patients-flash-add-load-error",
   examInfoLoadError: "patients-exam-info-load-error",
+};
+
+const DEFAULT_PATIENT_FILTER = {
+  keyword: "",
+  todayStatus: "all",
+  accountStatus: "all",
+  todayOnly: false,
 };
 
 // Lấy chuỗi yyyy-MM-dd của hôm nay
@@ -78,6 +87,113 @@ function normStatusDate(p) {
     p?.statusDate ??
     "";
   return String(v || "").trim();
+}
+
+function readPatientId(patient) {
+  return (
+    patient?.id ||
+    patient?.maBenhNhan ||
+    patient?.ma_benh_nhan ||
+    patient?.MaBenhNhan ||
+    patient?.pid ||
+    ""
+  );
+}
+
+function hasNonDefaultPatientFilters(filter) {
+  return (
+    !!filter?.keyword ||
+    (filter?.todayStatus && filter.todayStatus !== DEFAULT_PATIENT_FILTER.todayStatus) ||
+    (filter?.accountStatus && filter.accountStatus !== DEFAULT_PATIENT_FILTER.accountStatus)
+  );
+}
+
+function isTodayEligiblePatient(detail) {
+  if (!detail) return false;
+
+  const status = String(
+    detail?.TrangThaiHomNay ||
+      detail?.trangThaiHomNay ||
+      detail?.statusCode ||
+      detail?.trang_thai_hom_nay_code ||
+      ""
+  ).trim();
+
+  const dateRaw =
+    detail?.NgayTrangThai ||
+    detail?.ngayTrangThai ||
+    detail?.ngay_trang_thai ||
+    detail?.statusDate ||
+    "";
+
+  if (!status || !dateRaw) return false;
+
+  const ts = new Date(dateRaw).getTime();
+  if (Number.isNaN(ts)) return false;
+
+  return new Date(ts).toDateString() === new Date().toDateString();
+}
+
+async function findPatientPageInList({
+  pid,
+  todayOnly,
+  sortBy,
+  sortDirection,
+  pageSize = 50,
+}) {
+  if (!pid) return null;
+
+  const firstPage = await listPatients({
+    todayOnly,
+    page: 1,
+    pageSize,
+    sortBy,
+    sortDirection,
+  });
+
+  const firstItems = Array.isArray(firstPage?.Items) ? firstPage.Items : [];
+  if (firstItems.some((entry) => readPatientId(entry) === pid)) {
+    return 1;
+  }
+
+  const totalItems = Number(firstPage?.TotalItems || firstItems.length || 0);
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+  for (let nextPage = 2; nextPage <= totalPages; nextPage += 1) {
+    const pageData = await listPatients({
+      todayOnly,
+      page: nextPage,
+      pageSize,
+      sortBy,
+      sortDirection,
+    });
+
+    const pageItems = Array.isArray(pageData?.Items) ? pageData.Items : [];
+    if (pageItems.some((entry) => readPatientId(entry) === pid)) {
+      return nextPage;
+    }
+  }
+
+  return null;
+}
+
+function getPatientStatusPriority(patient) {
+  const code = normStatusCode(patient).toLowerCase();
+
+  if (code === STATUSES.IN_EXAM || code === STATUSES.IN_EXAM_SVC) return 0;
+  if (code === STATUSES.WAIT_PROC || code === STATUSES.WAIT_PROC_SVC) return 1;
+  if (code === STATUSES.WAIT_EXAM || code === STATUSES.WAIT_EXAM_SVC) return 2;
+  if (code === STATUSES.WAIT_INTAKE || code === STATUSES.WAIT_INTAKE_SVC) return 3;
+  if (code === STATUSES.DONE || code === "hoan_thanh" || code === "da_hoan_tat") return 4;
+  if (code === STATUSES.CANCELLED || code === "huy") return 5;
+  return 6;
+}
+
+function getPatientStatusDateTs(patient) {
+  const raw = normStatusDate(patient);
+  if (!raw) return 0;
+  const ts = new Date(raw).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
 }
 function pickLatestAppointment(list = []) {
   if (!Array.isArray(list) || list.length === 0) return null;
@@ -182,6 +298,8 @@ export default function Patients() {
   const nav = useNavigate();
   const { search } = useLocation();
   const sp = new URLSearchParams(search);
+  const routePid = String(sp.get("pid") || "").trim();
+  const routeView = String(sp.get("view") || "").trim().toLowerCase();
 
   // ✅ Check permissions
   const user = useAuthStore((s) => s.user);
@@ -201,6 +319,7 @@ export default function Patients() {
 
   const [viewMode, setViewMode] = useState("today"); // "today" | "all"
   const [sort, setSort] = useState("priority"); // "priority" | "name" | "date"
+  const effectiveViewMode = routeView === "all" ? "all" : viewMode;
   const [modal, setModal] = useState({
     open: false,
     mode: "view", // "view" | "add" | "edit" | "exam" | "process"
@@ -227,6 +346,7 @@ export default function Patients() {
   const [filterAnchor, setFilterAnchor] = useState(null);
 
   const highlightPid = useUIStore((s) => s.highlightPid);
+  const highlightSource = useUIStore((s) => s.highlightSource);
   const highlightNotified = useUIStore((s) => s.highlightNotified);  // ✅ NEW
   const markHighlightNotified = useUIStore((s) => s.markHighlightNotified);  // ✅ NEW
   const clearHighlight = useUIStore((s) => s.clearHighlight);
@@ -339,9 +459,7 @@ export default function Patients() {
       case "date":
         return { sortBy: "ngaytrangthai", sortDirection: "desc" };
       case "priority":
-        // Priority logic phức tạp, tạm thời dùng default của backend (theo HoTen)
-        // TODO: Implement priority sorting ở backend nếu cần
-        return { sortBy: "hoten", sortDirection: "asc" };
+        return { sortBy: "priority", sortDirection: "asc" };
       default:
         return { sortBy: "hoten", sortDirection: "asc" };
     }
@@ -358,7 +476,7 @@ export default function Patients() {
         accountStatus:
           filter.accountStatus === "all" ? undefined : filter.accountStatus,
         // map sang OnlyToday trong PatientSearchFilter
-        todayOnly: viewMode === "today",
+        todayOnly: effectiveViewMode === "today",
         page,
         pageSize: 50, // ✅ Chuẩn hóa: 50 items mặc định
         sortBy: sortParams.sortBy,
@@ -371,8 +489,12 @@ export default function Patients() {
 
   // ✅ Reset page khi filter, viewMode hoặc sort thay đổi
   useEffect(() => {
+    if (skipAutoResetPageRef.current) {
+      skipAutoResetPageRef.current = false;
+      return;
+    }
     if (page > 1) setPage(1);
-  }, [filter.keyword, filter.todayStatus, filter.accountStatus, viewMode, sort]);
+  }, [filter.keyword, filter.todayStatus, filter.accountStatus, effectiveViewMode, sort]);
 
   const { mutateAsync: createPatient } = useCreatePatient();
   const { mutateAsync: updatePatient } = useUpdatePatient();
@@ -463,7 +585,10 @@ export default function Patients() {
   }, [qc]);
 
   // ✅ Refs to prevent duplicate useEffect execution for check-in flow
-  const hasProcessedHighlightRef = React.useRef(false);
+  const processedHighlightKeyRef = React.useRef("");
+  const hydratedRouteHighlightRef = React.useRef("");
+  const locatedHighlightRef = React.useRef("");
+  const skipAutoResetPageRef = React.useRef(false);
   const hasProcessedFlashAddRef = React.useRef(false);
   
   // ✅ Clear stale prefill khi mount nếu flash đã quá cũ (> 5 phút)
@@ -483,21 +608,166 @@ export default function Patients() {
   // === Auto clear highlight sau 5s
   useEffect(() => {
     if (!highlightPid) return;
-    const t = setTimeout(() => clearHighlight(), 5000);
+    if (!items.some((entry) => readPatientId(entry) === highlightPid)) return;
+    const t = setTimeout(() => clearHighlight(), 10000);
     return () => clearTimeout(t);
-  }, [highlightPid, clearHighlight]);
+  }, [highlightPid, items, clearHighlight]);
+
+  useEffect(() => {
+    if (!routePid) return;
+    if (hydratedRouteHighlightRef.current === routePid) return;
+
+    hydratedRouteHighlightRef.current = routePid;
+    setHighlightPid(routePid, { source: "view" });
+  }, [routePid, setHighlightPid]);
+
+  useEffect(() => {
+    if (routeView !== "all") return;
+    if (viewMode === "all") return;
+
+    skipAutoResetPageRef.current = true;
+    setViewMode("all");
+  }, [routeView, viewMode]);
+
+  useEffect(() => {
+    const targetPid = highlightPid || routePid;
+    if (!targetPid) {
+      locatedHighlightRef.current = "";
+      return;
+    }
+
+    const onCurrentPage = items.some((entry) => readPatientId(entry) === targetPid);
+    if (onCurrentPage) {
+      locatedHighlightRef.current = `${targetPid}:${effectiveViewMode}:${sort}`;
+      if (routeView === "all" && viewMode !== "all") {
+        skipAutoResetPageRef.current = true;
+        setViewMode("all");
+        return;
+      }
+      if (routePid && routePid === targetPid) {
+        const nextParams = new URLSearchParams(search);
+        nextParams.delete("pid");
+        nextParams.delete("view");
+        nav(
+          {
+            pathname: "/patients",
+            search: nextParams.toString() ? `?${nextParams.toString()}` : "",
+          },
+          { replace: true }
+        );
+      }
+      return;
+    }
+
+    const locateKey = `${targetPid}:${effectiveViewMode}:${page}:${sort}`;
+    if (locatedHighlightRef.current === locateKey) return;
+    locatedHighlightRef.current = locateKey;
+
+    let cancelled = false;
+
+    (async () => {
+      const locateParams = {
+        pid: targetPid,
+        sortBy: sortParams.sortBy,
+        sortDirection: sortParams.sortDirection,
+        pageSize: 50,
+      };
+
+      let targetViewMode = effectiveViewMode;
+      let targetPage = null;
+
+      if (routeView !== "all" && routePid && routePid === targetPid) {
+        try {
+          const detail = await getPatientDetail(targetPid);
+          if (!isTodayEligiblePatient(detail)) {
+            targetViewMode = "all";
+          }
+        } catch {
+          targetViewMode = "all";
+        }
+      }
+
+      if (targetViewMode === "today") {
+        targetPage = await findPatientPageInList({
+          ...locateParams,
+          todayOnly: true,
+        });
+
+        if (!targetPage) {
+          targetPage = await findPatientPageInList({
+            ...locateParams,
+            todayOnly: false,
+          });
+          targetViewMode = "all";
+        }
+      } else {
+        targetPage = await findPatientPageInList({
+          ...locateParams,
+          todayOnly: false,
+        });
+      }
+
+      if (cancelled) return;
+
+      if (hasNonDefaultPatientFilters(filter)) {
+        setFilter({
+          ...DEFAULT_PATIENT_FILTER,
+        });
+      }
+
+      if (
+        targetViewMode !== effectiveViewMode ||
+        (targetPage && targetPage !== page) ||
+        hasNonDefaultPatientFilters(filter)
+      ) {
+        skipAutoResetPageRef.current = true;
+      }
+
+      if (targetViewMode !== viewMode) {
+        setViewMode(targetViewMode);
+      }
+
+      if (targetPage && targetPage !== page) {
+        setPage(targetPage);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    highlightPid,
+    routePid,
+    routeView,
+    search,
+    nav,
+    items,
+    viewMode,
+    effectiveViewMode,
+    page,
+    sort,
+    sortParams.sortBy,
+    sortParams.sortDirection,
+    filter,
+  ]);
 
   // === Khi highlight xuất hiện -> call API search appointments đã check-in
   useEffect(() => {
     // ✅ Guard: Prevent duplicate execution
-    if (hasProcessedHighlightRef.current) {
+    const highlightKey = `${highlightSource || "view"}:${highlightPid || ""}`;
+    if (processedHighlightKeyRef.current === highlightKey) {
       console.log("[Patients] Highlight already processed, skipping");
       return;
     }
     
     if (!highlightPid) {
       // ✅ Reset ref when highlightPid is cleared
-      hasProcessedHighlightRef.current = false;
+      processedHighlightKeyRef.current = "";
+      return;
+    }
+
+    if (highlightSource !== "checkin") {
+      processedHighlightKeyRef.current = highlightKey;
       return;
     }
 
@@ -535,7 +805,7 @@ export default function Patients() {
         }
         
         // Mark as processed
-        hasProcessedHighlightRef.current = true;
+        processedHighlightKeyRef.current = highlightKey;
       } catch (err) {
         console.error("Không lấy được lịch hẹn đã check-in khi highlight:", err);
         toast.error("Không thể tải thông tin lịch hẹn. Vui lòng thử lại.", {
@@ -544,7 +814,7 @@ export default function Patients() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightPid, items]);
+  }, [highlightPid, highlightSource, items]);
 
   // ❌ REMOVED: Separate useEffect to reset ref - causes duplicate execution
   // Reset is now handled inside the main useEffect when highlightPid is cleared
@@ -663,9 +933,38 @@ export default function Patients() {
     };
   }, [clearPatientPrefill, ackFlashAdd]);
 
-  // ✅ Với phân trang, filter và sort đã được làm ở BE
-  // Không cần filter/sort ở FE nữa
-  const filtered = items; // items đã được filter và sort ở backend
+  const filtered = useMemo(() => {
+    const arr = Array.isArray(items) ? [...items] : [];
+
+    arr.sort((a, b) => {
+      if (sort === "name") {
+        return readPatientName(a).localeCompare(readPatientName(b), "vi", {
+          sensitivity: "base",
+        });
+      }
+
+      if (sort === "date") {
+        const dateDiff = getPatientStatusDateTs(b) - getPatientStatusDateTs(a);
+        if (dateDiff !== 0) return dateDiff;
+        return readPatientName(a).localeCompare(readPatientName(b), "vi", {
+          sensitivity: "base",
+        });
+      }
+
+      const priorityDiff =
+        getPatientStatusPriority(a) - getPatientStatusPriority(b);
+      if (priorityDiff !== 0) return priorityDiff;
+
+      const dateDiff = getPatientStatusDateTs(b) - getPatientStatusDateTs(a);
+      if (dateDiff !== 0) return dateDiff;
+
+      return readPatientName(a).localeCompare(readPatientName(b), "vi", {
+        sensitivity: "base",
+      });
+    });
+
+    return arr;
+  }, [items, sort]);
 
   // === Đếm số lượng theo trạng thái hôm nay
   const counts = useMemo(() => {
@@ -853,7 +1152,7 @@ export default function Patients() {
       >
         <PatientsToolbar
           counts={counts}
-          viewMode={viewMode}
+          viewMode={effectiveViewMode}
           onChangeViewMode={setViewMode}
           onAdd={canCreatePatientAction ? () => {
             // Nếu có patientPrefill (từ flashAddAt) -> fill sẵn tên + sdt
@@ -993,7 +1292,7 @@ export default function Patients() {
               if (pid) {
                 // Highlight the newly created/updated patient row
                 try {
-                  setHighlightPid(pid);
+                  setHighlightPid(pid, { source: "view" });
                 } catch {}
 
                 nav(`/patients?pid=${encodeURIComponent(pid)}`);

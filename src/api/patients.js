@@ -167,6 +167,7 @@ const TRANSACTION_STATUS_MAP = {
   cho_thanh_toan: "Đang chờ",
   da_huy: "Đã hủy",
   huy: "Đã hủy",
+  bao_luu: "Bảo lưu",
 };
 
 export function mapTransactionStatusLabel(s) {
@@ -571,6 +572,8 @@ export function useUpdatePatientStatus() {
     mutationFn: ({ id, status }) => updatePatientStatus({ id, status }),
     onSuccess: (_res, vars) => {
       const key = vars?.id ?? vars?.pid ?? vars?.code;
+      qc.invalidateQueries({ queryKey: ["invoices"], exact: false });
+      qc.invalidateQueries({ queryKey: ["queue"], exact: false });
       if (key) {
         qc.invalidateQueries({ queryKey: ["patients"] });
         qc.invalidateQueries({ queryKey: ["visits", key] });

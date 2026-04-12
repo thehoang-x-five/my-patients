@@ -12,7 +12,7 @@ import React, { useEffect } from "react";
  *  - isServiceIntake: boolean
  *  - totalServiceFee: number
  *  - services?: Array<string | {name:string, room?:string, price?:number, note?:string}>
- *  - feePaid?: boolean   -> nếu undefined và price=0 thì ẩn toàn bộ dòng phí
+ *  - feePaid?: boolean   -> true: đã thu, false: chưa thu, undefined: suy luận theo từng flow cũ
  *  - onAfterPrint?: () => void
  */
 export default function PrintExamTicket({
@@ -134,7 +134,15 @@ export default function PrintExamTicket({
 
     const feeLabel = isServiceIntake ? "Tổng phí dịch vụ" : "Phí khám";
     const feeAmount = isServiceIntake ? totalServiceFee : (booking?.price || 0);
-    const showFeeRow = feeAmount > 0 && feePaid !== undefined;
+    const hasFee = feeAmount > 0;
+    const resolvedFeePaid =
+      typeof feePaid === "boolean" ? feePaid : hasFee;
+    const feeStatusHtml = !hasFee
+      ? '<span class="muted">Không thu</span>'
+      : resolvedFeePaid
+        ? '<span class="badge badge-paid">ĐÃ THU</span>'
+        : '<span class="badge badge-deferred">CHƯA THU</span>';
+    const showFeeRow = hasFee && feePaid !== undefined;
 
     const html = `<!doctype html>
 <html>
@@ -151,7 +159,9 @@ export default function PrintExamTicket({
       th,td{ border:1px solid #000; padding:8px; vertical-align:top; }
       th{ background:#ecfeff; text-align:left; }
       .block{ margin-top:14px; }
-      .badge{ display:inline-block; border:1px solid #a7f3d0; background:#ecfdf5; color:#064e3b; padding:2px 8px; border-radius:999px; font-weight:700; font-size:12px; }
+      .badge{ display:inline-block; padding:2px 8px; border-radius:999px; font-weight:700; font-size:12px; }
+      .badge-paid{ border:1px solid #a7f3d0; background:#ecfdf5; color:#064e3b; }
+      .badge-deferred{ border:1px solid #fde68a; background:#fffbeb; color:#92400e; }
       .fee{ color:#065f46; font-weight:800; }
       .muted{ color:#6b7280; }
       .signline{ margin-top:28px; font-weight:600; color:#334155; }
@@ -207,7 +217,7 @@ export default function PrintExamTicket({
                     <th>Tổng phí</th>
                     <td><span class="fee">${fmt(feeAmount)}đ</span></td>
                     <th>Trạng thái phí</th>
-                    <td>${feeAmount > 0 ? '<span class="badge">ĐÃ THU</span>' : '<span class="muted">Không thu</span>'}</td>
+                    <td>${feeStatusHtml}</td>
                   </tr>
                 `
                 : `
@@ -221,7 +231,7 @@ export default function PrintExamTicket({
                     <th>Bác sĩ</th>
                     <td>${safe(booking?.doctor || "-")}</td>
                     <th>Trạng thái phí</th>
-                    <td>${feeAmount > 0 ? '<span class="badge">ĐÃ THU</span>' : '<span class="muted">Không thu</span>'}</td>
+                    <td>${feeStatusHtml}</td>
                   </tr>
                 `
             }

@@ -1,4 +1,11 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useUI } from "../../context/UIContext.jsx";
@@ -75,28 +82,59 @@ export default function PopoverSelect({
     setQuery("");
   };
 
-  const computePosition = () => {
+  const computePosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
 
     const rect = trigger.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const margin = 12;
+    const gap = 8;
     const width = Math.min(Math.max(rect.width, 240), vw - 24);
-    let left = Math.min(Math.max(rect.left, 12), vw - width - 12);
-    let top = rect.bottom + 8;
-    const estH = canSearch ? 360 : 300;
+    const panelHeight = Math.min(
+      panelRef.current?.offsetHeight || (canSearch ? 360 : 300),
+      vh - margin * 2
+    );
+    const spaceBelow = vh - rect.bottom - margin;
+    const spaceAbove = rect.top - margin;
 
-    if (top + estH > vh - 12) {
-      top = Math.max(12, rect.top - estH - 8);
+    let left = Math.min(Math.max(rect.left, margin), vw - width - margin);
+    let top;
+
+    if (spaceBelow >= panelHeight || spaceBelow >= spaceAbove) {
+      top = Math.min(rect.bottom + gap, vh - panelHeight - margin);
+    } else {
+      top = Math.max(margin, rect.top - panelHeight - gap);
     }
 
     setPos({ top, left, width });
-  };
+  }, [canSearch]);
 
   useLayoutEffect(() => {
-    if (open) computePosition();
-  }, [open, normalizedOptions.length, canSearch]);
+    if (!open) return undefined;
+
+    let raf1 = 0;
+    let raf2 = 0;
+    let raf3 = 0;
+
+    computePosition();
+    raf1 = window.requestAnimationFrame(() => {
+      computePosition();
+      raf2 = window.requestAnimationFrame(() => {
+        computePosition();
+        raf3 = window.requestAnimationFrame(() => {
+          computePosition();
+        });
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+      window.cancelAnimationFrame(raf3);
+    };
+  }, [open, normalizedOptions.length, computePosition]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -116,6 +154,7 @@ export default function PopoverSelect({
 
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("mousedown", onClickOutside, true);
+    document.addEventListener("scroll", onViewport, true);
     window.addEventListener("resize", onViewport, { passive: true });
     window.addEventListener("scroll", onViewport, { passive: true });
     if (window.visualViewport) {
@@ -131,6 +170,7 @@ export default function PopoverSelect({
       window.clearTimeout(focusTimer);
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("mousedown", onClickOutside, true);
+      document.removeEventListener("scroll", onViewport, true);
       window.removeEventListener("resize", onViewport);
       window.removeEventListener("scroll", onViewport);
       if (window.visualViewport) {
@@ -138,7 +178,17 @@ export default function PopoverSelect({
         window.visualViewport.removeEventListener("scroll", onViewport);
       }
     };
-  }, [open, canSearch]);
+  }, [open, canSearch, computePosition]);
+
+  useEffect(() => {
+    if (!open || !triggerRef.current || typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => computePosition());
+    observer.observe(triggerRef.current);
+    return () => observer.disconnect();
+  }, [open, computePosition]);
 
   return (
     <>
@@ -186,7 +236,7 @@ export default function PopoverSelect({
             <AnimatePresence>
               {open && (
                 <motion.div
-                  className="fixed z-[140]"
+                  className="fixed z-[400]"
                   style={{ top: pos.top, left: pos.left, width: pos.width }}
                   initial={{ opacity: 0, y: 6, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}

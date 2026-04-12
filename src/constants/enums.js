@@ -127,12 +127,14 @@ export const TRANG_THAI_HOA_DON = {
   CHUA_THU: 'chua_thu',
   DA_THU: 'da_thu',
   DA_HUY: 'da_huy',
+  BAO_LUU: 'bao_luu',
 };
 
 export const TRANG_THAI_HOA_DON_LABEL = {
   [TRANG_THAI_HOA_DON.CHUA_THU]: 'Chưa thu',
   [TRANG_THAI_HOA_DON.DA_THU]: 'Đã thu',
   [TRANG_THAI_HOA_DON.DA_HUY]: 'Đã hủy',
+  [TRANG_THAI_HOA_DON.BAO_LUU]: 'Bảo lưu',
 };
 
 export const PHUONG_THUC_THANH_TOAN = {

@@ -14,6 +14,7 @@ const STATUS_TONES = {
   da_thu: { tone: "emerald", dot: "emerald", label: "Đã thu" },
   chua_thu: { tone: "amber", dot: "amber", label: "Chưa thu" },
   da_huy: { tone: "rose", dot: "rose", label: "Đã hủy" },
+  bao_luu: { tone: "sky", dot: "sky", label: "Bảo lưu" },
 };
 
 const PAYMENT_LABEL = {
@@ -51,7 +52,10 @@ export default function PatientTransactions({ transactions = [], highlightItems 
   }, [transactions, sortKey, sortDir]);
 
   const total = useMemo(
-    () => sorted.filter((t) => t.status === "da_thu").reduce((s, t) => s + Number(t.amount), 0),
+    () =>
+      sorted
+        .filter((t) => t.status === "da_thu" || t.status === "bao_luu")
+        .reduce((s, t) => s + Number(t.amount), 0),
     [sorted]
   );
 

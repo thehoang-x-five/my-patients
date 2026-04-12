@@ -306,11 +306,20 @@ const createUiSlice = (set, get) => ({
 
   // ----- Common highlights -----
   highlightPid: null,
+  highlightSource: null,
   highlightNotified: false,  // ✅ NEW: Track if highlight toast was shown
   setHighlightPid: (pid) => set({ highlightPid: pid, highlightNotified: false }),  // ✅ Reset notified when setting new highlight
   clearHighlight: () => set({ highlightPid: null, highlightNotified: false }),  // ✅ Reset notified when clearing
   markHighlightNotified: () => set({ highlightNotified: true }),  // ✅ NEW: Mark as notified
 
+  setHighlightPid: (pid, options = {}) =>
+    set({
+      highlightPid: pid,
+      highlightSource: options?.source || "view",
+      highlightNotified: false,
+    }),
+  clearHighlight: () =>
+    set({ highlightPid: null, highlightSource: null, highlightNotified: false }),
   flashAddAt: 0,
   flashAddNotified: false,  // ✅ NEW: Track if flash add toast was shown
   flashAdd: () => set({ flashAddAt: Date.now(), flashAddNotified: false }),  // ✅ Reset notified when flashing

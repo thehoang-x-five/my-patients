@@ -1,6 +1,6 @@
 // src/components/reports/ReportToolbar.jsx
 import { motion } from "framer-motion";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ReportFilterPopover from "./ReportFilterPopover.jsx";
 
 export default function ReportToolbar({
@@ -18,6 +18,52 @@ export default function ReportToolbar({
   onReset,
 }) {
   const [openFilter, setOpenFilter] = useState(false);
+  const popoverRef = useRef(null);
+  const filterBtnRef = useRef(null);
+  const justOpenedRef = useRef(false);
+
+  const closeFilter = () => setOpenFilter(false);
+  const handleReset = () => {
+    onReset?.();
+    closeFilter();
+  };
+
+  useEffect(() => {
+    if (!openFilter) return;
+    justOpenedRef.current = true;
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") closeFilter();
+    };
+
+    const onClickOutside = (event) => {
+      if (justOpenedRef.current) return;
+
+      const target = event.target;
+      const clickedAnchor = !!target?.closest?.(
+        '[data-popover-anchor="report-filter"]'
+      );
+      if (clickedAnchor) return;
+
+      const insidePopover = popoverRef.current?.contains(target);
+      const insideAnchor = filterBtnRef.current?.contains(target);
+      if (!insidePopover && !insideAnchor) {
+        closeFilter();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    const timer = setTimeout(() => {
+      justOpenedRef.current = false;
+      document.addEventListener("click", onClickOutside, true);
+    }, 0);
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("click", onClickOutside, true);
+      clearTimeout(timer);
+    };
+  }, [openFilter]);
 
   return (
     <header className="flex top-0 z-9 -mx-4 px-4">
@@ -95,7 +141,7 @@ export default function ReportToolbar({
         {/* Reset – ngoài popover */}
         <button
           type="button"
-          onClick={onReset}
+          onClick={handleReset}
           className="rounded-full px-3 py-1.5 bg-white text-sm ring-1 ring-slate-200/80 hover:bg-slate-50 hover:ring-cyan-300 text-slate-700 inline-flex items-center gap-1"
         >
           ↻ 
@@ -103,8 +149,12 @@ export default function ReportToolbar({
 
         {/* Filter popover trigger */}
         <button
+          ref={filterBtnRef}
           type="button"
           onClick={() => setOpenFilter((v) => !v)}
+          data-popover-anchor="report-filter"
+          aria-expanded={openFilter}
+          aria-haspopup="dialog"
           className="rounded-xl px-3 py-1.5 bg-white text-sm ring-1 ring-slate-200/80 hover:bg-cyan-50 hover:ring-cyan-300 text-slate-700 inline-flex items-center gap-1"
         >
           ⚙️ <span className="hidden sm:inline">Bộ lọc</span>
@@ -122,6 +172,7 @@ export default function ReportToolbar({
 
         {openFilter && (
           <ReportFilterPopover
+            popoverRef={popoverRef}
             period={period}
             from={from}
             to={to}
@@ -129,7 +180,7 @@ export default function ReportToolbar({
             setFrom={setFrom}
             setTo={setTo}
             onReset={onReset}
-            onClose={() => setOpenFilter(false)}
+            onClose={closeFilter}
           />
         )}
         </div>

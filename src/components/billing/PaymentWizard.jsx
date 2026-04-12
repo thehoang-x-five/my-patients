@@ -65,6 +65,8 @@ export default function PaymentWizard({
   examId,
   clsId,
   rxId,
+  initialInvoice = null,
+  allowDeferred = true,
   onClose,
   onComplete,
 }) {
@@ -90,16 +92,31 @@ export default function PaymentWizard({
     patient?.maBenhNhan ??
     patient?.pid ??
     patient?.id ??
+    initialInvoice?.MaBenhNhan ??
+    initialInvoice?.maBenhNhan ??
     null;
 
   const patientName =
-    patient?.HoTen ?? patient?.hoTen ?? patient?.name ?? "—";
+    patient?.HoTen ??
+    patient?.hoTen ??
+    patient?.name ??
+    initialInvoice?.TenBenhNhan ??
+    initialInvoice?.tenBenhNhan ??
+    "—";
 
-  const billingType = clsId
-    ? "can_lam_sang"
-    : rxId
-      ? "thuoc"
-      : "kham_lam_sang";
+  const billingType = String(
+    initialInvoice?.LoaiDotThu ??
+      initialInvoice?.loaiDotThu ??
+      (clsId ? "can_lam_sang" : rxId ? "thuoc" : "kham_lam_sang")
+  ).toLowerCase();
+
+  const methodOptions = useMemo(
+    () =>
+      allowDeferred
+        ? METHOD_OPTIONS
+        : METHOD_OPTIONS.filter((option) => option.value !== DEFERRED_METHOD),
+    [allowDeferred]
+  );
 
   // ==================== TÌM HÓA ĐƠN KHI MỞ ====================
   useEffect(() => {
@@ -115,6 +132,12 @@ export default function PaymentWizard({
     let cancelled = false;
 
     async function findInvoice() {
+      if (initialInvoice) {
+        setInvoice(initialInvoice);
+        setStep(STEPS.REVIEW);
+        return;
+      }
+
       try {
         // Tìm hóa đơn "chua_thu" cho bệnh nhân này
         const result = await searchInvoices({
@@ -163,7 +186,7 @@ export default function PaymentWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, patientId, examId, clsId, rxId, billingType]);
+  }, [open, patientId, examId, clsId, rxId, billingType, initialInvoice]);
 
   // Tổng tiền — ưu tiên từ invoice BE
   const total = useMemo(() => {
@@ -529,7 +552,7 @@ export default function PaymentWizard({
                     Chọn phương thức thanh toán
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    {METHOD_OPTIONS.map((option) => (
+                    {methodOptions.map((option) => (
                         <button
                           key={option.value}
                           type="button"
@@ -568,7 +591,7 @@ export default function PaymentWizard({
                     <div className="mt-2 text-sm text-slate-500">
                       Phương thức:{" "}
                       <span className="font-medium text-slate-700">
-                        {METHOD_OPTIONS.find((option) => option.value === method)
+                        {methodOptions.find((option) => option.value === method)
                           ?.label || "—"}
                       </span>
                     </div>
@@ -635,7 +658,7 @@ export default function PaymentWizard({
                     {completionMode === "deferred"
                       ? `${VND(total)} — Chưa thu`
                       : `${VND(total)} — ${
-                          METHOD_OPTIONS.find((option) => option.value === method)
+                          methodOptions.find((option) => option.value === method)
                             ?.label || "—"
                         }`}
                   </div>

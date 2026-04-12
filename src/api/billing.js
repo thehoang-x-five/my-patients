@@ -55,7 +55,11 @@ export async function searchInvoices(filter = {}) {
     ToTime: filter.ToTime ?? filter.toTime ?? null,
     LoaiDotThu: filter.LoaiDotThu ?? filter.loaiDotThu ?? null,
     TrangThai: filter.TrangThai ?? filter.trangThai ?? null,
+    MinAmount: filter.MinAmount ?? filter.minAmount ?? null,
+    MaxAmount: filter.MaxAmount ?? filter.maxAmount ?? null,
     Keyword: filter.Keyword ?? filter.keyword ?? null,
+    SortBy: filter.SortBy ?? filter.sortBy ?? null,
+    SortDirection: filter.SortDirection ?? filter.sortDirection ?? null,
     Page: filter.Page ?? filter.page ?? 1,
     PageSize: filter.PageSize ?? filter.pageSize ?? 20,
   };
@@ -94,11 +98,13 @@ export function useCreateInvoice() {
   });
 }
 
-export function useSearchInvoices(filter) {
+export function useSearchInvoices(filter, options = {}) {
   return useQuery({
-    queryKey: ["invoices", filter],
+    queryKey: ["invoices", "search", filter],
     queryFn: () => searchInvoices(filter),
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
+    staleTime: 30000, // 30 seconds
+    ...options,
   });
 }
 
@@ -133,7 +139,7 @@ export async function cancelInvoice(maHoaDon, payload = {}) {
   if (!maHoaDon) throw new Error("Thiếu mã hóa đơn");
   // payload: { LyDoHuy? } — optional
   const body = {
-    LyDoHuy: payload.LyDoHuy ?? payload.lyDoHuy ?? payload.reason ?? null,
+    LyDo: payload.LyDo ?? payload.lyDo ?? payload.LyDoHuy ?? payload.lyDoHuy ?? payload.reason ?? null,
   };
   const res = await http.put(`${BASE}/invoices/${maHoaDon}/cancel`, body);
   return res.data;
@@ -221,4 +227,4 @@ export function useGenerateVietQR(options = {}) {
     ...rest,
   });
 }
-
+

@@ -15,6 +15,7 @@ export default function Chip({
     white: "bg-white ring-slate-200/80",
     yellow: "bg-yellow-50 ring-yellow-200",
     amber: "bg-amber-50 ring-amber-200",
+    orange: "bg-orange-50 ring-orange-200",
     sky: "bg-sky-50 ring-sky-200",
     slate: "bg-slate-50 ring-slate-200",
     teal: "bg-teal-50 ring-teal-200",
@@ -29,6 +30,7 @@ export default function Chip({
   const dotMap = {
     emerald: "bg-emerald-500",
     amber: "bg-amber-500",
+    orange: "bg-orange-500",
     sky: "bg-sky-500",
     cyan: "bg-cyan-500",
     teal: "bg-teal-500",
@@ -43,6 +45,7 @@ export default function Chip({
   const rgbByTone = {
     emerald: "16,185,129",
     amber: "245,158,11",
+    orange: "249,115,22",
     sky: "14,165,233",
     teal: "20,184,166",
     rose: "244,63,94",
@@ -62,6 +65,7 @@ export default function Chip({
     white: "bg-violet-50 text-violet-700 ring-violet-300 shadow-sm",
     yellow: "bg-yellow-100 text-yellow-800 ring-yellow-300 shadow-sm",
     amber: "bg-amber-100 text-amber-800 ring-amber-300 shadow-sm",
+    orange: "bg-orange-100 text-orange-800 ring-orange-300 shadow-sm",
     sky: "bg-sky-100 text-sky-800 ring-sky-300 shadow-sm",
     slate: "bg-slate-200 text-slate-800 ring-slate-300 shadow-sm",
     teal: "bg-teal-100 text-teal-800 ring-teal-300 shadow-sm",

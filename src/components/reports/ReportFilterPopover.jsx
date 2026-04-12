@@ -41,6 +41,7 @@ function computeRangeForPeriod(value) {
 }
 
 export default function ReportFilterPopover({
+  popoverRef,
   period,
   from,
   to,
@@ -61,6 +62,7 @@ export default function ReportFilterPopover({
 
   return (
     <div
+      ref={popoverRef}
       className="absolute right-0 top-11 z-30 w-[min(390px,90vw)] rounded-2xl bg-white shadow-xl ring-1 ring-slate-200/80 p-3"
       role="dialog"
       aria-label="Bộ lọc báo cáo"

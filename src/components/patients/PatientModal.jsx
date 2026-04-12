@@ -349,6 +349,15 @@ export default function PatientModal({
   const readAppointmentType = (appt) =>
     appt?.LoaiHen || appt?.loaiHen || appt?.apptType || appt?.appointmentType || "";
 
+  const isFollowupAppointmentType = (value) => {
+    const normalized = normalizeText(value).replace(/_/g, " ");
+    return (
+      normalized.includes("tai kham") ||
+      normalized.includes("kham lai") ||
+      normalized.includes("follow")
+    );
+  };
+
   const readAppointmentPatientName = (appt) =>
     appt?.TenBenhNhan ||
     appt?.tenBenhNhan ||
@@ -975,18 +984,38 @@ export default function PatientModal({
 
 
 
+  // ---- Helpers nhận diện trạng thái ----
+  const isFollowupStatus =
+    (patientForView?.status || "") === STATUSES.SCHEDULED_FUP;
+  const isFollowupBooking = isFollowupAppointmentType(
+    booking?.LoaiHen ||
+      booking?.loaiHen ||
+      booking?.appointmentType ||
+      booking?.apptType ||
+      ""
+  );
+  const isFollowupExamFlow = isFollowupStatus || isFollowupBooking;
+  const isWaitingProcess =
+    (patientForView?.status || "") === STATUSES.WAIT_PROC ||
+    (patientForView?.status || "") === STATUSES.WAIT_PROC_SVC;
+
   useEffect(() => {
     if (!tpl) return;
     if (isServiceIntake) return;
+    if (isFollowupExamFlow) {
+      setBooking((b) =>
+        Number(b?.price || 0) === 0 ? b : { ...b, price: 0 }
+      );
+    }
     // Chỉ cập nhật giá nếu tpl có giá và booking chưa có giá
-    if (tpl.price && tpl.price > 0) {
+    else if (tpl.price && tpl.price > 0) {
       setBooking((b) => ({ ...b, price: b.price && b.price > 0 ? b.price : Number(tpl.price) }));
     }
     // Cập nhật type từ template nếu exam.type đang trống
     if (tpl.title && !exam.type) {
       setExam((s) => ({ ...s, type: s.type || tpl.title }));
     }
-  }, [tpl, exam.type, isServiceIntake]);
+  }, [tpl, exam.type, isServiceIntake, isFollowupExamFlow]);
 // Lịch sử khám từ PatientDetail
 const visits = useMemo(() => {
   const p = patientForView;
@@ -1068,14 +1097,6 @@ const transactions = useMemo(() => {
   if (Array.isArray(p.lich_su_giao_dich)) return p.lich_su_giao_dich;
   return [];
 }, [patientForView]);
-
-  // ---- Helpers nhận diện trạng thái ----
-  const isFollowupStatus =
-    (patientForView?.status || "") === STATUSES.SCHEDULED_FUP;
-  const isWaitingProcess =
-    (patientForView?.status || "") === STATUSES.WAIT_PROC ||
-    (patientForView?.status || "") === STATUSES.WAIT_PROC_SVC;
-
 
   // ---- Prefill cho Hẹn tái khám ----
   useEffect(() => {
@@ -1182,7 +1203,7 @@ const transactions = useMemo(() => {
       setClsStaffCode("");
     }
 
-    if (isFollowupStatus && !isServiceIntake) {
+    if (isFollowupExamFlow && !isServiceIntake) {
       const holds = listAppointmentHolds(patient?.id || "");
       const fup = holds.find(
         (h) => h.type === "followup" && h.status === "scheduled"
@@ -1246,6 +1267,9 @@ const transactions = useMemo(() => {
       time: nextBooking.time || prev.time,
       doctor: nextBooking.doctor || prev.doctor,
       dept: nextBooking.dept || prev.dept,
+      price: isFollowupAppointmentType(readAppointmentType(appointmentCandidate))
+        ? 0
+        : prev.price,
     }));
 
     setExam((prev) => ({
@@ -2096,16 +2120,18 @@ const transactions = useMemo(() => {
     const dept = exam.dept || booking.dept || "";
     const doctor = booking.doctor || "";
     const room = exam.room || "";
-    const fee = booking.price || tpl?.price || 0;
+    const fee = isFollowupExamFlow
+      ? 0
+      : Number(booking?.price ?? tpl?.price ?? 0) || 0;
     if (!dept || !room || !doctor) {
       toast.error("Vui lòng chọn đầy đủ khoa, phòng và bác sĩ.");
       return;
     }
 
-    const label = isFollowupStatus ? "Ghi chú" : "Triệu chứng";
+    const label = isFollowupExamFlow ? "Ghi chú" : "Triệu chứng";
     const examNote = [
       `${label}: ${
-        isFollowupStatus ? exam.note || "—" : exam.symptoms || "—"
+        isFollowupExamFlow ? exam.note || "—" : exam.symptoms || "—"
       }`,
       ...examExtras.map(
         (e) =>
@@ -2156,7 +2182,7 @@ const transactions = useMemo(() => {
       return "walkin";
     };
     const hinhThucTiepNhan = normalizeIntake(
-      exam?.hinhThucTiepNhan || (isFollowupStatus ? "service_return" : "walkin")
+      exam?.hinhThucTiepNhan || (isFollowupExamFlow ? "service_return" : "walkin")
     );
     // Tạo phiếu khám lâm sàng
     let maPhieuKham = null;
@@ -2787,7 +2813,7 @@ const transactions = useMemo(() => {
                     booking={booking}
                     setBooking={setBooking}
                     isServiceIntake={isServiceIntake}
-                    isFollowupStatus={isFollowupStatus}
+                    isFollowupStatus={isFollowupExamFlow}
                     serviceItems={serviceItems}
                     serviceNotes={serviceNotes}
                     setServiceNotes={setServiceNotes}
@@ -3103,7 +3129,8 @@ const transactions = useMemo(() => {
               note: serviceNotes[i] || "",
             }))}
             feePaid={
-              isServiceIntake ? totalServiceFee > 0 : (booking.price || 0) > 0
+              print.payload?.feePaid ??
+              (isServiceIntake ? totalServiceFee > 0 : (booking.price || 0) > 0)
             }
           />
         </>

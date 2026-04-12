@@ -22,6 +22,7 @@ const Notifications = React.lazy(() => import("./routes/Notifications.jsx"));
 const Reports = React.lazy(() => import("./routes/Reports.jsx"));
 const Settings = React.lazy(() => import("./routes/Settings.jsx"));
 const AdminUsers = React.lazy(() => import("./routes/AdminUsers.jsx"));
+const UnpaidInvoices = React.lazy(() => import("./routes/UnpaidInvoices.jsx"));
 
 const router = createBrowserRouter([
   {
@@ -93,6 +94,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute permKey="prescriptions">
             <Prescriptions />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/unpaid-invoices",
+        element: (
+          <ProtectedRoute permKey="unpaidInvoices">
+            <UnpaidInvoices />
           </ProtectedRoute>
         ),
       },

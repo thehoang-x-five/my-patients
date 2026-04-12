@@ -96,7 +96,7 @@ export default function App() {
   // 3. Đăng ký realtime notification CHỈ KHI đã đăng nhập
   useEffect(() => {
     // Nếu chưa login thì khỏi subscribe
-    if (!MaNguoiNhan || !accessToken) return;
+    if (!bootstrapped || !MaNguoiNhan || !accessToken) return;
 
     // ✅ Lấy thông tin user để join đúng groups
     const user = useAuthStore.getState().user;
@@ -121,7 +121,7 @@ export default function App() {
     return () => {
       unsubscribe?.();
     };
-  }, [MaNguoiNhan, accessToken, VaiTro]);
+  }, [bootstrapped, MaNguoiNhan, accessToken, VaiTro]);
 
   // ========== RENDER GUARD ==========
 

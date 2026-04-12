@@ -101,6 +101,61 @@ export async function ensureStarted() {
   return conn;
 }
 
+async function restartConnection(conn) {
+  try {
+    if (
+      conn.state === signalR.HubConnectionState.Connected ||
+      conn.state === signalR.HubConnectionState.Connecting ||
+      conn.state === signalR.HubConnectionState.Reconnecting
+    ) {
+      await conn.stop();
+    }
+  } catch {
+    // ignore and try a clean start below
+  }
+
+  if (conn.state === signalR.HubConnectionState.Disconnected) {
+    await conn.start();
+  } else {
+    const freshConn = createConnection();
+    if (freshConn.state === signalR.HubConnectionState.Disconnected) {
+      await freshConn.start();
+    }
+  }
+}
+
+async function invokeSafe(method, ...args) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const conn = await ensureStarted();
+
+    try {
+      if (conn.state !== signalR.HubConnectionState.Connected) {
+        throw new Error(
+          `SignalR connection is not ready (${conn.state}) for ${method}.`
+        );
+      }
+
+      return await conn.invoke(method, ...args);
+    } catch (err) {
+      lastError = err;
+      const message = String(err?.message || "");
+      const isConnectionStateError =
+        message.includes("Cannot send data if the connection is not in the 'Connected' State") ||
+        message.includes("SignalR connection is not ready");
+
+      if (!isConnectionStateError || attempt === 1) {
+        throw err;
+      }
+
+      await restartConnection(conn);
+    }
+  }
+
+  throw lastError;
+}
+
 export async function stop() {
   if (_conn) await _conn.stop();
 }
@@ -116,8 +171,7 @@ export function off(event, handler) {
 }
 
 export async function invoke(method, ...args) {
-  const conn = await ensureStarted();
-  return conn.invoke(method, ...args);
+  return invokeSafe(method, ...args);
 }
 
 /* ------------------------------------------------------------------
@@ -141,41 +195,40 @@ export async function initStaffRealtime({
     staffRole, // "bac_si" | "y_ta" | undefined (fallback: join cả hai)
     nurseType, // "hanhchinh" | "phong_kham" | "can_lam_sang" (chỉ y tá)
   } = {}) {
-  const conn = await ensureStarted();
   try {
       // ===== JOIN ROLE GROUPS =====
     // Dashboard / KPI & nhiều realtime khác đang bắn cho:
     //   - role:bac_si
     //   - role:y_ta
     if (staffRole === "bac_si") {
-      await conn.invoke("JoinRoleAsync", "bac_si");
+      await invokeSafe("JoinRoleAsync", "bac_si");
     } else if (staffRole === "y_ta") {
-      await conn.invoke("JoinRoleAsync", "y_ta");
+      await invokeSafe("JoinRoleAsync", "y_ta");
       
       // ===== JOIN NURSE TYPE GROUP (CHỈ Y TÁ) =====
       // Y tá hành chính: nhận invoices, prescriptions, appointments
       // Y tá LS: nhận clinical exams trong phòng
       // Y tá CLS: nhận CLS orders trong phòng
       if (nurseType) {
-        await conn.invoke("JoinNurseTypeAsync", nurseType);
+        await invokeSafe("JoinNurseTypeAsync", nurseType);
       }
     } else {
       // Nếu FE chưa phân loại được nhân sự, join cả hai để đảm bảo nhận đủ realtime
-      await conn.invoke("JoinRoleAsync", "bac_si");
-      await conn.invoke("JoinRoleAsync", "y_ta");
+      await invokeSafe("JoinRoleAsync", "bac_si");
+      await invokeSafe("JoinRoleAsync", "y_ta");
     }
 
     // ===== JOIN USER GROUPS =====
     // NotificationService dùng loaiNguoiNhan "nhan_vien_y_te"  (tuỳ lúc) "bac_si"
     if (staffId) {
-      await conn.invoke("JoinUserAsync", "nhan_vien_y_te", staffId);
-      await conn.invoke("JoinUserAsync", "bac_si", staffId);
+      await invokeSafe("JoinUserAsync", "nhan_vien_y_te", staffId);
+      await invokeSafe("JoinUserAsync", "bac_si", staffId);
     }
 
     // nếu truyền kèm danh sách phòng, join luôn hàng đợi các phòng đó
     for (const maPhong of rooms) {
       if (maPhong) {
-        await conn.invoke("JoinRoomAsync", maPhong);
+        await invokeSafe("JoinRoomAsync", maPhong);
       }
     }
   } catch (err) {
@@ -187,25 +240,21 @@ export async function initStaffRealtime({
 // Join / Leave một phòng (Queue, Clinical, CLS...)
 export async function joinRoom(maPhong) {
   if (!maPhong) return;
-  const conn = await ensureStarted();
-  return conn.invoke("JoinRoomAsync", maPhong);
+  return invokeSafe("JoinRoomAsync", maPhong);
 }
 
 export async function leaveRoom(maPhong) {
   if (!maPhong) return;
-  const conn = await ensureStarted();
-  return conn.invoke("LeaveRoomAsync", maPhong);
+  return invokeSafe("LeaveRoomAsync", maPhong);
 }
 
 // Join / Leave group user (có thể dùng cho bệnh nhân nếu sau này có app BN)
 export async function joinUser(loaiNguoiNhan, maNguoiNhan) {
   if (!loaiNguoiNhan || !maNguoiNhan) return;
-  const conn = await ensureStarted();
-  return conn.invoke("JoinUserAsync", loaiNguoiNhan, maNguoiNhan);
+  return invokeSafe("JoinUserAsync", loaiNguoiNhan, maNguoiNhan);
 }
 
 export async function leaveUser(loaiNguoiNhan, maNguoiNhan) {
   if (!loaiNguoiNhan || !maNguoiNhan) return;
-  const conn = await ensureStarted();
-  return conn.invoke("LeaveUserAsync", loaiNguoiNhan, maNguoiNhan);
+  return invokeSafe("LeaveUserAsync", loaiNguoiNhan, maNguoiNhan);
 }

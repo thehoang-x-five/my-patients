@@ -260,7 +260,7 @@ export default function PatientsTable({
           returnHome: "Cancel visit",
           returnHomeTitle: "Cancel today's visit",
           returnHomeMessage: (name) =>
-            `Patient "${name}" will be moved to the cancelled status. Do you want to continue?`,
+            `Patient "${name}" will be moved to the cancelled status. Unpaid invoices will be cancelled, and paid invoices will be moved to reserve. Do you want to continue?`,
           returnHomeConfirm: "Confirm cancel",
           returnHomeSuccess: "Patient has been moved to cancelled status.",
           returnHomeError: "Unable to update patient status. Please try again.",
@@ -287,7 +287,7 @@ export default function PatientsTable({
           returnHome: "Bỏ về",
           returnHomeTitle: "Xác nhận bỏ về",
           returnHomeMessage: (name) =>
-            `Bệnh nhân "${name}" sẽ được chuyển sang trạng thái bỏ về. Bạn có chắc chắn?`,
+            `Bệnh nhân "${name}" sẽ được chuyển sang trạng thái bỏ về. Hóa đơn chưa thu sẽ bị hủy, còn hóa đơn đã thu sẽ chuyển sang bảo lưu. Bạn có chắc chắn?`,
           returnHomeConfirm: "Xác nhận bỏ về",
           returnHomeSuccess: "Đã chuyển bệnh nhân sang trạng thái bỏ về.",
           returnHomeError: "Không thể cập nhật trạng thái bỏ về. Vui lòng thử lại.",
@@ -311,15 +311,19 @@ export default function PatientsTable({
 
   useEffect(() => {
     if (!highlightPid) return;
-    const row = document.querySelector(`tr[data-pid="${safeCssEscape(highlightPid)}"]`);
-    if (row?.scrollIntoView) {
-      try {
-        row.scrollIntoView({ block: "center", behavior: "smooth" });
-      } catch {
-        // ignore scroll errors
+    const rafId = window.requestAnimationFrame(() => {
+      const row = document.querySelector(`tr[data-pid="${safeCssEscape(highlightPid)}"]`);
+      if (row?.scrollIntoView) {
+        try {
+          row.scrollIntoView({ block: "center", behavior: "smooth" });
+        } catch {
+          // ignore scroll errors
+        }
       }
-    }
-  }, [highlightPid]);
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [highlightPid, items]);
 
   function handleIntakeSmart(patient) {
     const status = normalizeEnumKey(getTodayStatusCode(patient) || "");

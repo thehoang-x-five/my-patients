@@ -14,6 +14,7 @@ const allLinks = [
   ["/departments", "Departments", "departments", "departments"],
   ["/staff", "Staff", "staff", "staff"],
   ["/prescriptions", "Prescriptions", "prescriptions", "prescriptions"],
+  ["/unpaid-invoices", "Unpaid Invoices", "unpaidInvoices", "unpaidInvoices"],
   ["/history", "History", "history", "history"],
   ["/notifications", "Notifications", "notifications", "notifications"],
   ["/reports", "Reports", "reports", "reports"],
@@ -191,6 +192,31 @@ const iconMap = {
         strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  unpaidInvoices: () => (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
+      <rect
+        x="3"
+        y="6"
+        width="18"
+        height="14"
+        rx="2.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M3 10h18M7 14h4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <circle
+        cx="16"
+        cy="14"
+        r="1.5"
+        fill="currentColor"
       />
     </svg>
   ),

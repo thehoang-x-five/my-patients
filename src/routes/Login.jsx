@@ -8,7 +8,7 @@
 // còn UI tách sang các component trong /components/auth.
 import OtpVerificationModal from "../components/auth/OtpVerificationModal.jsx";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "react-toastify";
@@ -29,9 +29,12 @@ export default function Login() {
   const location = useLocation();
 
   const login = useAuthStore((s) => s.login);
+  const authLoading = useAuthStore((s) => s.loading);
   const accessToken = useAuthStore((s) => s.accessToken);
   const bootstrapped = useAuthStore((s) => s.bootstrapped);
   const bootstrap = useAuthStore((s) => s.bootstrap);
+  const loginSubmitRef = useRef(false);
+  const loginToastIdRef = useRef(null);
 
   // Bootstrap auth state 1 lần
   useEffect(() => {
@@ -43,6 +46,9 @@ export default function Login() {
   // Nếu đã có token thì redirect khỏi trang login
   useEffect(() => {
     if (accessToken) {
+      if (loginToastIdRef.current && toast.isActive(loginToastIdRef.current)) {
+        toast.dismiss(loginToastIdRef.current);
+      }
       const from = location.state?.from?.pathname || "/";
       navigate(from, { replace: true });
     }
@@ -50,14 +56,6 @@ export default function Login() {
 
   const loginMutation = useMutation({
     mutationFn: login,
-    onError: (err) => {
-      const msg =
-
-        err?.message ||
-        "Đăng nhập thất bại. Vui lòng thử lại.";
-      toast.error(msg);
-    },
-
   });
 
   // Quên mật khẩu: đổi mật khẩu mới sau khi verify OTP
@@ -103,15 +101,41 @@ export default function Login() {
     setOtpOpen(true);
   };
 
-  const handleLogin = ({ username, password }) => {
+  const handleLogin = async ({ username, password }) => {
     if (!username || !password) {
       toast.warning("Vui lòng nhập đầy đủ tài khoản và mật khẩu.");
       return;
     }
-    loginMutation.mutate({ username, password });
+
+    if (loginSubmitRef.current || loginMutation.isPending || authLoading) {
+      return;
+    }
+
+    loginSubmitRef.current = true;
+
+    try {
+      if (loginToastIdRef.current && toast.isActive(loginToastIdRef.current)) {
+        toast.dismiss(loginToastIdRef.current);
+      }
+      await loginMutation.mutateAsync({ username, password });
+    } catch (err) {
+      if (!useAuthStore.getState().accessToken) {
+        const msg =
+          err?.message ||
+          "Đăng nhập thất bại. Vui lòng thử lại.";
+
+        loginToastIdRef.current = toast.error(msg, {
+          toastId: "login-error",
+        });
+      }
+    } finally {
+      loginSubmitRef.current = false;
+    }
   };
 
-  const loading = loginMutation.isLoading || forgotMutation.isLoading;
+  const loginLoading = loginMutation.isPending || authLoading;
+  const forgotLoading = forgotMutation.isPending;
+  const loading = loginLoading || forgotLoading;
 
   return (
     <>
@@ -123,8 +147,8 @@ export default function Login() {
             onLogin={handleLogin}
             onForgot={handleForgot}
             loading={loading}
-            loginLoading={loginMutation.isLoading}
-            forgotLoading={forgotMutation.isLoading}
+            loginLoading={loginLoading}
+            forgotLoading={forgotLoading}
           />
         }
         right={<AuthShowcasePanel />}

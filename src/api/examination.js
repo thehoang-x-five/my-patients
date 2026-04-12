@@ -726,3 +726,25 @@ export function useCancelClsOrder(options = {}) {
     ...options,
   });
 }
+
+export async function cancelWaitingClinicalQueue(maHangDoi) {
+  if (!maHangDoi) throw new Error("Thiếu maHangDoi");
+  const res = await http.put(`${CLINICAL_BASE}/queues/${maHangDoi}/cancel`);
+  return unwrap(res);
+}
+
+export function useCancelWaitingClinicalQueue(options = {}) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: cancelWaitingClinicalQueue,
+    onSuccess: (data, vars, ctx) => {
+      qc.invalidateQueries({ queryKey: ["queue"] });
+      qc.invalidateQueries({ queryKey: ["visits"] });
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      if (typeof options.onSuccess === "function") {
+        options.onSuccess(data, vars, ctx);
+      }
+    },
+    ...options,
+  });
+}

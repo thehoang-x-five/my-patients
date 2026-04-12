@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { APPT_STATUS, APPT_STATUS_LABEL } from "../../api/appointments.js";
 import { useUIStore, useAuthStore } from "../stores/appStore";
 import { isReceptionNurse } from "../../utils/permissions.js";
+import { formatVietnameseText, normalizeEnumKey } from "../../utils/textFormatters.js";
 import ConfirmModal from "../ui/ConfirmModal.jsx";
 
 function Badge({ status }) {
@@ -93,11 +94,15 @@ export default function ApptDetailModal({
   const patientCode = appt.patientCode || appt.code || appt.pid || "";
   const doctorName = appt.doctorName || appt.doctor || "";
   const deptName = appt.deptName || appt.dept || "";
-  const apptType = appt.apptType || appt.type || "";
+  const apptType = formatVietnameseText(appt.apptType || appt.type || "", "â€”");
+  const apptTypeLabel = formatVietnameseText(apptType, "—");
   const checkedIn = appt.checkedIn ?? (statusCode === APPT_STATUS.DA_CHECKIN);
   const canCheckIn = statusCode === APPT_STATUS.DA_XAC_NHAN && !checkedIn;
   const isFollowup = apptType === "Tái khám";
   const pid = appt.pid || patientCode || "";
+  const isFollowupType =
+    normalizeEnumKey(appt.apptType || appt.type || "") === "tai_kham" ||
+    normalizeEnumKey(appt.apptType || appt.type || "") === "follow_up";
 
   return (
     <AnimatePresence>
@@ -149,12 +154,12 @@ export default function ApptDetailModal({
                   <Badge status={appt.status} />
 
                   {/* Link hồ sơ chỉ khi tái khám */}
-                  {isFollowup && pid && (
+                  {isFollowupType && pid && (
                     <Link
-                      to={`/patients?pid=${encodeURIComponent(pid)}`}
+                      to={`/patients?pid=${encodeURIComponent(pid)}&view=all`}
                       onClick={() => {
                         const ui = useUIStore.getState();
-                        ui.setHighlightPid(pid);
+                        ui.setHighlightPid(pid, { source: "view" });
                       }}
                       className="btn btn-outline hover:!border-violet-300 hover:!bg-violet-50 hover:!text-violet-700 transition-colors"
                     >

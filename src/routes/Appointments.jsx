@@ -26,6 +26,7 @@ import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
 import { getFollowupContext, clearFollowupContext } from "../utils/followupContext.js";
+import { formatLocalizedMessage } from "../utils/textFormatters.js";
 import {
   canCreateAppointment,
   canEditAppointment,
@@ -425,7 +426,7 @@ export default function Appointments() {
         err?.response?.data?.message ||
         
         "Không thể tạo lịch hẹn. Vui lòng thử lại.";
-      toast.error(msg);
+      toast.error(formatLocalizedMessage(msg));
       return;
     }
     toast.success("Đã tạo lịch hẹn thành công.");
@@ -488,7 +489,7 @@ export default function Appointments() {
         err?.response?.data?.message ||
         err?.message ||
         "Không thể check-in lịch hẹn. Vui lòng thử lại.";
-      toast.error(msg);
+      toast.error(formatLocalizedMessage(msg));
       return;
     }
 
@@ -506,7 +507,7 @@ export default function Appointments() {
     // Nếu là tái khám và có mã BN: chỉ highlight dòng bệnh nhân, không mở sẵn tab
     if (!isKhamMoi && pid) {
       useUIStore.getState().setPatientPrefill({ name });
-      useUIStore.getState().setHighlightPid(pid);
+      useUIStore.getState().setHighlightPid(pid, { source: "checkin" });
       navigate(`/patients`); // Chỉ chuyển trang, không có query params
       // ❌ REMOVED: toast.success() - will be shown in Patients.jsx to prevent duplicate
       closeDetail();
@@ -523,7 +524,7 @@ export default function Appointments() {
       closeDetail();
     } else {
       useUIStore.getState().setPatientPrefill({ name });
-      useUIStore.getState().setHighlightPid(pid);
+      useUIStore.getState().setHighlightPid(pid, { source: "checkin" });
       navigate(`/patients`);
       // ❌ REMOVED: toast.success() - will be shown in Patients.jsx to prevent duplicate
       closeDetail();
@@ -734,7 +735,7 @@ export default function Appointments() {
               err?.response?.data?.message ||
               err?.message ||
               "Không thể cập nhật lịch hẹn. Vui lòng thử lại.";
-            toast.error(msg);
+            toast.error(formatLocalizedMessage(msg));
             return;
           }
 

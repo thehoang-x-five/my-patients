@@ -411,6 +411,13 @@ function renderStatusChip(status) {
       </span>
     );
   }
+  if (v === "bao_luu" || v === "reserved") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+        Bảo lưu
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-600 ring-1 ring-slate-200">
       Không rõ

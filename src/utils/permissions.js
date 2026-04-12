@@ -82,6 +82,7 @@ export const TAB_VISIBILITY = {
   staff: () => true,
   adminUsers: (user) => isAdmin(user),
   prescriptions: () => true,
+  unpaidInvoices: (user) => isReceptionNurse(user) || isAdmin(user),
   history: () => true,
   notifications: () => true,
   reports: (user) =>

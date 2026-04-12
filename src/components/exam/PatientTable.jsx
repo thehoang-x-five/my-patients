@@ -232,8 +232,20 @@ function getKey(p) {
   );
 }
 
-export default function PatientTable({ items = [], onStart, onCancelVisit, onCancelClsOrder, inProgress = new Set(), stretch = false }) {
+export default function PatientTable({ items = [], onStart, onCancelVisit, onCancelWaitingClinical, onCancelClsOrder, inProgress = new Set(), stretch = false }) {
   const [confirmCancel, setConfirmCancel] = useState({ open: false, type: null, name: "", targetId: null });
+  const confirmTitle =
+    confirmCancel.type === "visit"
+      ? "Hủy lượt khám"
+      : confirmCancel.type === "waitingClinical"
+        ? "Hủy ca đang chờ"
+        : "Hủy phiếu Cận lâm sàng";
+  const confirmMessage =
+    confirmCancel.type === "visit"
+      ? `Lượt khám của bệnh nhân "${confirmCancel.name}" sẽ bị hủy bỏ. Bạn có chắc chắn?`
+      : confirmCancel.type === "waitingClinical"
+        ? `Ca chờ khám của bệnh nhân "${confirmCancel.name}" sẽ bị hủy bỏ. Bạn có chắc chắn?`
+        : `Phiếu CLS của bệnh nhân "${confirmCancel.name}" sẽ bị hủy bỏ. Bạn có chắc chắn?`;
 
   return (
     <>
@@ -383,6 +395,35 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
 
                     // ✅ Queue status for cancel button visibility
                     const queueStatus = (p.TrangThai || p.trangThai || p.status || "").toLowerCase();
+                    const maLuotKham = fld(
+                      p,
+                      "MaLuotKham",
+                      "maLuotKham",
+                      "PhieuKhamLsFull.MaLuotKham"
+                    );
+                    const trangThaiLuot = String(
+                      fld(
+                        p,
+                        "TrangThaiLuot",
+                        "trangThaiLuot",
+                        "PhieuKhamLsFull.TrangThaiLuot"
+                      ) || ""
+                    ).toLowerCase();
+                    const canCancelVisitRow =
+                      !isClsQueue &&
+                      !!onCancelVisit &&
+                      !!maLuotKham &&
+                      trangThaiLuot === "dang_thuc_hien";
+                    const canCancelWaitingClinicalRow =
+                      !isClsQueue &&
+                      !!onCancelWaitingClinical &&
+                      !maLuotKham &&
+                      (queueStatus === "cho_goi" || queueStatus === "dang_goi");
+                    const canCancelClsRow =
+                      !!isClsQueue &&
+                      !!onCancelClsOrder &&
+                      (queueStatus === "cho_goi" || queueStatus === "dang_goi");
+                    const canCancelRow = canCancelVisitRow || canCancelWaitingClinicalRow || canCancelClsRow;
 
                     return (
                       <Row key={key ?? i} i={i}>
@@ -390,14 +431,14 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                           <div className="relative flex items-center justify-center w-8 h-8 mx-auto">
                             {/* Dot: hidden on hover if cancelable */}
                             <i
-                              className={`inline-block w-2.5 h-2.5 rounded-full ${pillTone[t].dot} ${(onCancelVisit || onCancelClsOrder) && (queueStatus === "cho_goi" || queueStatus === "dang_goi")
+                              className={`inline-block w-2.5 h-2.5 rounded-full ${pillTone[t].dot} ${canCancelRow
                                 ? "group-hover:hidden"
                                 : ""
                                 } transition-all duration-200`}
                             />
 
                             {/* X Button: shown on hover if cancelable */}
-                            {(onCancelVisit || onCancelClsOrder) && (queueStatus === "cho_goi" || queueStatus === "dang_goi") && (
+                            {canCancelRow && (
                               <div className="absolute inset-0 hidden group-hover:flex items-center justify-center translate-x-[-2px]">
                                 <motion.button
                                   initial={{ opacity: 0, scale: 0.5 }}
@@ -416,7 +457,7 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                                         "name"
                                       ) || "";
 
-                                    if (isClsQueue) {
+                                    if (canCancelClsRow) {
                                       const maPhieuCls = fld(
                                         p,
                                         "MaPhieuKhamCls",
@@ -433,24 +474,22 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                                       } else {
                                         console.warn("[PatientTable] Missing CLS ID for", p);
                                       }
-                                    } else {
-                                      const maLuot = fld(
+                                    } else if (canCancelWaitingClinicalRow) {
+                                      const maHangDoi = fld(
                                         p,
-                                        "MaLuotKham",
-                                        "maLuotKham",
-                                        "MaLuot",
-                                        "maLuot",
-                                        "visitId",
-                                        "MaPhieuKham",
-                                        "maPhieuKham",
-                                        "MaPhieuKhamLs",
-                                        "maPhieuKhamLs",
-                                        "PhieuKhamLsFull.MaPhieuKham",
-                                        "PhieuKhamLsFull.MaLuotKham",
+                                        "MaHangDoi",
+                                        "maHangDoi",
+                                        "queueId",
                                         "id"
                                       );
-                                      if (maLuot) {
-                                        setConfirmCancel({ open: true, type: "visit", name: patientName, targetId: maLuot });
+                                      if (maHangDoi) {
+                                        setConfirmCancel({ open: true, type: "waitingClinical", name: patientName, targetId: maHangDoi });
+                                      } else {
+                                        console.warn("[PatientTable] Missing Queue ID for waiting clinical row", p);
+                                      }
+                                    } else {
+                                      if (maLuotKham) {
+                                        setConfirmCancel({ open: true, type: "visit", name: patientName, targetId: maLuotKham });
                                       } else {
                                         console.warn("[PatientTable] Missing Visit ID for", p);
                                       }
@@ -544,6 +583,8 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
           if (confirmCancel.targetId) {
             if (confirmCancel.type === "visit") {
               onCancelVisit(confirmCancel.targetId);
+            } else if (confirmCancel.type === "waitingClinical") {
+              onCancelWaitingClinical(confirmCancel.targetId);
             } else if (confirmCancel.type === "cls") {
               onCancelClsOrder(confirmCancel.targetId);
             }
