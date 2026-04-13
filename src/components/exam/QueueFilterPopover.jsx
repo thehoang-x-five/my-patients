@@ -31,6 +31,7 @@ export default function QueueFilterPopover({
   values,
   setValues,
   onReset,
+  lockedKind,    // "clinical" | "cls" | null  →  khóa Loại lượt theo role
 }) {
   const boxRef = useRef(null);
   const [pos, setPos] = useState({ top: 72, left: 16, width: 320 });
@@ -71,6 +72,9 @@ export default function QueueFilterPopover({
       document.removeEventListener("click", onClick, true);
     };
   }, [open, anchorNode, onClose]);
+
+  // lockedKind: "ls" | "cls" | null → khớp với TYPE_OPTIONS value
+  const lockedVal = lockedKind || null;
 
   if (typeof document === "undefined") return null;
 
@@ -158,16 +162,20 @@ export default function QueueFilterPopover({
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {TYPE_OPTIONS.map((opt) => {
                     const active = opt.value === kind;
+                    const isDisabled = !!lockedVal && opt.value !== lockedVal;
                     return (
                       <button
                         key={opt.value}
                         type="button"
-                        onClick={() => setValues((v) => ({ ...v, kind: opt.value }))}
+                        disabled={isDisabled}
+                        onClick={() => !isDisabled && setValues((v) => ({ ...v, kind: opt.value }))}
                         className={[
-                          "px-2.5 py-1 rounded-full border text-[12px] font-semibold",
-                          active
-                            ? "bg-sky-100 border-sky-400 text-sky-800"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50",
+                          "px-2.5 py-1 rounded-full border text-[12px] font-semibold transition",
+                          isDisabled
+                            ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed"
+                            : active
+                              ? "bg-sky-100 border-sky-400 text-sky-800"
+                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50",
                         ].join(" ")}
                       >
                         {opt.label}

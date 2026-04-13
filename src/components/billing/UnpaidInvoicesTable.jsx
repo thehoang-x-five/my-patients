@@ -155,8 +155,8 @@ export default function UnpaidInvoicesTable({
     <div
       className={`scrollbar-none px-4 pt-0 pb-0 ${
         stretch
-          ? "h-full flex-1 min-h-0 overflow-x-auto overflow-y-auto"
-          : "overflow-x-auto"
+          ? "h-full flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none"
+          : "overflow-x-auto scrollbar-none"
       }`}
     >
       <table className="min-w-full table-fixed">

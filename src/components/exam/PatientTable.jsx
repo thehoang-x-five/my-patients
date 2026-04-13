@@ -204,20 +204,44 @@ function tone(item, active) {
   return "teal";
 }
 
-function ActionButton({ active, onClick }) {
+function ActionButton({ active, status, hasPendingCls, source, onClick }) {
+  // Ưu tiên BE status (TrangThai) trước, fallback về local inProgress
+  const qs = (status || "").toLowerCase();
+  const isInProgress = active || qs === "dang_thuc_hien" || qs === "dang_kham";
+  const isDone = qs === "da_phuc_vu" || qs === "hoan_tat";
+
+  // Đã hoàn tất → không hiện nút
+  if (isDone) return null;
+
+  // Đang đi CLS (phiếu CLS tồn tại, chưa trở về) → khóa nút
+  const isWaitingCls = isInProgress && hasPendingCls && source !== "service_return";
+
+  if (isWaitingCls) {
+    return (
+      <motion.button
+        disabled
+        className="inline-flex items-center gap-2 rounded-xl border border-violet-100 bg-gradient-to-tr from-violet-50 to-violet-100 px-2 py-1.5 mt-0 text-sm font-semibold text-violet-400 shadow cursor-not-allowed opacity-80"
+        aria-label="Chờ CLS"
+        title="Bệnh nhân đang đi khám Cận lâm sàng"
+      >
+        ⏳ Chờ CLS
+      </motion.button>
+    );
+  }
+
   return (
     <motion.button
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
-      className={`inline-flex items-center gap-2 rounded-xl border ${active ? "border-teal-100" : "border-rose-100"
-        } bg-gradient-to-tr ${active ? "from-teal-50 to-teal-200" : "from-rose-50 to-rose-200"
-        } px-2 py-1.5 mt-0 text-sm font-semibold ${active ? "text-teal-900" : "text-rose-900"
+      className={`inline-flex items-center gap-2 rounded-xl border ${isInProgress ? "border-teal-100" : "border-rose-100"
+        } bg-gradient-to-tr ${isInProgress ? "from-teal-50 to-teal-200" : "from-rose-50 to-rose-200"
+        } px-2 py-1.5 mt-0 text-sm font-semibold ${isInProgress ? "text-teal-900" : "text-rose-900"
         } shadow hover:shadow-md transition`}
-      aria-label={active ? "Đang khám" : "Gọi vào"}
-      title={active ? "Đang khám" : "Gọi vào"}
+      aria-label={isInProgress ? "Đang khám" : "Gọi vào"}
+      title={isInProgress ? "Đang khám" : "Gọi vào"}
     >
-      {active ? "Đang khám" : "Gọi vào"}
+      {isInProgress ? "Đang khám" : "Gọi vào"}
     </motion.button>
   );
 }
@@ -558,7 +582,13 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                         <Td last right>
                           <div className="flex items-center justify-end gap-2">
                             {onStart ? (
-                              <ActionButton active={active} onClick={() => onStart(p)} />
+                              <ActionButton
+                                active={active}
+                                status={queueStatus}
+                                hasPendingCls={!isClsQueue && !!fld(p, "HasPendingCls", "hasPendingCls")}
+                                source={fld(p, "Nguon", "nguon", "source") || ""}
+                                onClick={() => onStart(p)}
+                              />
                             ) : (
                               <span className="inline-flex min-w-[5.5rem] justify-end text-sm font-medium text-slate-300">
                                 --

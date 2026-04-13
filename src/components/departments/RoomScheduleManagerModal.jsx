@@ -177,7 +177,7 @@ export default function RoomScheduleManagerModal({
             </div>
           </header>
 
-          <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="flex-1 overflow-y-auto scrollbar-none px-6 py-5">
             <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
               Mỗi ca có thể phân công nhiều nhân sự trực. Lịch bác sĩ được suy ra từ bác sĩ phụ trách phòng hiện tại.
             </div>

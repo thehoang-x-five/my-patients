@@ -77,9 +77,9 @@ export default function PatientModal({
   const user = useAuthStore((s) => s.user);
   const canCreateAppt = canCreateAppointment(user);
 
-  
- 
-  
+
+
+
   const [form, setForm] = useState(patient || {});
   const [isDirty, setIsDirty] = useState(false);
   const change = (k, v) => {
@@ -93,39 +93,39 @@ export default function PatientModal({
     patient?.id ||
     form?.id ||
     "";
-  
+
   // ✅ useMemo để tính lại maPhieuKham khi patient hoặc form thay đổi
   // ⚠️ KHÔNG lấy từ localStorage để tránh lấy nhầm mã phiếu khám cũ
   const maPhieuKhamCurrent = useMemo(() => {
-    const fromPatient = 
+    const fromPatient =
       patient?.MaPhieuKham ||
       patient?.maPhieuKham ||
       patient?.MaPhieuKhamLs ||
       patient?.maPhieuKhamLs ||
       null;
-    
-    const fromForm = 
+
+    const fromForm =
       form?.MaPhieuKham ||
       form?.maPhieuKham ||
       null;
-    
+
     // ✅ CHỈ lấy từ patient prop và form state, KHÔNG lấy từ localStorage
     const result = fromPatient || fromForm;
-    
+
     console.log(
       `[maPhieuKhamCurrent] Computed for patient ${patientId}: ` +
       `fromPatient=${fromPatient}, fromForm=${fromForm}, result=${result}`
     );
-    
+
     return result;
   }, [patient, form, patientId]);
 
-    const {
-      data: patientDetail,
-      isFetching: loadingPatientDetail,
-      isError: errorPatientDetail,
-      refetch: refetchPatientDetail,
-    }  = usePatientDetail(patientId, {
+  const {
+    data: patientDetail,
+    isFetching: loadingPatientDetail,
+    isError: errorPatientDetail,
+    refetch: refetchPatientDetail,
+  } = usePatientDetail(patientId, {
     enabled: open && !!patientId && mode !== "add",
   });
 
@@ -139,11 +139,11 @@ export default function PatientModal({
     () =>
       String(
         patientForView?.status ||
-          patient?.status ||
-          patient?.trang_thai_hom_nay_code ||
-          patient?.TrangThaiHomNay ||
-          patient?.todayStatus ||
-          ""
+        patient?.status ||
+        patient?.trang_thai_hom_nay_code ||
+        patient?.TrangThaiHomNay ||
+        patient?.todayStatus ||
+        ""
       ).toLowerCase(),
     [
       patientForView?.status,
@@ -257,23 +257,88 @@ export default function PatientModal({
     [tplId, tplList]
   );
 
-  // Auto-select mẫu khám đầu tiên khi mở modal khám nếu chưa chọn
-  useEffect(() => {
-    if (mode !== "exam") return;
-    if (isServiceIntake) return;
-    if (tplId) return;
-    if (!tplList.length) return;
-    const first = tplList[0];
-    setTplId(first?.id || "");
-    setExam((s) => ({ ...s, type: s.type || first?.title || s.type || "" }));
-  }, [mode, tplId, tplList, isServiceIntake]);
-
   // Thông tin khoa + phòng + bác sĩ của dịch vụ hiện tại
   // Chỉ gọi API khi không ở mode "edit" hoặc "add" (không cần service info khi chỉnh sửa form)
   const { data: serviceInfo } = useServiceInfo(tpl?.id, {
     enabled:
       !!tpl?.id && mode !== "edit" && mode !== "add" && mode === "exam" && !isServiceIntake,
   });
+
+
+  const readServiceInfoAutofill = (info) => {
+    const tenKhoa =
+      info?.TenKhoa ||
+      info?.tenKhoa ||
+      info?.ten_khoa ||
+      "";
+    const tenPhong =
+      info?.TenPhong ||
+      info?.tenPhong ||
+      info?.ten_phong ||
+      "";
+    const tenBacSi =
+      info?.TenBacSi ||
+      info?.tenBacSi ||
+      info?.ten_bac_si ||
+      "";
+    const donGia =
+      info?.DonGia ??
+      info?.donGia ??
+      info?.price ??
+      info?.PhiDV ??
+      info?.phiDV ??
+      null;
+
+    return { tenKhoa, tenPhong, tenBacSi, donGia };
+  };
+
+  const handleTemplateChange = (newTplId) => {
+    const nextTplId = newTplId || "";
+    const selectedTpl =
+      (nextTplId
+        ? tplList.find((item) => String(item?.id) === String(nextTplId))
+        : null) ||
+      tplList[0] ||
+      tpl ||
+      null;
+
+    const shouldUseCurrentServiceInfo =
+      !!serviceInfo && String(nextTplId) === String(tpl?.id || "");
+    const { tenKhoa, tenPhong, tenBacSi, donGia } = readServiceInfoAutofill(
+      shouldUseCurrentServiceInfo ? serviceInfo : null
+    );
+
+    setTplId(nextTplId);
+
+    setExam((prev) => ({
+      ...prev,
+      type: selectedTpl?.title || prev.type || "",
+      dept: tenKhoa || "",
+      room: tenPhong || "",
+
+    }));
+    setBooking((prev) => ({
+      ...prev,
+      dept: tenKhoa || "",
+
+      doctor: tenBacSi || "",
+
+      price: isFollowupExamFlow
+        ? 0
+        : donGia != null
+          ? Number(donGia) || 0
+          : Number(selectedTpl?.price || 0) || 0,
+    }));
+  };
+
+  // Auto-select mẫu khám đầu tiên khi mở modal khám nếu chưa chọn
+  useEffect(() => {
+    if (mode !== "exam") return;
+    if (isServiceIntake) return;
+    if (tplId) return;
+    if (!tplList.length) return;
+    handleTemplateChange(tplList[0]?.id || "");
+  }, [mode, tplId, tplList, isServiceIntake]);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -415,19 +480,19 @@ export default function PatientModal({
   const [clsOrderId, setClsOrderId] = useState("");
   const [clsStaffCode, setClsStaffCode] = useState("");
   const [loadingFinalDiagnosis, setLoadingFinalDiagnosis] = useState(false);
-  
+
   // ✅ Cache key để track bệnh nhân nào đang có data cached
   const cachedDiagnosisPatientRef = useRef(null);
-  
+
   // ✅ Cache maPhieuKham để tránh mất khi switch tab
   const cachedMaPhieuKhamRef = useRef(null);
-  
+
   // ✅ Track if fetchFinalDiagnosis is currently running
   const isFetchingDiagnosisRef = useRef(null);
-  
+
   // ✅ Track if validation is currently running to prevent duplicate getClinicalExam calls
   const isValidatingPhieuKhamRef = useRef(null);
-  
+
   // ✅ Track if search is currently running to prevent duplicate searchClinicalRaw calls
   const isSearchingPhieuKhamRef = useRef(null);
 
@@ -441,47 +506,6 @@ export default function PatientModal({
       (Array.isArray(svcItems) && svcItems.length > 0)
     );
   }, [isServiceIntake, servicePrefill.length, clsOrderId, patientForView, patient, isSvcProcessingStatus]);
-
-  // Khi serviceInfo thay đổi -> prefill khoa / phòng / bác sĩ / đơn giá theo DV đang chọn
-  useEffect(() => {
-    if (!serviceInfo || isServiceIntake) return;
-
-    const tenKhoa =
-      serviceInfo.TenKhoa ||
-      serviceInfo.tenKhoa ||
-      serviceInfo.ten_khoa ||
-      "";
-    const tenPhong =
-      serviceInfo.TenPhong ||
-      serviceInfo.tenPhong ||
-      serviceInfo.ten_phong ||
-      "";
-    const tenBacSi =
-      serviceInfo.TenBacSi ||
-      serviceInfo.tenBacSi ||
-      serviceInfo.ten_bac_si ||
-      "";
-    const donGia =
-      serviceInfo.DonGia ??
-      serviceInfo.donGia ??
-      serviceInfo.price ??
-      serviceInfo.PhiDV ??
-      serviceInfo.phiDV ??
-      null;
-
-    setExam((s) => ({
-      ...s,
-      dept: tenKhoa || s.dept,
-      room: tenPhong || s.room,
-    }));
-
-    setBooking((b) => ({
-      ...b,
-      dept: tenKhoa || b.dept,
-      doctor: tenBacSi || b.doctor,
-      price: donGia != null ? Number(donGia) || b.price || 0 : b.price || 0,
-    }));
-  }, [serviceInfo]);
 
   const [showDoctorSelect, setShowDoctorSelect] = useState(false);
   const [showDeptSelect, setShowDeptSelect] = useState(false);
@@ -577,19 +601,19 @@ export default function PatientModal({
     setExamExtras((s) => s.filter((_, idx) => idx !== i));
   }
 
-    // ---------- Derived ----------
-    const patientExtras = useMemo(() => {
-      const src = patientForView;
-      if (!src) return [];
-      return EXTRA_FIELDS.filter(
-        (f) => src[f.key] && String(src[f.key]).trim().length
-      ).map((f) => ({
-        key: f.key,
-        value: String(src[f.key]),
-        label: f.label,
-      }));
-    }, [patientForView]);
-  
+  // ---------- Derived ----------
+  const patientExtras = useMemo(() => {
+    const src = patientForView;
+    if (!src) return [];
+    return EXTRA_FIELDS.filter(
+      (f) => src[f.key] && String(src[f.key]).trim().length
+    ).map((f) => ({
+      key: f.key,
+      value: String(src[f.key]),
+      label: f.label,
+    }));
+  }, [patientForView]);
+
 
   useEffect(() => {
     if (!open) {
@@ -598,17 +622,17 @@ export default function PatientModal({
       setDiagnosisData(DIAG_INIT); // Clear diagnosis data
       setRx([]); // Clear prescriptions
       setSvcResults([]); // Clear service results
-      
+
       // ✅ Reset cache
       cachedDiagnosisPatientRef.current = null; // ✅ Clear cache
       cachedMaPhieuKhamRef.current = null; // ✅ Clear maPhieuKham cache
       isFetchingDiagnosisRef.current = false; // ✅ Clear fetching flag
       isValidatingPhieuKhamRef.current = null; // ✅ Clear validation flag
       isSearchingPhieuKhamRef.current = null; // ✅ Clear search flag
-      
+
       return;
     }
-    
+
     // ✅ CRITICAL: Clear localStorage NGAY KHI MỞ MODAL để tránh lấy nhầm mã phiếu khám cũ
     // Phải clear trước khi useMemo maPhieuKhamCurrent chạy
     try {
@@ -622,10 +646,10 @@ export default function PatientModal({
     }
     // If the user already started editing, don't overwrite their changes
     if (isDirty) return;
-    
+
     // Sử dụng patientForView thay vì patient vì nó có dữ liệu đầy đủ từ API
     const sourcePatient = patientForView || patient;
-    
+
     // Ensure the status field holds the raw status code (used by the select)
     let statusCodeToSet = null;
     if (sourcePatient) {
@@ -688,7 +712,7 @@ export default function PatientModal({
         statusCodeToSet = statusCode;
       }
     }
-    
+
     // Set form với status đã được xử lý
     setForm((prevForm) => {
       const newForm = sourcePatient ? { ...sourcePatient } : {};
@@ -701,14 +725,14 @@ export default function PatientModal({
       }
       return newForm;
     });
-    
+
     // Ensure accountStatus (select) uses code if available
     if (sourcePatient) {
       const acct = sourcePatient.accountStatus ?? sourcePatient.TrangThaiTaiKhoan ?? sourcePatient.trangThaiTaiKhoan ?? null;
       if (acct) {
         setForm((s) => ({ ...(s || {}), accountStatus: acct }));
       }
-      
+
       // Normalize NgaySinh -> input type=date expects yyyy-MM-dd
       const rawDob = sourcePatient.NgaySinh ?? sourcePatient.ngaySinh ?? sourcePatient.dob ?? null;
       if (rawDob) {
@@ -754,7 +778,7 @@ export default function PatientModal({
     if (patient && mode === "process") {
       // ✅ RESET diagnosis data về DIAG_INIT khi mở modal mới (tránh cache cũ)
       setDiagnosisData(DIAG_INIT);
-      
+
       const svcItems = Array.isArray(patient?.serviceOrder?.items)
         ? patient.serviceOrder.items
         : [];
@@ -769,9 +793,9 @@ export default function PatientModal({
 
       // ✅ Lấy mã bệnh nhân hiện tại
       const currentPid = patient?.id || patient?.pid || patient?.MaBenhNhan || patient?.maBenhNhan;
-      
+
       // ✅ Lấy maPhieuKham từ patient prop (KHÔNG lấy từ localStorage để tránh lấy nhầm)
-      const maPhieuKham = 
+      const maPhieuKham =
         patient?.MaPhieuKham ||
         patient?.maPhieuKham ||
         patient?.MaPhieuKhamLs ||
@@ -779,7 +803,7 @@ export default function PatientModal({
         form?.MaPhieuKham ||
         form?.maPhieuKham ||
         null;
-      
+
       console.log(
         `[PatientModal] Process mode - currentPid: ${currentPid}, maPhieuKham: ${maPhieuKham}`
       );
@@ -790,33 +814,33 @@ export default function PatientModal({
           console.log(`[PatientModal] Already validating phiếu khám ${maPhieuKham}, skipping duplicate`);
           return; // Skip duplicate validation
         }
-        
+
         // ✅ Lưu maPhieuKham vào ref để dùng cho lần sau (khi switch tab)
         cachedMaPhieuKhamRef.current = maPhieuKham;
         console.log(`[PatientModal] Saved maPhieuKham to ref: ${maPhieuKham}`);
-        
+
         // ✅ Mark as validating
         isValidatingPhieuKhamRef.current = maPhieuKham;
-        
+
         // ✅ REMOVED: Don't check fetchedDiagnosisRef here
         // Let fetchFinalDiagnosis handle cache logic internally
-        
+
         // ✅ CRITICAL: Validate phiếu khám có thuộc về bệnh nhân này không
         // Gọi API để lấy thông tin phiếu khám và kiểm tra MaBenhNhan
         (async () => {
           try {
             const { getClinicalExam } = await import("../../api/examination");
             const clinicalExam = await getClinicalExam(maPhieuKham);
-            
+
             if (!clinicalExam) {
               console.warn(`[PatientModal] Phiếu khám ${maPhieuKham} không tồn tại`);
               toast.error("Phiếu khám không tồn tại.");
               isValidatingPhieuKhamRef.current = null; // ✅ Clear validation flag
               return;
             }
-            
+
             const examPatientId = clinicalExam.MaBenhNhan || clinicalExam.maBenhNhan;
-            
+
             if (examPatientId !== currentPid) {
               console.error(
                 `[PatientModal] ❌ PHIẾU KHÁM KHÔNG KHỚP: ` +
@@ -830,15 +854,15 @@ export default function PatientModal({
               isValidatingPhieuKhamRef.current = null; // ✅ Clear validation flag
               return;
             }
-            
+
             console.log(
               `[PatientModal] ✅ Phiếu khám ${maPhieuKham} thuộc về bệnh nhân ${currentPid}. ` +
               `Tiếp tục lấy chẩn đoán...`
             );
-            
+
             // ✅ Always call fetchFinalDiagnosis - it will handle cache and duplicate prevention internally
             fetchFinalDiagnosis(currentPid);
-            
+
             // ✅ Clear validation flag after successful validation
             isValidatingPhieuKhamRef.current = null;
           } catch (err) {
@@ -853,10 +877,10 @@ export default function PatientModal({
           console.log(`[PatientModal] Already searching for phiếu khám of patient ${currentPid}, skipping duplicate`);
           return; // Skip duplicate search
         }
-        
+
         // ✅ Mark as searching
         isSearchingPhieuKhamRef.current = currentPid;
-        
+
         // Nếu không có maPhieuKham, thử tìm lại từ pid
         (async () => {
           try {
@@ -874,7 +898,7 @@ export default function PatientModal({
                   if (clinicalPid && clinicalPid !== currentPid) {
                     return false; // Bỏ qua nếu không khớp mã BN
                   }
-                  
+
                   const status = c.TrangThai || c.trangThai || "";
                   return (
                     status !== "da_hoan_tat" &&
@@ -888,7 +912,7 @@ export default function PatientModal({
               );
 
               if (activeClinical) {
-                const foundMaPhieuKham = 
+                const foundMaPhieuKham =
                   activeClinical?.MaPhieuKham ||
                   activeClinical?.maPhieuKham ||
                   null;
@@ -897,7 +921,7 @@ export default function PatientModal({
                   // ✅ Lưu maPhieuKham vào ref để dùng cho lần sau
                   cachedMaPhieuKhamRef.current = foundMaPhieuKham;
                   console.log(`[PatientModal] Saved found maPhieuKham to ref: ${foundMaPhieuKham}`);
-                  
+
                   // Lưu vào form để fetchFinalDiagnosis dùng
                   setForm(prev => ({
                     ...prev,
@@ -950,21 +974,21 @@ export default function PatientModal({
   // ✅ Reset cache khi đổi bệnh nhân
   useEffect(() => {
     if (!open) return;
-    
-    const currentPid = 
-      patient?.id || 
-      patient?.pid || 
-      patient?.MaBenhNhan || 
+
+    const currentPid =
+      patient?.id ||
+      patient?.pid ||
+      patient?.MaBenhNhan ||
       patient?.maBenhNhan ||
       patientId;
-    
+
     // Nếu đổi bệnh nhân khác, reset cache và clear diagnosis state
     if (currentPid && cachedDiagnosisPatientRef.current !== null && cachedDiagnosisPatientRef.current !== currentPid) {
       console.log(`[PatientModal] Patient changed from ${cachedDiagnosisPatientRef.current} to ${currentPid}, clearing cache`);
       cachedDiagnosisPatientRef.current = null; // ✅ Clear cache
       cachedMaPhieuKhamRef.current = null; // ✅ Clear maPhieuKham cache
       setDiagnosisData(DIAG_INIT); // ✅ Clear diagnosis state
-      
+
       // ✅ Clear localStorage để tránh lấy nhầm mã phiếu khám cũ
       try {
         const oldMaPhieuKham = localStorage.getItem("last-clinical-exam-id");
@@ -989,10 +1013,10 @@ export default function PatientModal({
     (patientForView?.status || "") === STATUSES.SCHEDULED_FUP;
   const isFollowupBooking = isFollowupAppointmentType(
     booking?.LoaiHen ||
-      booking?.loaiHen ||
-      booking?.appointmentType ||
-      booking?.apptType ||
-      ""
+    booking?.loaiHen ||
+    booking?.appointmentType ||
+    booking?.apptType ||
+    ""
   );
   const isFollowupExamFlow = isFollowupStatus || isFollowupBooking;
   const isWaitingProcess =
@@ -1016,87 +1040,87 @@ export default function PatientModal({
       setExam((s) => ({ ...s, type: s.type || tpl.title }));
     }
   }, [tpl, exam.type, isServiceIntake, isFollowupExamFlow]);
-// Lịch sử khám từ PatientDetail
-const visits = useMemo(() => {
-  const p = patientForView;
-  if (!p) return [];
-  if (Array.isArray(p.visits)) return p.visits;
-  if (Array.isArray(p.LichSuKham)) return p.LichSuKham;
-  if (Array.isArray(p.lich_su_kham)) return p.lich_su_kham;
-  return [];
-}, [patientForView]);
+  // Lịch sử khám từ PatientDetail
+  const visits = useMemo(() => {
+    const p = patientForView;
+    if (!p) return [];
+    if (Array.isArray(p.visits)) return p.visits;
+    if (Array.isArray(p.LichSuKham)) return p.LichSuKham;
+    if (Array.isArray(p.lich_su_kham)) return p.lich_su_kham;
+    return [];
+  }, [patientForView]);
 
-const normalizeVisitDate = (value) => {
-  if (!value) return "";
-  const str = String(value).trim();
-  if (!str) return "";
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
-  const parsed = new Date(str);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toISOString().slice(0, 10);
-};
-
-const normalizeVisitTime = (value) => {
-  if (!value) return "";
-  const str = String(value).trim();
-  if (!str) return "";
-  if (/^\d{2}:\d{2}/.test(str)) return str.slice(0, 5);
-  const isoMatch = str.match(/T(\d{2}:\d{2})/);
-  if (isoMatch) return isoMatch[1];
-  const parsed = new Date(str);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
-};
-
-const latestVisitForAppointmentPrefill = useMemo(() => {
-  if (!Array.isArray(visits) || !visits.length) return null;
-
-  const latestVisit = [...visits].sort((a, b) => {
-    const aTime = new Date(a?.date || a?.Date || 0).getTime();
-    const bTime = new Date(b?.date || b?.Date || 0).getTime();
-    return bTime - aTime;
-  })[0];
-
-  if (!latestVisit) return null;
-
-  const pid =
-    patientForView?.MaBenhNhan ||
-    patientForView?.maBenhNhan ||
-    patient?.MaBenhNhan ||
-    patient?.maBenhNhan ||
-    patient?.id ||
-    form?.id ||
-    "";
-  const name =
-    patientForView?.HoTen ||
-    patientForView?.hoTen ||
-    patientForView?.name ||
-    patient?.HoTen ||
-    patient?.hoTen ||
-    patient?.name ||
-    form?.name ||
-    "";
-
-  return {
-    date: normalizeVisitDate(latestVisit.date || latestVisit.Date),
-    time: normalizeVisitTime(latestVisit.date || latestVisit.Date),
-    patientName: name,
-    patientCode: pid,
-    doctorName: latestVisit.doctor || latestVisit.Doctor || "",
-    deptName: latestVisit.dept || latestVisit.Dept || "",
-    note: latestVisit.note || latestVisit.Note || "",
+  const normalizeVisitDate = (value) => {
+    if (!value) return "";
+    const str = String(value).trim();
+    if (!str) return "";
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+    const parsed = new Date(str);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return parsed.toISOString().slice(0, 10);
   };
-}, [visits, patientForView, patient, form]);
 
-// Lịch sử giao dịch từ PatientDetail
-const transactions = useMemo(() => {
-  const p = patientForView;
-  if (!p) return [];
-  if (Array.isArray(p.transactions)) return p.transactions;
-  if (Array.isArray(p.LichSuGiaoDich)) return p.LichSuGiaoDich;
-  if (Array.isArray(p.lich_su_giao_dich)) return p.lich_su_giao_dich;
-  return [];
-}, [patientForView]);
+  const normalizeVisitTime = (value) => {
+    if (!value) return "";
+    const str = String(value).trim();
+    if (!str) return "";
+    if (/^\d{2}:\d{2}/.test(str)) return str.slice(0, 5);
+    const isoMatch = str.match(/T(\d{2}:\d{2})/);
+    if (isoMatch) return isoMatch[1];
+    const parsed = new Date(str);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
+  };
+
+  const latestVisitForAppointmentPrefill = useMemo(() => {
+    if (!Array.isArray(visits) || !visits.length) return null;
+
+    const latestVisit = [...visits].sort((a, b) => {
+      const aTime = new Date(a?.date || a?.Date || 0).getTime();
+      const bTime = new Date(b?.date || b?.Date || 0).getTime();
+      return bTime - aTime;
+    })[0];
+
+    if (!latestVisit) return null;
+
+    const pid =
+      patientForView?.MaBenhNhan ||
+      patientForView?.maBenhNhan ||
+      patient?.MaBenhNhan ||
+      patient?.maBenhNhan ||
+      patient?.id ||
+      form?.id ||
+      "";
+    const name =
+      patientForView?.HoTen ||
+      patientForView?.hoTen ||
+      patientForView?.name ||
+      patient?.HoTen ||
+      patient?.hoTen ||
+      patient?.name ||
+      form?.name ||
+      "";
+
+    return {
+      date: normalizeVisitDate(latestVisit.date || latestVisit.Date),
+      time: normalizeVisitTime(latestVisit.date || latestVisit.Date),
+      patientName: name,
+      patientCode: pid,
+      doctorName: latestVisit.doctor || latestVisit.Doctor || "",
+      deptName: latestVisit.dept || latestVisit.Dept || "",
+      note: latestVisit.note || latestVisit.Note || "",
+    };
+  }, [visits, patientForView, patient, form]);
+
+  // Lịch sử giao dịch từ PatientDetail
+  const transactions = useMemo(() => {
+    const p = patientForView;
+    if (!p) return [];
+    if (Array.isArray(p.transactions)) return p.transactions;
+    if (Array.isArray(p.LichSuGiaoDich)) return p.LichSuGiaoDich;
+    if (Array.isArray(p.lich_su_giao_dich)) return p.lich_su_giao_dich;
+    return [];
+  }, [patientForView]);
 
   // ---- Prefill cho Hẹn tái khám ----
   useEffect(() => {
@@ -1177,13 +1201,13 @@ const transactions = useMemo(() => {
             }
           }
           else {
-          setServicePrefill([]);
-          setServiceRoomPrefill([]);
-          setServiceNotePrefill([]);
-          setServicePricePrefill([]);
-          setClsOrderId("");
-          setClsStaffCode("");
-        }
+            setServicePrefill([]);
+            setServiceRoomPrefill([]);
+            setServiceNotePrefill([]);
+            setServicePricePrefill([]);
+            setClsOrderId("");
+            setClsStaffCode("");
+          }
         } catch (err) {
           console.warn("Prefetch CLS orders failed:", err);
           setServicePrefill([]);
@@ -1288,6 +1312,63 @@ const transactions = useMemo(() => {
     examPrefillAppointment,
   ]);
 
+  // Re-apply template/service prefill after the modal open-reset effects.
+  // This fixes the "first click on the initial template does not auto-fill"
+  // case when service info is already cached and the reset effect clears it.
+  useEffect(() => {
+    if (!open || mode !== "exam" || isServiceIntake || !tpl) return;
+
+    const { tenKhoa, tenPhong, tenBacSi, donGia } = readServiceInfoAutofill(
+      serviceInfo
+    );
+    const fallbackPrice =
+      donGia != null ? Number(donGia) || 0 : Number(tpl?.price || 0) || 0;
+
+    setExam((prev) => {
+      const nextType = tpl?.title || prev.type || "";
+      const nextDept = tenKhoa || prev.dept || "";
+      const nextRoom = tenPhong || prev.room || "";
+
+      if (
+        prev.type === nextType &&
+        prev.dept === nextDept &&
+        prev.room === nextRoom
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        type: nextType,
+        dept: nextDept,
+        room: nextRoom,
+      };
+    });
+
+    setBooking((prev) => {
+      const nextDept = tenKhoa || prev.dept || "";
+      const nextDoctor = tenBacSi || prev.doctor || "";
+      const nextPrice = isFollowupExamFlow
+        ? 0
+        : fallbackPrice || prev.price || 0;
+
+      if (
+        prev.dept === nextDept &&
+        prev.doctor === nextDoctor &&
+        Number(prev.price || 0) === Number(nextPrice || 0)
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        dept: nextDept,
+        doctor: nextDoctor,
+        price: nextPrice,
+      };
+    });
+  }, [open, mode, isServiceIntake, tplId, tpl, serviceInfo, isFollowupExamFlow]);
+
   // ---- UI ghi chú từng dịch vụ (nếu intake dịch vụ) ----
   const serviceItems = useMemo(() => {
     if (servicePrefill.length) return servicePrefill;
@@ -1353,7 +1434,7 @@ const transactions = useMemo(() => {
   async function saveEdit(e) {
     e.preventDefault();
     const src = form || {};
-  
+
     // Lấy MaBenhNhan từ nhiều nguồn (ưu tiên từ form, sau đó từ patient prop)
     const maBenhNhan =
       src.MaBenhNhan ||
@@ -1371,7 +1452,7 @@ const transactions = useMemo(() => {
       toast.error("Không tìm thấy mã bệnh nhân. Vui lòng thử lại.");
       return;
     }
-  
+
     // Map thông tin bổ sung
     const extrasMap = {};
     extras.forEach((ex) => {
@@ -1405,10 +1486,10 @@ const transactions = useMemo(() => {
           extrasMap[ex.key] = v;
       }
     });
-  
+
     // Lấy trạng thái mới - ưu tiên từ form state (UI input)
     const newStatus = src.status || src.trangThaiHomNay || src.TrangThaiHomNay || null;
-  
+
     // Ưu tiên lấy giá trị từ form state (các key mà UI sẽ dùng: name, phone, email, address, dob, gender, accountStatus)
     // Sau đó mới fallback sang các key khác (HoTen, NgaySinh, ...) nếu không có
     const payload = {
@@ -1426,9 +1507,9 @@ const transactions = useMemo(() => {
       // Trạng thái trong ngày (FE -> API build sẽ map sang TrangThaiHomNay)
       // Chỉ gọi nếu có giá trị
       ...(newStatus ? { TrangThaiHomNay: newStatus, status: newStatus } : {}),
-  
+
       ...extrasMap,
-  
+
       // Giữ lại vài field FE nếu hook upsert có dùng
       id: maBenhNhan || src.id,
       pid: maBenhNhan || src.pid,
@@ -1440,7 +1521,7 @@ const transactions = useMemo(() => {
       gender: src.gender,
       accountStatus: src.accountStatus,
     };
-  
+
     // Client-side required checks for create mode: ensure dob, phone, email present
     if (mode === "add") {
       const missing = [];
@@ -1455,16 +1536,16 @@ const transactions = useMemo(() => {
 
     try {
       const result = await onSave?.(payload, mode);
-      
+
       // Nếu có thay đổi trạng thái và đã update thành công, cập nhật trạng thái riêng
       // (mặc dù payload đã có TrangThaiHomNay, nhưng để đảm bảo, có thể gọi riêng)
       // Tuy nhiên, nếu BE đã xử lý trong upsertPatient thì không cần gọi riêng
-      
+
       // Gọi callback onSaved sau khi lưu thành công
       if (result) {
         onSaved?.(result);
       }
-      
+
       // Reset dirty flag sau khi lưu thành công
       setIsDirty(false);
     } catch (err) {
@@ -1476,7 +1557,7 @@ const transactions = useMemo(() => {
       throw err;
     }
   }
-  
+
 
 
 
@@ -1513,25 +1594,25 @@ const transactions = useMemo(() => {
         dept: deptName,
         waiting: toNumber(
           bs.SoCho ||
-            bs.soCho ||
-            bs.SoChoKham ||
-            bs.soChoKham ||
-            bs.SoChoHienTai ||
-            bs.soChoHienTai ||
-            bs.DangCho ||
-            bs.dangCho ||
-            bs.Waiting ||
-            bs.waiting
+          bs.soCho ||
+          bs.SoChoKham ||
+          bs.soChoKham ||
+          bs.SoChoHienTai ||
+          bs.soChoHienTai ||
+          bs.DangCho ||
+          bs.dangCho ||
+          bs.Waiting ||
+          bs.waiting
         ),
         appointments: toNumber(
           bs.SoLich ||
-            bs.soLich ||
-            bs.SoLichHen ||
-            bs.soLichHen ||
-            bs.LichHen ||
-            bs.lichHen ||
-            bs.Appointments ||
-            bs.appointments
+          bs.soLich ||
+          bs.SoLichHen ||
+          bs.soLichHen ||
+          bs.LichHen ||
+          bs.lichHen ||
+          bs.Appointments ||
+          bs.appointments
         ),
         status: bs.TrangThai || bs.trangThai || "Đang làm việc",
       }));
@@ -1678,9 +1759,9 @@ const transactions = useMemo(() => {
   const handlePaymentComplete = (result) => {
     const nextPrintPayload = paymentFlow.printPayload
       ? {
-          ...paymentFlow.printPayload,
-          feePaid: result?.status === "paid",
-        }
+        ...paymentFlow.printPayload,
+        feePaid: result?.status === "paid",
+      }
       : null;
 
     closePaymentFlow();
@@ -1782,7 +1863,7 @@ const transactions = useMemo(() => {
               payload.maNhanVien ||
               payload.sub ||
               payload[
-                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+              "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
               ] ||
               null;
           }
@@ -1806,7 +1887,7 @@ const transactions = useMemo(() => {
               payload.maNhanVien ||
               payload.sub ||
               payload[
-                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+              "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
               ] ||
               null;
           }
@@ -1850,9 +1931,9 @@ const transactions = useMemo(() => {
       console.log("[fetchFinalDiagnosis] Already fetching, skipping duplicate call");
       return;
     }
-    
+
     // ✅ Lấy mã bệnh nhân hiện tại (MUST HAVE)
-    const currentPatientId = 
+    const currentPatientId =
       explicitPatientId ||
       form?.id ||
       form?.MaBenhNhan ||
@@ -1861,22 +1942,22 @@ const transactions = useMemo(() => {
       patient?.MaBenhNhan ||
       patient?.maBenhNhan ||
       patientId;
-    
+
     if (!currentPatientId) {
       toast.error("Thiếu mã bệnh nhân.");
       return;
     }
-    
+
     // ✅ Check loading state
     if (loadingFinalDiagnosis) {
       console.log("[fetchFinalDiagnosis] Already loading, skipping duplicate call");
       return;
     }
-    
+
     // ✅ Lấy maPhieuKham DYNAMICALLY (tránh stale closure)
     // KHÔNG dùng maPhieuKhamCurrent từ closure vì nó có thể đã thay đổi
     // Ưu tiên lấy từ cache ref nếu có, nếu không thì lấy từ patient/form
-    const currentMaPhieuKham = 
+    const currentMaPhieuKham =
       cachedMaPhieuKhamRef.current ||
       patient?.MaPhieuKham ||
       patient?.maPhieuKham ||
@@ -1885,7 +1966,7 @@ const transactions = useMemo(() => {
       form?.MaPhieuKham ||
       form?.maPhieuKham ||
       null;
-    
+
     if (!currentMaPhieuKham) {
       console.warn(
         `[fetchFinalDiagnosis] Không tìm thấy mã phiếu khám cho bệnh nhân ${currentPatientId}`
@@ -1899,13 +1980,13 @@ const transactions = useMemo(() => {
       toast.error("Chưa có phiếu khám để tải chẩn đoán.");
       return;
     }
-    
+
     // ✅ Lưu maPhieuKham vào ref để dùng cho lần sau
     if (currentMaPhieuKham && !cachedMaPhieuKhamRef.current) {
       cachedMaPhieuKhamRef.current = currentMaPhieuKham;
       console.log(`[fetchFinalDiagnosis] Cached maPhieuKham: ${currentMaPhieuKham}`);
     }
-    
+
     // ✅ CHECK CACHE: Nếu đã có data cached cho bệnh nhân này, show toast và skip fetch
     // Di chuyển cache check xuống đây SAU KHI đã kiểm tra maPhieuKham
     if (cachedDiagnosisPatientRef.current === currentPatientId) {
@@ -1917,36 +1998,36 @@ const transactions = useMemo(() => {
       toast.success("Đã tải chẩn đoán cuối.");
       return; // Data already in diagnosisData state
     }
-    
+
     console.log(
       `[fetchFinalDiagnosis] Fetching diagnosis for patient: ${currentPatientId}, ` +
       `maPhieuKham: ${currentMaPhieuKham}`
     );
-    
+
     // ✅ Mark as fetching to prevent duplicate calls
     isFetchingDiagnosisRef.current = true;
-    
+
     try {
       setLoadingFinalDiagnosis(true);
-      
+
       // ✅ Gọi API với mã phiếu khám đã lấy động
       const dxRes = await getFinalDiagnosis(currentMaPhieuKham);
-      
+
       // ✅ Log toàn bộ response để debug
       console.log("[fetchFinalDiagnosis] API Response:", dxRes);
-      
+
       if (!dxRes) {
         console.log("[fetchFinalDiagnosis] API returned null/undefined");
         toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
-      
+
       // ✅ CRITICAL: Kiểm tra mã bệnh nhân có khớp không
-      const diagnosisPatientId = 
+      const diagnosisPatientId =
         dxRes.MaBenhNhan ||
         dxRes.maBenhNhan ||
         dxRes.patientId;
-      
+
       console.log(
         `[fetchFinalDiagnosis] Checking patient ID: ` +
         `MaBenhNhan=${dxRes.MaBenhNhan}, ` +
@@ -1954,14 +2035,14 @@ const transactions = useMemo(() => {
         `patientId=${dxRes.patientId}, ` +
         `result=${diagnosisPatientId}`
       );
-      
+
       if (!diagnosisPatientId) {
         console.warn("[fetchFinalDiagnosis] Phiếu chẩn đoán không có mã bệnh nhân");
         console.warn("[fetchFinalDiagnosis] Response keys:", Object.keys(dxRes));
         toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
-      
+
       if (diagnosisPatientId !== currentPatientId) {
         console.warn(
           `[fetchFinalDiagnosis] ❌ Mã bệnh nhân KHÔNG KHỚP: ` +
@@ -1971,11 +2052,11 @@ const transactions = useMemo(() => {
         toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
-      
+
       console.log(
         `[fetchFinalDiagnosis] ✅ Mã bệnh nhân khớp: ${currentPatientId}. Loading diagnosis...`
       );
-      
+
       // Parse HuongXuTri field to populate checkbox flags
       const huongXuTri = dxRes.HuongXuTri || dxRes.followup || "";
       const flags = {
@@ -1983,7 +2064,7 @@ const transactions = useMemo(() => {
         choThuocVe: huongXuTri.includes("cho_thuoc_ve") || huongXuTri.includes("Cho thuốc về"),
         taiKham: huongXuTri.includes("tai_kham") || huongXuTri.includes("Tái khám"),
       };
-      
+
       setDiagnosisData((prev) => ({
         ...prev,
         MaPhieuChanDoan: dxRes.MaPhieuChanDoan || dxRes.maPhieuChanDoan,
@@ -1997,11 +2078,11 @@ const transactions = useMemo(() => {
         followupFlags: flags,
         prescriptionCode: dxRes.MaDonThuoc || dxRes.maDonThuoc || "",
       }));
-      
+
       // ✅ CACHE: Mark this patient's diagnosis as cached
       cachedDiagnosisPatientRef.current = currentPatientId;
       console.log(`[fetchFinalDiagnosis] ✅ Cached diagnosis for patient ${currentPatientId}`);
-      
+
       toast.success("Đã tải chẩn đoán cuối.");
     } catch (err) {
       const msg =
@@ -2011,9 +2092,9 @@ const transactions = useMemo(() => {
         err?.response?.data?.detail ||
         err?.message ||
         "";
-      
+
       console.error("[fetchFinalDiagnosis] Error:", err);
-      
+
       // Nếu là lỗi 404 hoặc không tìm thấy
       if (err?.response?.status === 404 || msg.includes("not found") || msg.includes("không tìm thấy")) {
         // ✅ 404 là trường hợp bình thường khi chưa có chẩn đoán
@@ -2057,12 +2138,12 @@ const transactions = useMemo(() => {
       try {
         await updateClsOrderStatus(clsOrderId, "dang_thuc_hien");
         toast.success("Lập phiếu CLS thành công.");
-        
+
         // Refetch patient detail to get updated status
         if (refetchPatientDetail) {
           await refetchPatientDetail();
         }
-        
+
         setClsSummaryPrint(null);
 
         const paymentItems = (serviceItems || []).map((sv, i) => ({
@@ -2130,13 +2211,11 @@ const transactions = useMemo(() => {
 
     const label = isFollowupExamFlow ? "Ghi chú" : "Triệu chứng";
     const examNote = [
-      `${label}: ${
-        isFollowupExamFlow ? exam.note || "—" : exam.symptoms || "—"
+      `${label}: ${isFollowupExamFlow ? exam.note || "—" : exam.symptoms || "—"
       }`,
       ...examExtras.map(
         (e) =>
-          `${
-            EXTRA_FIELDS.find((f) => f.key === e.key)?.label || e.key
+          `${EXTRA_FIELDS.find((f) => f.key === e.key)?.label || e.key
           }: ${e.value}`
       ),
     ].join("\n");
@@ -2377,8 +2456,7 @@ const transactions = useMemo(() => {
       `Triệu chứng: ${exam.symptoms || "—"}`,
       ...examExtras.map(
         (e) =>
-          `${
-            EXTRA_FIELDS.find((f) => f.key === e.key)?.label || e.key
+          `${EXTRA_FIELDS.find((f) => f.key === e.key)?.label || e.key
           }: ${e.value}`
       ),
     ].join("\n");
@@ -2456,14 +2534,14 @@ const transactions = useMemo(() => {
     // ✅ Validation: Check at least one treatment direction is selected
     const flags = diagnosisData.followupFlags || {};
     const hasSelection = flags.choVe || flags.choThuocVe || flags.taiKham;
-    
+
     if (!hasSelection) {
       toast.error("Vui lòng chọn ít nhất một hướng xử trí");
       return;
     }
 
     // ✅ 1. Lấy maPhieuKham
-    const maPhieuKham = 
+    const maPhieuKham =
       diagnosisData?.MaPhieuKham ||
       diagnosisData?.maPhieuKham ||
       form?.MaPhieuKham ||
@@ -2537,11 +2615,11 @@ const transactions = useMemo(() => {
         // ✅ 3.5 Navigate to Appointments page with flash animation
         // ❌ REMOVED: toast.info() - will be shown in Appointments.jsx to prevent duplicate
         onClose?.();
-        
+
         // ✅ Sử dụng UIStore để flash nút "Tạo lịch hẹn" giống flow check-in
         const uiStore = useUIStore.getState();
         uiStore.flashApptCreate();
-        
+
         // Navigate after a short delay to ensure modal closes first
         setTimeout(() => {
           navigate("/appointments");
@@ -2611,8 +2689,7 @@ const transactions = useMemo(() => {
     const svcNote = (svcResults || [])
       .map(
         (r, i) =>
-          `#${i + 1} ${r.service}: ${r.result || "—"}${
-            r.note ? ` • ${r.note}` : ""
+          `#${i + 1} ${r.service}: ${r.result || "—"}${r.note ? ` • ${r.note}` : ""
           }`
       )
       .join("\n");
@@ -2704,14 +2781,14 @@ const transactions = useMemo(() => {
             patientCode: pid,
           },
       };
-      
+
       // Lưu vào localStorage
       localStorage.setItem("appt-prefill", JSON.stringify(apptPrefillData));
-      
+
       // ✅ Flash nút "Tạo lịch hẹn" ở trang Appointments
       const uiStore = useUIStore.getState();
       uiStore.flashApptCreate();
-      
+
       // Navigate to appointments page
       navigate("/appointments");
     } catch (err) {
@@ -2753,12 +2830,12 @@ const transactions = useMemo(() => {
                   {mode === "exam"
                     ? "Lập phiếu khám"
                     : mode === "edit"
-                    ? "Chỉnh sửa bệnh nhân"
-                    : mode === "add"
-                    ? "Thêm bệnh nhân"
-                    : mode === "process"
-                    ? "Xử lý chẩn đoán"
-                    : "Hồ sơ bệnh nhân"}
+                      ? "Chỉnh sửa bệnh nhân"
+                      : mode === "add"
+                        ? "Thêm bệnh nhân"
+                        : mode === "process"
+                          ? "Xử lý chẩn đoán"
+                          : "Hồ sơ bệnh nhân"}
                 </h3>
                 <motion.button
                   whileHover={{ scale: 1.05, rotate: 90 }}
@@ -2767,12 +2844,12 @@ const transactions = useMemo(() => {
                   className="w-9 h-9 rounded-xl bg-white/90 ring-1 ring-slate-200 text-slate-500 hover:text-slate-900 hover:shadow-sm transition-all grid place-items-center"
                   aria-label="Đóng"
                 >
-                    ✕
+                  ✕
                 </motion.button>
               </header>
 
               <div className="p-4 pt-1 overflow-y-auto max-h-[calc(92vh-73px)] scrollbar-none">
-              {mode === "view" && (
+                {mode === "view" && (
                   <PatientViewMode
                     patient={patientForView || patient || form}
                     visits={visits}
@@ -2808,6 +2885,7 @@ const transactions = useMemo(() => {
                     setExam={setExam}
                     tplId={tplId}
                     setTplId={setTplId}
+                    onTemplateChange={handleTemplateChange}
                     tpl={tpl}
                     tplList={tplList}
                     booking={booking}

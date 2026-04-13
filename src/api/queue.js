@@ -148,6 +148,7 @@ function normalizeQueueItem(raw = {}) {
     TrangThai: raw.TrangThai ?? raw.trangThai ?? raw.status ?? null,
     MaPhieuKham: raw.MaPhieuKham ?? raw.maPhieuKham ?? null,
     MaChiTietDv: raw.MaChiTietDv ?? raw.maChiTietDv ?? null,
+    HasPendingCls: Boolean(raw.HasPendingCls ?? raw.hasPendingCls ?? false),
     
     // Alias fields cho tương thích với code hiện tại (camelCase)
     id: raw.MaHangDoi ?? raw.maHangDoi ?? raw.id ?? null,
@@ -173,6 +174,7 @@ function normalizeQueueItem(raw = {}) {
     status: raw.TrangThai ?? raw.trangThai ?? raw.status ?? null,
     maPhieuKham: raw.MaPhieuKham ?? raw.maPhieuKham ?? null,
     maChiTietDv: raw.MaChiTietDv ?? raw.maChiTietDv ?? null,
+    hasPendingCls: Boolean(raw.HasPendingCls ?? raw.hasPendingCls ?? false),
     
    // Patient info từ nested object hoặc từ API khác (nếu có)
     name:

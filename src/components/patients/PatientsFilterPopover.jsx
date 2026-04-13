@@ -211,7 +211,7 @@ export default function PatientsFilterPopover({
               </div>
             </div>
 
-            <div className="grid gap-2 overflow-y-auto p-2">
+            <div className="grid gap-2 overflow-y-auto scrollbar-none p-2">
               <label className="text-[13px]">
                 {t.keyword}
                 <div className="relative mt-1">
@@ -241,7 +241,7 @@ export default function PatientsFilterPopover({
                 <div
                   role="radiogroup"
                   aria-label={t.todayStatusAria}
-                  className="mt-1 flex w-full flex-wrap gap-1.5 overflow-x-auto overflow-y-visible rounded-xl bg-gradient-to-b from-white to-emerald-50/40 p-1 ring-1 ring-emerald-100"
+                  className="mt-1 flex w-full flex-wrap gap-1.5 overflow-x-auto scrollbar-none overflow-y-visible rounded-xl bg-gradient-to-b from-white to-emerald-50/40 p-1 ring-1 ring-emerald-100"
                   onKeyDown={(event) => {
                     const index = TODAY_SEG.findIndex((value) => value === todayStatus);
                     if (event.key === "ArrowRight") {

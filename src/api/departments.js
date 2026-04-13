@@ -705,7 +705,7 @@ function normalizeRoomDetail(dto) {
   const waitingPatients = dto.DangCho ?? dto.dangCho ?? 0;
   const examinedPatients = dto.DaHoanThanh ?? dto.daHoanThanh ?? 0;
   const totalToday = dto.TongHomNay ?? dto.tongHomNay ?? waitingPatients + examinedPatients;
-  const capacityPerDay = dto.SucChuaNgay ?? dto.sucChuaNgay ??dto.sucChua ?? dto.SucChua??  null;
+  const capacityPerDay = dto.SucChuaNgay ?? dto.sucChuaNgay ?? dto.sucChua ?? dto.SucChua ?? null;
 
   const equipments = dto.ThietBi || dto.thietBi || [];
 
@@ -1186,7 +1186,7 @@ export function useUpdateRoomDutyWeek() {
 export async function subscribeDepartments(qc) {
   await ensureStarted();
   if (!qc || typeof qc.invalidateQueries !== "function") {
-    return () => {};
+    return () => { };
   }
 
   const off1 = on("departments.updated", () => {

@@ -265,7 +265,7 @@ export default function PopoverSelect({
                       </div>
                     ) : null}
 
-                    <div className="max-h-72 overflow-y-auto p-1.5">
+                    <div className="max-h-72 overflow-y-auto scrollbar-none p-1.5">
                       {filteredOptions.length ? (
                         filteredOptions.map((option) => {
                           const active =

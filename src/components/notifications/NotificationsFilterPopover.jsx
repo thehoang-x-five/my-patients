@@ -245,7 +245,7 @@ export default function NotificationsFilterPopover({
               </div>
             </div>
 
-            <div className="grid gap-3 overflow-y-auto p-3 text-[13px] text-slate-700">
+            <div className="grid gap-3 overflow-y-auto scrollbar-none p-3 text-[13px] text-slate-700">
               <label className="text-[13px]">
                 {t.keyword}
                 <div className="relative mt-1">

@@ -203,7 +203,7 @@ export default function UnpaidInvoiceFilterPopover({
               </div>
             </div>
 
-            <div className="p-2 grid gap-2 overflow-y-auto text-[13px] text-slate-700">
+            <div className="p-2 grid gap-2 overflow-y-auto scrollbar-none text-[13px] text-slate-700">
               {/* Từ khóa */}
               <label className="text-[13px]">
                 Từ khóa

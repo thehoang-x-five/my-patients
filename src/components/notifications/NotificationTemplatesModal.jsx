@@ -134,7 +134,7 @@ export default function NotificationTemplatesModal({ open, onClose }) {
               </p>
             </div>
 
-            <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-4 py-4">
+            <div className="max-h-[calc(90vh-88px)] overflow-y-auto scrollbar-none px-4 py-4">
               {isLoading ? (
                 <div className="rounded-2xl bg-white p-6 text-sm text-slate-500 ring-1 ring-slate-200/70">
                   Đang tải mẫu thông báo.
@@ -223,7 +223,7 @@ export default function NotificationTemplatesModal({ open, onClose }) {
                 </div>
               </div>
 
-              <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+              <div className="flex-1 space-y-4 overflow-y-auto scrollbar-none px-6 py-5">
                 <label className="block text-sm">
                   <span className="mb-1 block font-medium text-slate-600">
                     Tên mẫu

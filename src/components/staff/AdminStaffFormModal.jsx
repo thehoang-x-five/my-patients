@@ -138,7 +138,7 @@ export default function AdminStaffFormModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 12 }}
           transition={{ type: "spring", stiffness: 360, damping: 28 }}
-          className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200/80"
+          className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-none rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200/80"
         >
           <form onSubmit={handleSubmit}>
             <div className="sticky top-0 rounded-t-2xl border-b border-teal-100 bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4">

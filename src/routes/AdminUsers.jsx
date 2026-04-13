@@ -134,7 +134,7 @@ function StaffFormModal({ open, onClose, initial, isEdit, onSubmit, isPending })
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
         transition={{ type: "spring", stiffness: 400, damping: 30 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto ring-1 ring-slate-200/80"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto scrollbar-none ring-1 ring-slate-200/80"
       >
         <form onSubmit={handleSubmit}>
           {/* Header */}

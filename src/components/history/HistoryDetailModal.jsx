@@ -196,7 +196,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                           </div>
                         )}
                         {(data.examRows || []).length > 0 && (
-                          <div className="overflow-x-auto rounded-lg ring-1 ring-slate-200/70">
+                          <div className="overflow-x-auto scrollbar-none rounded-lg ring-1 ring-slate-200/70">
                             <table className="min-w-full text-sm">
                               <thead className="text-left text-slate-500 bg-slate-50">
                                 <tr>
@@ -268,7 +268,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     {(data.services || []).length > 0 && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                         <b className="block mb-2">Dịch vụ thực hiện</b>
-                        <div className="overflow-x-auto rounded-lg ring-1 ring-slate-200/70">
+                        <div className="overflow-x-auto scrollbar-none rounded-lg ring-1 ring-slate-200/70">
                           <table className="min-w-full text-sm">
                             <thead className="text-left text-slate-500 bg-slate-50">
                               <tr>

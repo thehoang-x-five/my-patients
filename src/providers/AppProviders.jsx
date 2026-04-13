@@ -1,29 +1,18 @@
 // [AUTH FLOW FIX - 2025-11-22]
-// - Giữ nguyên UI providers (React Query, RealtimeContext, Devtools).
-// - Thêm listener global cho event 'auth:unauthorized' từ http interceptor:
-//   + Gọi useAuthStore.handleUnauthorized() để tự refresh hoặc logout khi 401.
+// - Keep core providers unchanged (React Query, RealtimeContext, Devtools).
+// - Listen globally for 'auth:unauthorized' from the http interceptor and
+//   delegate refresh/logout handling to the auth store.
 
 import React, { createContext, useEffect, useMemo } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { ensureStarted, getConnection } from "../api/realtime";
+import { getConnection } from "../api/realtime";
 import { queryClient } from "../components/lib/queryClient.js";
 import { useAuthStore } from "../components/stores/appStore.js";
-// Context (nếu nơi khác cần dùng connection)
+
 export const RealtimeContext = createContext({ connection: null });
 
 export default function AppProviders({ children }) {
-
-  const auth = useAuthStore();
-  useEffect(() => {
-    // Khởi tạo SignalR khi app mount (không chặn UI nếu lỗi)
-    ensureStarted().catch(() => {});
-    return () => {
-      // tuỳ dự án có thể stop(); giữ nguyên để thân thiện HMR
-    };
-  }, []);
-
-  // Lắng nghe 401 từ http (event 'auth:unauthorized') để tự xử lý refresh/logout
   useEffect(() => {
     const onUnauthorized = () => {
       const state = useAuthStore.getState();
@@ -42,6 +31,7 @@ export default function AppProviders({ children }) {
       }
     };
   }, []);
+
   const value = useMemo(() => ({ connection: getConnection() }), []);
 
   return (

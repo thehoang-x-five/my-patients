@@ -16,7 +16,6 @@ import {
   useFinishRemove,
   subscribeQueue,
   getQueueById,
-  rememberQueueAwaitingReturn,
 } from "../api/queue.js";
 import { on } from "../api/realtime.js";
 
@@ -34,6 +33,12 @@ import {
   canCallPatient,
   canCancelClinicalVisit,
   canCancelClsOrder,
+  isAdmin,
+  isReceptionNurse,
+  isDoctor,
+  isClinicalNurse,
+  isClsNurse,
+  isTechnician,
 } from "../utils/permissions.js";
 
 const CLS_CREATED_KEY = "cls-orders-created";
@@ -73,31 +78,33 @@ export default function Examination() {
   const canCall = canCallPatient(user);
   const canCancelVisitAction = canCancelClinicalVisit(user);
   const canCancelClsAction = canCancelClsOrder(user);
-
-  // ✅ Auto-detect queue type based on user role
   const userRole = user?.ChucVu || user?.chucVu || user?.role || null;
   const nurseType = user?.LoaiYTa || user?.loaiYTa || user?.nurseType || null;
 
-  // Determine default queue kind based on user
   const defaultKind = useMemo(() => {
-    // Bác sĩ → chỉ LS
-    if (userRole === 'bac_si') return 'clinical';
-    
-    // Kỹ thuật viên → chỉ CLS
-    if (userRole === 'ky_thuat_vien') return 'cls';
-    
-    // Y tá → phụ thuộc vào loại
+    if (isDoctor(user) || isClinicalNurse(user)) return "ls";
+    if (isTechnician(user) || isClsNurse(user)) return "cls";
+    if (isAdmin(user) || isReceptionNurse(user)) return "all";
+    return "all";
+  }, [user]);
+
+  // ✅ Auto-detect queue type based on user role
+
+  // Determine default queue kind based on user (values match TYPE_OPTIONS: 'ls' | 'cls' | 'all')
+  const legacyDefaultKind = useMemo(() => {
+    if (userRole === 'bac_si') return 'ls';                     // Bác sĩ → chỉ LS
+    if (userRole === 'ky_thuat_vien') return 'cls';             // KTV → chỉ CLS
     if (userRole === 'y_ta') {
-      if (nurseType === 'phong_kham') return 'clinical'; // Y tá LS
-      if (nurseType === 'can_lam_sang') return 'cls'; // Y tá CLS
-      if (nurseType === 'hanhchinh') return 'all'; // Y tá HC xem cả 2
+      if (nurseType === 'phong_kham') return 'ls';              // Y tá LS
+      if (nurseType === 'can_lam_sang') return 'cls';           // Y tá CLS
+      if (nurseType === 'hanhchinh') return 'all';              // Y tá HC
     }
-    
-    // Admin → xem tất cả
     if (userRole === 'admin') return 'all';
-    
     return 'all';
   }, [userRole, nurseType]);
+
+  // Khóa loại lượt theo role (null = không khóa, tự do chọn)
+  const lockedKind = defaultKind !== "all" ? defaultKind : null;
 
   // Filter theo nguồn (walkin / appointment / service_return) + loại lượt (ls / cls) + search
   const [filter, setFilter] = useState({
@@ -136,7 +143,7 @@ export default function Examination() {
     // Kind (LoaiHangDoi)
     if (filter.kind === "cls") {
       params.LoaiHangDoi = "can_lam_sang";
-    } else if (filter.kind === "clinical") {
+    } else if (filter.kind === "ls" || filter.kind === "clinical") {
       params.LoaiHangDoi = "kham_lam_sang";
     }
     // "all" → không set LoaiHangDoi
@@ -693,6 +700,8 @@ export default function Examination() {
       }
     }
 
+    qc.invalidateQueries({ queryKey: ["queue"] });
+
     setActive(null);
   }
 
@@ -819,7 +828,7 @@ export default function Examination() {
                 className="h-full min-h-0 flex flex-col"
               >
                 <div className="card flex-1 min-h-0 flex flex-col overflow-hidden">
-                  <div className="flex-1 min-h-0 overflow-auto">
+                  <div className="flex-1 min-h-0 overflow-auto scrollbar-none">
                     <PatientTable
                       items={filtered}
                       onStart={canCall ? handleStart : undefined}
@@ -869,6 +878,7 @@ export default function Examination() {
           onClose={() => setFilterOpen(false)}
           values={filter}
           setValues={setFilter}
+          lockedKind={lockedKind}
           onReset={() =>
             setFilter({ source: "all", kind: defaultKind, status: "all", search: "" })
           }

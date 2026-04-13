@@ -229,7 +229,7 @@ export default function DeptFilterPopover({
               </div>
             </div>
 
-            <div className="grid gap-2 overflow-y-auto p-2.5 text-[13px] text-slate-700">
+            <div className="grid gap-2 overflow-y-auto scrollbar-none p-2.5 text-[13px] text-slate-700">
               <label className="text-[13px]">
                 {t.keyword}
                 <div className="relative mt-1">

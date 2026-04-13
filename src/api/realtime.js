@@ -37,11 +37,8 @@ const BASE_NORM =
 // Kết quả kỳ vọng dev: https://localhost:7146/hubs/realtime
 const HUB_URL = `${BASE_NORM}/hubs/realtime`;
 
-
-
-
-
 let _conn = null;
+let _startPromise = null;
 
 export function getConnection() {
   return _conn;
@@ -57,7 +54,6 @@ export function createConnection(options = {}) {
       accessTokenFactory: () => getStoredAccessToken(),
       ...options,
     })
-    
     .withAutomaticReconnect([0, 2000, 5000, 10000, 20000])
     .configureLogging(signalR.LogLevel.Information)
     .build();
@@ -72,30 +68,137 @@ export function createConnection(options = {}) {
   return _conn;
 }
 
+async function waitForConnectionState(conn, allowedStates, timeoutMs = 5000) {
+  if (allowedStates.includes(conn.state)) return;
+
+  await new Promise((resolve) => {
+    const start = Date.now();
+    const id = setInterval(() => {
+      if (
+        allowedStates.includes(conn.state) ||
+        Date.now() - start > timeoutMs
+      ) {
+        clearInterval(id);
+        resolve();
+      }
+    }, 100);
+  });
+}
+
+function shouldRetryStart(err) {
+  const message = String(err?.message || "").toLowerCase();
+  return (
+    message.includes("stopped during negotiation") ||
+    message.includes("connection was stopped") ||
+    message.includes("failed to start the connection")
+  );
+}
+
+async function startConnectionSafely(conn) {
+  if (conn.state === signalR.HubConnectionState.Connected) {
+    return conn;
+  }
+
+  if (_startPromise) {
+    await _startPromise;
+    return getConnection();
+  }
+
+  _startPromise = (async () => {
+    let current = conn;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (current.state === signalR.HubConnectionState.Disconnecting) {
+        await waitForConnectionState(
+          current,
+          [signalR.HubConnectionState.Disconnected],
+          5000
+        );
+        _conn = null;
+        current = createConnection();
+      }
+
+      if (
+        current.state === signalR.HubConnectionState.Connecting ||
+        current.state === signalR.HubConnectionState.Reconnecting
+      ) {
+        await waitForConnectionState(
+          current,
+          [
+            signalR.HubConnectionState.Connected,
+            signalR.HubConnectionState.Disconnected,
+          ],
+          5000
+        );
+      }
+
+      if (current.state === signalR.HubConnectionState.Connected) {
+        return current;
+      }
+
+      try {
+        await current.start();
+        return current;
+      } catch (err) {
+        if (!shouldRetryStart(err) || attempt === 1) {
+          throw err;
+        }
+
+        try {
+          await current.stop();
+        } catch {
+          // ignore
+        }
+
+        _conn = null;
+        current = createConnection();
+      }
+    }
+
+    return current;
+  })();
+
+  try {
+    await _startPromise;
+    return getConnection();
+  } finally {
+    _startPromise = null;
+  }
+}
+
 export async function ensureStarted() {
-  const conn = createConnection();
-  // Start if disconnected; if connecting/reconnecting, wait briefly for a connected/terminal state.
+  let conn = createConnection();
+
+  // Handle Disconnecting state (React StrictMode triggers cleanup → stop() mid-connect)
+  if (conn.state === signalR.HubConnectionState.Disconnecting) {
+    await waitForConnectionState(
+      conn,
+      [signalR.HubConnectionState.Disconnected],
+      5000
+    );
+    // Connection object is stale after stop(), create fresh
+    _conn = null;
+    conn = createConnection();
+  }
+
+  // Start if disconnected
   if (conn.state === signalR.HubConnectionState.Disconnected) {
-    await conn.start();
+    conn = await startConnectionSafely(conn);
   } else if (
     conn.state === signalR.HubConnectionState.Connecting ||
     conn.state === signalR.HubConnectionState.Reconnecting
   ) {
-    await new Promise((resolve) => {
-      const start = Date.now();
-      const id = setInterval(() => {
-        if (
-          conn.state === signalR.HubConnectionState.Connected ||
-          conn.state === signalR.HubConnectionState.Disconnected ||
-          Date.now() - start > 5000
-        ) {
-          clearInterval(id);
-          resolve();
-        }
-      }, 100);
-    });
+    // Wait for connecting/reconnecting to settle
+    await waitForConnectionState(
+      conn,
+      [
+        signalR.HubConnectionState.Connected,
+        signalR.HubConnectionState.Disconnected,
+      ],
+      5000
+    );
     if (conn.state === signalR.HubConnectionState.Disconnected) {
-      await conn.start();
+      conn = await startConnectionSafely(conn);
     }
   }
   return conn;
@@ -114,13 +217,11 @@ async function restartConnection(conn) {
     // ignore and try a clean start below
   }
 
-  if (conn.state === signalR.HubConnectionState.Disconnected) {
-    await conn.start();
-  } else {
-    const freshConn = createConnection();
-    if (freshConn.state === signalR.HubConnectionState.Disconnected) {
-      await freshConn.start();
-    }
+  // After stop, the old connection object may be unusable — reset and create fresh
+  _conn = null;
+  const freshConn = createConnection();
+  if (freshConn.state === signalR.HubConnectionState.Disconnected) {
+    await freshConn.start();
   }
 }
 
@@ -157,6 +258,7 @@ async function invokeSafe(method, ...args) {
 }
 
 export async function stop() {
+  _startPromise = null;
   if (_conn) await _conn.stop();
 }
 
@@ -204,7 +306,7 @@ export async function initStaffRealtime({
       await invokeSafe("JoinRoleAsync", "bac_si");
     } else if (staffRole === "y_ta") {
       await invokeSafe("JoinRoleAsync", "y_ta");
-      
+
       // ===== JOIN NURSE TYPE GROUP (CHỈ Y TÁ) =====
       // Y tá hành chính: nhận invoices, prescriptions, appointments
       // Y tá LS: nhận clinical exams trong phòng

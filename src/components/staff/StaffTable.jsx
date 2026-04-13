@@ -241,7 +241,7 @@ export default function StaffTable({
   }
 
   return (
-    <div className="overflow-auto rounded-xl bg-white ring-1 ring-slate-200/80">
+    <div className="overflow-auto scrollbar-none rounded-xl bg-white ring-1 ring-slate-200/80">
       <table className="w-full text-left text-[13px]">
         <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-600">
           <tr>

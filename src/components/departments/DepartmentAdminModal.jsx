@@ -314,7 +314,7 @@ export default function DepartmentAdminModal({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div className="flex-1 overflow-y-auto scrollbar-none px-4 py-4">
               {tab === "departments" ? (
                 <div className="space-y-3">
                   {sortedDepartments.map((department) => (
@@ -487,7 +487,7 @@ export default function DepartmentAdminModal({
                   </div>
                 </div>
 
-                <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                <div className="flex-1 space-y-4 overflow-y-auto scrollbar-none px-6 py-5">
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="block text-sm">
                       <span className="mb-1 block font-medium text-slate-600">Mã khoa</span>
@@ -652,7 +652,7 @@ export default function DepartmentAdminModal({
                   </div>
                 </div>
 
-                <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                <div className="flex-1 space-y-4 overflow-y-auto scrollbar-none px-6 py-5">
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="block text-sm">
                       <span className="mb-1 block font-medium text-slate-600">Mã phòng</span>
@@ -909,7 +909,7 @@ export default function DepartmentAdminModal({
                   </div>
                 </div>
 
-                <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                <div className="flex-1 space-y-4 overflow-y-auto scrollbar-none px-6 py-5">
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="block text-sm">
                       <span className="mb-1 block font-medium text-slate-600">Mã dịch vụ</span>

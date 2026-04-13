@@ -12,6 +12,7 @@ export default function PatientExamMode({
   setExam,
   tplId,
   setTplId,
+  onTemplateChange,
   tpl,
   tplList = [],
   booking,
@@ -229,12 +230,25 @@ export default function PatientExamMode({
                     name="tplId"
                     value={tplId || ""}
                     onChange={(newId) => {
+                      if (typeof onTemplateChange === "function") {
+                        onTemplateChange(newId);
+                        return;
+                      }
+
                       setTplId(newId);
                       const found =
                         selectTemplates.find((t) => t.id === newId) || tpl;
                       setExam((s) => ({
                         ...s,
                         type: found?.title || s.type || "",
+                        dept: "",
+                        room: "",
+                      }));
+                      setBooking((b) => ({
+                        ...b,
+                        dept: "",
+                        doctor: "",
+                        price: isFreeExam ? 0 : Number(found?.price || 0) || 0,
                       }));
                     }}
                     options={[
@@ -339,7 +353,7 @@ export default function PatientExamMode({
                 {clsDisplayRows.length} dịch vụ
               </Chip>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto scrollbar-none">
               <table className="min-w-full text-sm">
                 <thead className="bg-sky-100">
                   <tr className="text-xs font-semibold text-slate-700">

@@ -344,7 +344,7 @@ export default function PatientsTable({
       >
         <div
           className={`scrollbar-none p-4 pt-0 pb-0 ${
-            stretch ? "min-h-0 flex-1 overflow-x-auto overflow-y-auto" : "overflow-x-auto"
+            stretch ? "min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"
           }`}
         >
           <table className="min-w-full table-fixed">
