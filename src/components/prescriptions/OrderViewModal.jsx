@@ -1,5 +1,6 @@
 // src/components/prescriptions/OrderViewModal.jsx
 import { AnimatePresence, motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import Button from "../ui/Button.jsx";
 import React from "react";
 import { formatVietnameseText } from "../../utils/textFormatters.js";
@@ -118,6 +119,15 @@ export default function OrderViewModal({ open, order, onClose }) {
                       {totalDisplay}
                     </span>
                   </span>
+                  {order?.visitCode && (
+                    <Link
+                      to={`/history?tab=visits&highlight=${order.visitCode}`}
+                      className="inline-flex items-center gap-1 rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200 px-2 py-0.5 font-semibold hover:bg-sky-100 transition-colors cursor-pointer"
+                      title="Xem lượt khám tương ứng trong Lịch sử"
+                    >
+                      🏥 Lượt khám: {order.visitCode}
+                    </Link>
+                  )}
                 </div>
               </div>
               <Button
@@ -132,7 +142,7 @@ export default function OrderViewModal({ open, order, onClose }) {
             {/* --- Body --- */}
             <div className="p-6">
               <motion.div
-                className="grid grid-cols-3 gap-4 mb-6"
+                className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
                 variants={listVariants}
                 initial="hidden"
                 animate="visible"
@@ -175,6 +185,29 @@ export default function OrderViewModal({ open, order, onClose }) {
                     {order?.at
                       ? new Date(order.at).toLocaleString("vi-VN")
                       : "—"}
+                  </div>
+                </motion.div>
+
+                {/* Box 4: Mã lượt khám */}
+                <motion.div
+                  className="p-4 bg-teal-50 rounded-xl border border-teal-200/80 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
+                  variants={itemVariants}
+                >
+                  <div className="text-sm font-medium text-teal-700">
+                    Mã lượt khám
+                  </div>
+                  <div className="font-bold text-teal-900 mt-1 truncate">
+                    {order?.visitCode ? (
+                      <Link
+                        to={`/history?tab=visits&highlight=${order.visitCode}`}
+                        className="underline underline-offset-2 hover:text-teal-700 transition-colors"
+                        title="Xem chi tiết lượt khám trong Lịch sử"
+                      >
+                        {order.visitCode}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
                   </div>
                 </motion.div>
               </motion.div>

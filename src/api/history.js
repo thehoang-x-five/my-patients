@@ -408,7 +408,6 @@ export function useHistoryVisits(params = {}, options = {}) {
     queryKey: ["history", "visits", params],
     queryFn: () => getHistoryVisits(params),
     select: (res) => {
-      // ✅ Trả về PagedResult đầy đủ
       if (res && typeof res === "object" && ("TotalItems" in res || "totalItems" in res)) {
         return {
           Items: res.Items || res.items || [],
@@ -417,7 +416,6 @@ export function useHistoryVisits(params = {}, options = {}) {
           PageSize: res.PageSize ?? res.pageSize ?? (params?.pageSize ?? 50),
         };
       }
-      // Fallback
       const items = Array.isArray(res) ? res : [];
       return {
         Items: items,
@@ -427,7 +425,7 @@ export function useHistoryVisits(params = {}, options = {}) {
       };
     },
     keepPreviousData: true,
-    staleTime: 60_000,
+    staleTime: 300_000, // 5 phút - giảm refetch không cần thiết
     ...options,
   });
 }
@@ -446,7 +444,6 @@ export function useHistoryTransactions(params = {}, options = {}) {
     queryKey: ["history", "transactions", params],
     queryFn: () => getHistoryTransactions(params),
     select: (res) => {
-      // ✅ Trả về PagedResult đầy đủ
       if (res && typeof res === "object" && ("TotalItems" in res || "totalItems" in res)) {
         return {
           Items: res.Items || res.items || [],
@@ -455,7 +452,6 @@ export function useHistoryTransactions(params = {}, options = {}) {
           PageSize: res.PageSize ?? res.pageSize ?? (params?.pageSize ?? 50),
         };
       }
-      // Fallback
       const items = Array.isArray(res) ? res : [];
       return {
         Items: items,
@@ -465,7 +461,7 @@ export function useHistoryTransactions(params = {}, options = {}) {
       };
     },
     keepPreviousData: true,
-    staleTime: 60_000,
+    staleTime: 60_000, // 30 giây
     ...options,
   });
 }

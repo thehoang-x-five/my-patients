@@ -40,6 +40,55 @@ function cleanupFilter(obj) {
   return copy;
 }
 
+function normalizeRoomTypeCode(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw === "phong_kham" || raw === "phong_kham_ls") return "phong_kham_ls";
+  if (raw === "phong_dich_vu" || raw === "phong_cls") return "phong_cls";
+  return raw;
+}
+
+function buildRoomTypeCandidates(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return [""];
+
+  if (raw === "cls" || raw === "phong_cls" || raw === "phong_dich_vu") {
+    return ["cls", "phong_cls", "phong_dich_vu"];
+  }
+
+  if (raw === "ls" || raw === "phong_kham_ls" || raw === "phong_kham") {
+    return ["ls", "phong_kham_ls", "phong_kham"];
+  }
+
+  return [raw];
+}
+
+async function postRoomSearchWithFallback(path, filter) {
+  const candidates = buildRoomTypeCandidates(filter?.LoaiPhong);
+  let lastBody = null;
+
+  for (const candidate of candidates) {
+    const payload = { ...filter };
+
+    if (candidate) payload.LoaiPhong = candidate;
+    else delete payload.LoaiPhong;
+
+    const res = await http.post(path, payload);
+    const body = res.data ?? res;
+    lastBody = body;
+
+    const items = normalizeListLike(body);
+    const totalItems =
+      body?.TotalItems ?? body?.totalItems ?? body?.total ?? items.length;
+
+    if (totalItems > 0) {
+      return body;
+    }
+  }
+
+  return lastBody;
+}
+
 // at = { ngay, gio } – nếu không truyền thì mặc định lấy thời điểm hiện tại
 function buildAt(at) {
   const now = new Date();
@@ -105,6 +154,7 @@ function normalizeDepartmentOverview(dto) {
  * RoomCardDto:
  *  - MaPhong, TenPhong, TenKhoa, LoaiPhong, TrangThai
  *  - MaBacSiPhuTrach, TenBacSiPhuTrach
+ *  - MaKTVPhuTrach, TenKTVPhuTrach
  *  - DienThoai, Email
  *  - DangCho, DaHoanThanh, TongHomNay
  */
@@ -117,8 +167,9 @@ function normalizeRoomCard(dto) {
     dto.TenPhong || dto.tenPhong || dto.ten_phong || dto.name || "";
   const deptName =
     dto.TenKhoa || dto.tenKhoa || dto.ten_khoa || dto.deptName || "";
-  const roomType =
-    dto.LoaiPhong || dto.loaiPhong || dto.loai_phong || dto.type || "";
+  const roomType = normalizeRoomTypeCode(
+    dto.LoaiPhong || dto.loaiPhong || dto.loai_phong || dto.type || ""
+  );
 
   const statusRaw =
     dto.TrangThai ||
@@ -135,7 +186,14 @@ function normalizeRoomCard(dto) {
     dto.bacSiPhuTrach ||
     null;
 
-  const nurseInCharge = null; // DTO RoomCardDto chưa có, để trống
+  const technicianInCharge =
+    dto.TenKTVPhuTrach ||
+    dto.tenKTVPhuTrach ||
+    dto.KTVPhuTrach ||
+    dto.ktvPhuTrach ||
+    null;
+
+  const nurseInCharge = technicianInCharge;
 
   const waitingPatients = dto.DangCho ?? dto.dangCho ?? 0;
   const examinedPatients = dto.DaHoanThanh ?? dto.daHoanThanh ?? 0;
@@ -174,6 +232,7 @@ function normalizeRoomCard(dto) {
     trangThai: statusRaw,
 
     doctorInCharge,
+    technicianInCharge,
     nurseInCharge,
 
     waitingPatients,
@@ -191,7 +250,7 @@ function normalizeRoomCard(dto) {
  *  - string MaPhong
  *  - string TenPhong
  *  - string MaKhoa
- *  - string LoaiPhong // phong_kham_ls, phong_cls, thu_ngan...
+ *  - string LoaiPhong // phong_kham_ls, phong_cls
  *  - int? SucChua
  *  - string? ViTri
  *  - string? Email
@@ -201,6 +260,7 @@ function normalizeRoomCard(dto) {
  *  - List<string> ThietBi
  *  - string TrangThai // hoat_dong, tam_dung
  *  - string? MaBacSiPhuTrach
+ *  - string? MaKTVPhuTrach
  */
 function normalizeRoomWithDept(room, deptMap) {
   if (!room) return null;
@@ -216,8 +276,9 @@ function normalizeRoomWithDept(room, deptMap) {
   const roomName =
     room.TenPhong || room.tenPhong || room.ten_phong || room.name || "";
 
-  const roomType =
-    room.LoaiPhong || room.loaiPhong || room.loai_phong || room.type || "";
+  const roomType = normalizeRoomTypeCode(
+    room.LoaiPhong || room.loaiPhong || room.loai_phong || room.type || ""
+  );
 
   const capacity =
     room.SucChua ?? room.sucChua ?? room.capacity ?? room.suc_chua ?? 0;
@@ -274,6 +335,11 @@ function normalizeRoomWithDept(room, deptMap) {
     room.maBacSiPhuTrach ||
     room.headDoctorCode ||
     null;
+  const headTechnician =
+    room.MaKTVPhuTrach ||
+    room.maKTVPhuTrach ||
+    room.headTechnicianCode ||
+    null;
 
   return {
     _raw: room,
@@ -322,6 +388,7 @@ function normalizeRoomWithDept(room, deptMap) {
     thietBi: equipments,
 
     headDoctor,
+    headTechnician,
 
     // Thống kê (nếu BE có trả)
     waitingPatients,
@@ -442,7 +509,7 @@ function buildRoomSearchFilter(params = {}) {
   const filter = cleanupFilter({
     Keyword: q ?? keyword,
     MaKhoa: dept ?? maKhoa,
-    LoaiPhong: roomType ?? loaiPhong,
+    LoaiPhong: normalizeRoomTypeCode(roomType ?? loaiPhong),
     TrangThai: status ?? trangThai,
     SortBy: sortBy,
     SortDirection: sortDirection,
@@ -481,8 +548,10 @@ export const getDepartmentsOverview = async (at) => {
 export const listDepartments = async (params = {}) => {
   // 1) rooms (RoomCardDto)
   const filter = buildRoomSearchFilter(params);
-  const res = await http.post("/master-data/rooms/cards/search", filter);
-  const body = res.data ?? res;
+  const body = await postRoomSearchWithFallback(
+    "/master-data/rooms/cards/search",
+    filter
+  );
 
   const roomsRaw = normalizeListLike(body);
 
@@ -557,11 +626,11 @@ export const listRoomCatalog = async (params = {}) => {
   });
 
   const [roomRes, deptRes] = await Promise.all([
-    http.post("/master-data/rooms/search", filter),
+    postRoomSearchWithFallback("/master-data/rooms/search", filter),
     http.get("/master-data/departments"),
   ]);
 
-  const roomPayload = roomRes.data ?? roomRes;
+  const roomPayload = roomRes;
   const deptPayload = deptRes.data ?? deptRes;
   const roomItems = normalizeListLike(roomPayload);
   const deptItems = normalizeListLike(deptPayload);
@@ -580,7 +649,7 @@ export const listRoomCatalog = async (params = {}) => {
       MaKhoa: dto.MaKhoa || dto.maKhoa || "",
       TenKhoa:
         dto.TenKhoa || dto.tenKhoa || deptMap.get(dto.MaKhoa || dto.maKhoa || "") || "",
-      LoaiPhong: dto.LoaiPhong || dto.loaiPhong || "",
+      LoaiPhong: normalizeRoomTypeCode(dto.LoaiPhong || dto.loaiPhong || ""),
       SucChua: dto.SucChua ?? dto.sucChua ?? null,
       ViTri: dto.ViTri || dto.viTri || "",
       Email: dto.Email || dto.email || "",
@@ -590,6 +659,7 @@ export const listRoomCatalog = async (params = {}) => {
       ThietBi: dto.ThietBi || dto.thietBi || [],
       TrangThai: dto.TrangThai || dto.trangThai || "hoat_dong",
       MaBacSiPhuTrach: dto.MaBacSiPhuTrach || dto.maBacSiPhuTrach || "",
+      MaKTVPhuTrach: dto.MaKTVPhuTrach || dto.maKTVPhuTrach || "",
     })),
     totalItems: roomPayload.TotalItems ?? roomPayload.totalItems ?? roomItems.length,
     page: roomPayload.Page ?? roomPayload.page ?? 1,
@@ -682,8 +752,9 @@ function normalizeRoomDetail(dto) {
   const deptName =
     dto.TenKhoa || dto.tenKhoa || dto.ten_khoa || dto.deptName || "";
 
-  const roomType =
-    dto.LoaiPhong || dto.loaiPhong || dto.loai_phong || dto.type || "";
+  const roomType = normalizeRoomTypeCode(
+    dto.LoaiPhong || dto.loaiPhong || dto.loai_phong || dto.type || ""
+  );
 
   const statusRaw =
     dto.TrangThai ||
@@ -700,7 +771,14 @@ function normalizeRoomDetail(dto) {
     dto.bacSiPhuTrach ||
     null;
 
-  const nurseInCharge = null; // Detail chưa có tên y tá cố định
+  const technicianInCharge =
+    dto.TenKTVPhuTrach ||
+    dto.tenKTVPhuTrach ||
+    dto.KTVPhuTrach ||
+    dto.ktvPhuTrach ||
+    null;
+
+  const nurseInCharge = technicianInCharge;
 
   const waitingPatients = dto.DangCho ?? dto.dangCho ?? 0;
   const examinedPatients = dto.DaHoanThanh ?? dto.daHoanThanh ?? 0;
@@ -750,6 +828,7 @@ function normalizeRoomDetail(dto) {
     trangThai: statusRaw,
 
     doctorInCharge,
+    technicianInCharge,
     nurseInCharge,
 
     equipments,
@@ -819,6 +898,8 @@ function normalizeRoomDutyWeek(data) {
     deptName: data.TenKhoa || data.tenKhoa || "",
     doctorId: data.MaBacSiPhuTrach || data.maBacSiPhuTrach || "",
     doctorName: data.TenBacSiPhuTrach || data.tenBacSiPhuTrach || "",
+    technicianId: data.MaKTVPhuTrach || data.maKTVPhuTrach || "",
+    technicianName: data.TenKTVPhuTrach || data.tenKTVPhuTrach || "",
     today: data.Today || data.today || null,
     items: dutyItems.map((item) => ({
       day: item.Thu || item.thu || "",
@@ -871,6 +952,7 @@ export const getDutyByRoom = async (id) => {
       GioBatDau: item.gioBatDau,
       GioKetThuc: item.gioKetThuc,
       BacSi: dutyWeek.doctorName,
+      KyThuatVien: dutyWeek.technicianName,
     }));
 };
 

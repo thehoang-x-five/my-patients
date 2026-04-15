@@ -261,6 +261,13 @@ function normalizePrescription(dto = {}) {
     ? itemsRaw.map(normalizePrescriptionItem)
     : [];
 
+  // Mã lượt khám (dùng để link đến trang Lịch sử + highlight dòng)
+  const visitCode =
+    dto.visitCode ??
+    dto.maLuotKham ??
+    dto.MaLuotKham ??
+    null;
+
   return {
     id: code || dto.id,
     code,
@@ -268,23 +275,22 @@ function normalizePrescription(dto = {}) {
     status: rawStatus,
     at: atRaw,
     total,
-    // alias cho bệnh nhân
     patientId: ptId,
     patientName: ptName,
     ptId,
     ptName,
-    // alias cho bác sĩ
     doctorId,
     doctorName,
     doctor: doctorName,
-    // alias cho chẩn đoán
     diagnosisId,
     diagnosis,
     diag: diagnosis,
+    visitCode,
     items,
     raw: dto,
   };
 }
+
 function normalizeStatusForUpsert(status) {
   const raw = String(status || "").toLowerCase();
 
@@ -297,10 +303,11 @@ function normalizeStatusForUpsert(status) {
     return "tam_dung";
   }
 
-  // Mặc định là hoạt động, các trạng thái khác BE tự tính
   return "hoat_dong";
 }
+
 /** ================== RAW API CALLS ================== */
+
 function extractItems(data) {
   if (!data) return [];
   if (Array.isArray(data)) return data;
@@ -315,7 +322,6 @@ export async function searchRxOrders({ keyword, status, fromDate, toDate, page =
   const params = new URLSearchParams();
   if (keyword) params.append("keyword", keyword);
   if (status && status !== "all" && status !== "Tất cả") {
-    // Map frontend status → backend status
     const statusMap = {
       "Đã kê": "da_ke",
       "Chờ phát": "cho_phat",
@@ -331,7 +337,6 @@ export async function searchRxOrders({ keyword, status, fromDate, toDate, page =
 
   const data = await get(`/pharmacy/prescriptions?${params.toString()}`);
 
-  // ✅ Trả về PagedResult đầy đủ
   const list = extractItems(data);
   return {
     Items: list.map(normalizePrescription),
@@ -350,15 +355,16 @@ export async function getRxOrders() {
 // GET /api/pharmacy/stock
 export async function getStock() {
   const data = await get("/pharmacy/stock");
-
   const list = extractItems(data);
   return list.map(normalizeDrug);
 }
-// ✅ Trả về PagedResult đầy đủ
-export async function searchStock({ keyword, status, expFrom, expTo, tonMin, tonMax, page = 1, pageSize = 50 } = {}) {
+
+// ✅ Search stock với phân trang + filter
+export async function searchStock({ keyword, status, unit, expFrom, expTo, tonMin, tonMax, page = 1, pageSize = 50 } = {}) {
   const payload = {
     Keyword: keyword || null,
     TrangThai: status === "all" ? null : status || null,
+    DonViTinh: unit || null,
     HanSuDungFrom: expFrom || null,
     HanSuDungTo: expTo || null,
     TonToiThieu: tonMin ?? null,
@@ -371,7 +377,6 @@ export async function searchStock({ keyword, status, expFrom, expTo, tonMin, ton
 
   const data = await post("/pharmacy/stock/search", payload);
 
-  // ✅ Trả về PagedResult đầy đủ
   if (data && typeof data === "object" && ("TotalItems" in data || "totalItems" in data)) {
     return {
       Items: extractItems(data).map(normalizeDrug),
@@ -381,7 +386,6 @@ export async function searchStock({ keyword, status, expFrom, expTo, tonMin, ton
     };
   }
 
-  // Fallback: nếu không phải PagedResult
   const list = extractItems(data);
   return {
     Items: list.map(normalizeDrug),
@@ -390,8 +394,6 @@ export async function searchStock({ keyword, status, expFrom, expTo, tonMin, ton
     PageSize: pageSize,
   };
 }
-
-
 
 /**
  * Upsert kho thuốc
@@ -410,8 +412,8 @@ export async function upsertStockItem(form) {
     CongDung: form.usage || null,
     GiaNiemYet: toNumber(form.price),
     SoLuongTon: toNumber(form.qty),
-    TrangThai: normalizeStatusForUpsert(form.status), // 🔑
-    HanSuDung: form.exp || null, // yyyy-MM-dd
+    TrangThai: normalizeStatusForUpsert(form.status),
+    HanSuDung: form.exp || null,
     SoLo: form.lot || null,
   };
 
@@ -489,7 +491,7 @@ export function useSearchStock(filters = {}, options = {}) {
     queryKey: ["pharmacy", "stock", "search", { keyword, status, unit, expFrom, expTo, tonMin, tonMax, page, pageSize }],
     queryFn: () => searchStock({ keyword, status, unit, expFrom, expTo, tonMin, tonMax, page, pageSize }),
     staleTime: 10_000,
-    keepPreviousData: true, // Giữ data cũ khi chuyển trang
+    keepPreviousData: true,
     ...options,
   });
 }

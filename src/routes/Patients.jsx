@@ -347,19 +347,42 @@ export default function Patients() {
 
   const highlightPid = useUIStore((s) => s.highlightPid);
   const highlightSource = useUIStore((s) => s.highlightSource);
-  const highlightNotified = useUIStore((s) => s.highlightNotified);  // ✅ NEW
-  const markHighlightNotified = useUIStore((s) => s.markHighlightNotified);  // ✅ NEW
+  const highlightNotified = useUIStore((s) => s.highlightNotified);
+  const markHighlightNotified = useUIStore((s) => s.markHighlightNotified);
   const clearHighlight = useUIStore((s) => s.clearHighlight);
   const setHighlightPid = useUIStore((s) => s.setHighlightPid);
 
   const flashAddAt = useUIStore((s) => s.flashAddAt);
-  const flashAddNotified = useUIStore((s) => s.flashAddNotified);  // ✅ NEW
-  const markFlashAddNotified = useUIStore((s) => s.markFlashAddNotified);  // ✅ NEW
+  const flashAddNotified = useUIStore((s) => s.flashAddNotified);
+  const markFlashAddNotified = useUIStore((s) => s.markFlashAddNotified);
   const ackFlashAdd = useUIStore((s) => s.ackFlashAdd);
 
   const patientPrefill = useUIStore((s) => s.patientPrefill);
   const setPatientPrefill = useUIStore((s) => s.setPatientPrefill);
   const clearPatientPrefill = useUIStore((s) => s.clearPatientPrefill);
+
+  // ✅ Track when highlight was first shown
+  const highlightTimestampRef = useRef(null);
+
+  // Record timestamp when highlight appears
+  useEffect(() => {
+    if (highlightPid && !highlightTimestampRef.current) {
+      highlightTimestampRef.current = Date.now();
+    }
+  }, [highlightPid]);
+
+  // Clear highlight on unmount (only if shown for at least 1 second)
+  useEffect(() => {
+    return () => {
+      if (highlightTimestampRef.current) {
+        const elapsed = Date.now() - highlightTimestampRef.current;
+        // Chỉ clear nếu đã hiển thị ít nhất 1 giây (user đã thấy)
+        if (elapsed >= 1000) {
+          clearHighlight();
+        }
+      }
+    };
+  }, [clearHighlight]);
 
   // Exam store: dùng để prefill phiếu khám
   const setExamActive = useExamStore((s) => s.setActive);

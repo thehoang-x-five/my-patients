@@ -4,6 +4,18 @@ import Button from "../ui/Button.jsx";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+function isClsType(type) {
+  const v = String(type || "").toLowerCase();
+  return (
+    v.includes("cls") ||
+    v.includes("cận lâm sàng") ||
+    v.includes("can_lam_sang") ||
+    v.includes("dv") ||
+    v.includes("dich_vu") ||
+    v.includes("dịch vụ")
+  );
+}
+
 // === THAY ĐỔI: Tinh chỉnh hiệu ứng (nhẹ & mượt) ===
 const modalContentVariants = {
   hidden: { opacity: 0 },
@@ -31,9 +43,25 @@ const itemVariants = {
 export default function ScheduleModal({ open, dept, todayDuty, weekDays, todayKey, onClose }) {
   if (!dept) return null;
 
-  const fixedDoctor = (weekDays && weekDays.fixedDoctor)
-    ? weekDays.fixedDoctor
-    : (dept.doctorInCharge || "—");
+  const roomType =
+    dept.room?.type ||
+    dept.roomType ||
+    dept.loaiPhong ||
+    dept.loai_phong ||
+    "";
+  const isCls = isClsType(roomType);
+  const fixedStaffLabel = isCls
+    ? "KTV phụ trách (cố định)"
+    : "Bác sĩ phụ trách (cố định)";
+  const fixedStaffName = isCls
+    ? weekDays?.fixedTechnician || dept.technicianInCharge || "—"
+    : weekDays?.fixedDoctor || dept.doctorInCharge || "—";
+  const todayDutyLabel = isCls
+    ? "Nhân sự CLS trực hôm nay"
+    : "Điều dưỡng trực hôm nay";
+  const weekDutyLabel = isCls
+    ? "Lịch nhân sự CLS cả tuần"
+    : "Lịch điều dưỡng cả tuần";
 
   const slotsOf = (d) => {
     const v = weekDays?.[d];
@@ -146,15 +174,15 @@ export default function ScheduleModal({ open, dept, todayDuty, weekDays, todayKe
                   {/* BS cố định (1/3) */}
                   <div className="lg:col-span-1">
                     <Tile className="flex items-center gap-2">
-                      <b className="text-slate-800">Bác sĩ phụ trách (cố định):</b>
-                      <span className="text-sm font-semibold text-indigo-800">{fixedDoctor}</span>
+                      <b className="text-slate-800">{fixedStaffLabel}:</b>
+                      <span className="text-sm font-semibold text-indigo-800">{fixedStaffName}</span>
                     </Tile>
                   </div>
 
                   {/* Điều dưỡng trực hôm nay (2/3) */}
                   <div className="lg:col-span-2">
                     <Tile>
-                      <b className="block mb-2 text-slate-800">Điều dưỡng trực hôm nay</b>
+                      <b className="block mb-2 text-slate-800">{todayDutyLabel}</b>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {(Array.isArray(todayDuty) ? todayDuty : slotsOf(todayKey)).map((s, i) => (
                           <NurseCard slot={s} index={i} key={i} />
@@ -167,7 +195,7 @@ export default function ScheduleModal({ open, dept, todayDuty, weekDays, todayKe
                 {/* Bố cục Cả tuần (ĐÃ ÁP DỤNG VARIANTS MỚI) */}
                 <motion.div variants={itemVariants}>
                   <Tile>
-                    <b className="block mb-3 text-slate-800">Lịch điều dưỡng cả tuần</b>
+                    <b className="block mb-3 text-slate-800">{weekDutyLabel}</b>
                     
                     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
                       {DAYS.map((d) => {

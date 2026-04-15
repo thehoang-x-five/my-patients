@@ -77,9 +77,10 @@ const LOCALIZED_LABELS = {
   the: { vi: "Thẻ", en: "Card" },
   vietqr: { vi: "VietQR", en: "VietQR" },
 
-  phong_kham: { vi: "Phòng khám", en: "Examination room" },
-  phong_dich_vu: { vi: "Phòng dịch vụ", en: "Service room" },
-  phong_cls: { vi: "Phòng cận lâm sàng", en: "Paraclinical room" },
+  phong_kham: { vi: "Phòng khám LS", en: "Clinical exam room" },
+  phong_kham_ls: { vi: "Phòng khám LS", en: "Clinical exam room" },
+  phong_dich_vu: { vi: "Phòng CLS", en: "Paraclinical room" },
+  phong_cls: { vi: "Phòng CLS", en: "Paraclinical room" },
   khoa_tq: { vi: "Khoa tổng quát", en: "General department" },
   khoa_noi: { vi: "Khoa nội", en: "Internal medicine department" },
   khoa_ngoai: { vi: "Khoa ngoại", en: "Surgery department" },

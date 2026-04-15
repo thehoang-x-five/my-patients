@@ -19,20 +19,20 @@ export default function DeptToolbar({
       ? {
           aria: "Department toolbar",
           totalRooms: "Total rooms",
-          online: "Online",
-          offline: "Offline",
+          online: "Active",
+          offline: "Paused",
           clinicRooms: "Clinical rooms",
-          clsRooms: "CLS / service rooms",
+          clsRooms: "CLS rooms",
           reset: "Reset filters",
           filter: "Filters",
         }
       : {
           aria: "Thanh công cụ phòng khám",
           totalRooms: "Tổng phòng",
-          online: "Online",
-          offline: "Offline",
+          online: "Hoạt động",
+          offline: "Tạm dừng",
           clinicRooms: "Phòng khám LS",
-          clsRooms: "Phòng CLS / DV",
+          clsRooms: "Phòng CLS",
           reset: "Làm mới bộ lọc",
           filter: "Bộ lọc",
         };

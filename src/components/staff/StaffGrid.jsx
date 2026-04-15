@@ -15,7 +15,7 @@ export default function StaffGrid({ items = [], role, onDetail, onSchedule }) {
         <StaffCard
           key={s.id}
           item={s}
-          role={role}
+          role={s.role || s.vaiTro || role}
           onDetail={onDetail}
           onSchedule={onSchedule}
         />

@@ -37,13 +37,33 @@ export default function PrintExamTicket({
     // Chuẩn hóa dịch vụ: cho phép truyền string hoặc object
     const normServices = (Array.isArray(services) ? services : []).map((it) => {
       if (typeof it === "string") {
-        return { name: it, room: `Phòng ${it}`, price: 0, note: "" };
+        return { name: it, room: `Phòng ${it}`, price: 0, note: "", technician: "" };
       }
+      // Extract technician name from various possible field names
+      const technician = 
+        it?.technician ||
+        it?.TenKyThuatVien ||
+        it?.tenKyThuatVien ||
+        it?.TenKyThuatVienThucHien ||
+        it?.tenKyThuatVienThucHien ||
+        it?.TenNhanSuThucHien ||
+        it?.tenNhanSuThucHien ||
+        it?.kyThuatVien ||
+        it?.KyThuatVien ||
+        it?.TenKTV ||
+        it?.tenKTV ||
+        "";
+      
+      // Debug log to see what data we're receiving
+      console.log("[PrintExamTicket] Service item:", it);
+      console.log("[PrintExamTicket] Extracted technician:", technician);
+      
       return {
         name: it?.name ?? "",
         room: it?.room ?? (it?.name ? `Phòng ${it.name}` : ""),
         price: Number(it?.price || 0),
         note: it?.note || "",
+        technician: technician,
       };
     });
 
@@ -96,6 +116,8 @@ export default function PrintExamTicket({
           rs.ghiChu ||
           "(Chưa có)";
         const staffName =
+          rs.TenKyThuatVienThucHien ||
+          rs.tenKyThuatVienThucHien ||
           rs.TenNhanSuThucHien ||
           rs.tenNhanSuThucHien ||
           rs.NguoiThucHien ||
@@ -143,6 +165,9 @@ export default function PrintExamTicket({
         ? '<span class="badge badge-paid">ĐÃ THU</span>'
         : '<span class="badge badge-deferred">CHƯA THU</span>';
     const showFeeRow = hasFee && feePaid !== undefined;
+    
+    // Check if any service has a technician to conditionally show the column
+    const hasAnyTechnician = normServices.some(s => s.technician);
 
     const html = `<!doctype html>
 <html>
@@ -242,14 +267,16 @@ export default function PrintExamTicket({
       ${
         isServiceIntake
           ? `
-      <!-- Bảng dịch vụ (có cột Phòng, Phí từng DV) -->
+      <!-- Bảng dịch vụ (có cột Phòng, Ghi chú, Phí từng DV) -->
       <div class="block">
         <table>
           <thead>
             <tr>
-              <th style="width:41%">Dịch vụ</th>
-              <th style="width:24%">Phòng</th>
-              <th style="width:30%">Ghi chú / Phí</th>
+              <th style="width:${hasAnyTechnician ? '25%' : '33%'}">Dịch vụ</th>
+              <th style="width:${hasAnyTechnician ? '16%' : '22%'}">Phòng</th>
+              ${hasAnyTechnician ? '<th style="width:18%">Kỹ thuật viên</th>' : ''}
+              <th style="width:${hasAnyTechnician ? '21%' : '25%'}">Ghi chú</th>
+              <th style="width:15%">Phí</th>
               <th style="width:5%"></th>
             </tr>
           </thead>
@@ -258,14 +285,16 @@ export default function PrintExamTicket({
               normServices.length
                 ? normServices.map((s) =>
                     `<tr>
-                       <td>${safe(s.name)}${s.price ? ` • Phí: <b> ${fmt(s.price)} đ</b>` : ""}</td>
-                       <td>${safe(s.room || '')}</td>
-                       <td>${safe(s.note || '')}</td>
+                       <td>${safe(s.name)}</td>
+                       <td>${safe(s.room || '—')}</td>
+                       ${hasAnyTechnician ? `<td>${safe(s.technician || '—')}</td>` : ''}
+                       <td>${safe(s.note || '—')}</td>
+                       <td>${s.price ? `<b>${fmt(s.price)} đ</b>` : '—'}</td>
                        <td><span class="chk "></span></td>
                      </tr>`
                      
                   ).join("")
-                : `<tr><td colspan="3" class="muted">Không có dịch vụ</td></tr>`
+                : `<tr><td colspan="${hasAnyTechnician ? '6' : '5'}" class="muted">Không có dịch vụ</td></tr>`
             }
           </tbody>
         </table>
@@ -275,7 +304,7 @@ export default function PrintExamTicket({
         <table>
           <tbody>
             <tr>
-              <th style="width:22%">Ghi chú</th>
+              <th style="width:22%">Ghi chú chung</th>
               <td>${safe(exam?.note || "—")}</td>
             </tr>
           </tbody>
@@ -313,11 +342,11 @@ export default function PrintExamTicket({
                <table>
                  <thead>
                    <tr>
-                     <th style="width:28%">D?ch v? CLS</th>
-                     <th style="width:32%">K?t qu?</th>
+                     <th style="width:28%">Dịch vụ CLS</th>
+                     <th style="width:32%">Kết quả</th>
                      <th style="width:15%">Người thực hiện</th>
-                     <th style="width:13%">Th?i gian</th>
-                     <th style="width:12%">T?p ??nh k?m</th>
+                     <th style="width:13%">Thời gian</th>
+                     <th style="width:12%">Tệp đính kèm</th>
                    </tr>
                  </thead>
                  <tbody>
@@ -342,7 +371,7 @@ export default function PrintExamTicket({
 
       <!-- Chữ ký -->
       <div class="signline">
-        Nguoi lap phieu: ${creatorName ? `<span class="creator">${safe(creatorName)}</span>` : ""}
+        Người lập phiếu: ${creatorName ? `<span class="creator">${safe(creatorName)}</span>` : ""}
       </div>
     </div>
   </body>

@@ -67,9 +67,15 @@ function normalizeStaffCard(dto) {
     dto.SoLichHenHomNay ?? dto.soLichHenHomNay ?? 0;
   const soCaTruc =
     dto.SoCaTrucTuanNay ?? dto.soCaTrucTuanNay ?? 0;
+  const soCaLamClsHomNay =
+    dto.SoCaLamClsHomNay ?? dto.soCaLamClsHomNay ?? 0;
 
   const tenPhongHomNay =
     dto.TenPhongHomNay ?? dto.tenPhongHomNay ?? null;
+  const tenPhongPhuTrach =
+    dto.TenPhongPhuTrach ?? dto.tenPhongPhuTrach ?? null;
+  const maPhongPhuTrach =
+    dto.MaPhongPhuTrach ?? dto.maPhongPhuTrach ?? null;
 
   return {
     raw: dto,
@@ -88,10 +94,10 @@ function normalizeStaffCard(dto) {
     maKhoa: dto.MaKhoa ?? dto.maKhoa ?? null,
     tenKhoa: dto.TenKhoa ?? dto.tenKhoa ?? null,
     dept:
-      dto.MaKhoa ??
-      dto.maKhoa ??
       dto.TenKhoa ??
       dto.tenKhoa ??
+      dto.MaKhoa ??
+      dto.maKhoa ??
       null,
 
     hocVi: dto.HocVi ?? dto.hocVi ?? null,
@@ -116,14 +122,18 @@ function normalizeStaffCard(dto) {
     // Phòng / thống kê hôm nay
     maPhongHomNay: dto.MaPhongHomNay ?? dto.maPhongHomNay ?? null,
     tenPhongHomNay,
+    maPhongPhuTrach,
+    tenPhongPhuTrach,
     // card đang dùng doctorRoom / roomToday
-    doctorRoom: vaiTro === "bac_si" ? tenPhongHomNay : null,
-    roomToday: tenPhongHomNay,
+    doctorRoom: vaiTro === "bac_si" ? (tenPhongPhuTrach || tenPhongHomNay) : null,
+    clsRoom: vaiTro === "ky_thuat_vien" ? (tenPhongPhuTrach || tenPhongHomNay) : null,
+    roomToday: tenPhongHomNay || tenPhongPhuTrach,
 
     soLichHenHomNay: soLichHen,
     appointmentsToday: soLichHen,
     apptCount: soLichHen,        // để card hiển thị đúng 3
     soCaTrucTuanNay: soCaTruc,
+    soCaLamClsHomNay,
   };
 }
 
@@ -143,11 +153,17 @@ function normalizeStaffDetail(dto) {
     dto.SoLichHenHomNay ?? dto.soLichHenHomNay ?? 0;
   const soCaTruc =
     dto.SoCaTrucTuanNay ?? dto.soCaTrucTuanNay ?? 0;
+  const soCaLamClsHomNay =
+    dto.SoCaLamClsHomNay ?? dto.soCaLamClsHomNay ?? 0;
 
   const tenPhong =
     dto.TenPhongHoacBanHomNay ??
     dto.tenPhongHoacBanHomNay ??
     null;
+  const tenPhongPhuTrach =
+    dto.TenPhongPhuTrach ?? dto.tenPhongPhuTrach ?? null;
+  const maPhongPhuTrach =
+    dto.MaPhongPhuTrach ?? dto.maPhongPhuTrach ?? null;
 
   const kyNang =
     dto.KyNang ??
@@ -167,7 +183,7 @@ function normalizeStaffDetail(dto) {
     role: vaiTro,
 
     tenKhoa: dto.TenKhoa ?? dto.tenKhoa ?? null,
-    dept: dto.TenKhoa ?? dto.tenKhoa ?? null,
+    dept: dto.TenKhoa ?? dto.tenKhoa ?? dto.MaKhoa ?? dto.maKhoa ?? null,
 
     trangThaiCongTac: trangThai,
     status: uiStatus,
@@ -194,12 +210,16 @@ function normalizeStaffDetail(dto) {
     appointmentsToday: soLichHen,
     apptCount: soLichHen,
     soCaTrucTuanNay: soCaTruc,
+    soCaLamClsHomNay,
 
     maPhongHoacBanHomNay:
       dto.MaPhongHoacBanHomNay ?? dto.maPhongHoacBanHomNay ?? null,
     tenPhongHoacBanHomNay: tenPhong,
-    doctorRoom: vaiTro === "bac_si" ? tenPhong : null,
-    roomToday: tenPhong,
+    maPhongPhuTrach,
+    tenPhongPhuTrach,
+    doctorRoom: vaiTro === "bac_si" ? (tenPhongPhuTrach || tenPhong) : null,
+    clsRoom: vaiTro === "ky_thuat_vien" ? (tenPhongPhuTrach || tenPhong) : null,
+    roomToday: tenPhong || tenPhongPhuTrach,
 
     kyNang,
     skills: kyNang,
@@ -537,6 +557,9 @@ export async function subscribeStaff(qc) {
         qc.invalidateQueries({ queryKey: ["staff-duty-week", id] });
         qc.invalidateQueries({ queryKey: ["staff-duty-room", id] });
       }
+      qc.invalidateQueries({ queryKey: ["department-rooms"] });
+      qc.invalidateQueries({ queryKey: ["duty"] });
+      qc.invalidateQueries({ queryKey: ["room-duty-week"] });
     })
   );
   return () => offs.forEach((off) => off && off());
@@ -572,6 +595,9 @@ export function useUpdateStaffDutyWeek() {
         qc.invalidateQueries({ queryKey: ["staff-duty-room", vars.id] });
         qc.invalidateQueries({ queryKey: ["staff-detail", vars.id] });
       }
+      qc.invalidateQueries({ queryKey: ["department-rooms"] });
+      qc.invalidateQueries({ queryKey: ["duty"] });
+      qc.invalidateQueries({ queryKey: ["room-duty-week"] });
     },
   });
 }

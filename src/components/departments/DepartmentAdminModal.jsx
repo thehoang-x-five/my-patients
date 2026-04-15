@@ -27,6 +27,7 @@ const EMPTY_ROOM = {
   thietBi: "",
   trangThai: "hoat_dong",
   maBacSiPhuTrach: "",
+  maKTVPhuTrach: "",
 };
 
 const EMPTY_SERVICE = {
@@ -43,6 +44,22 @@ const SERVICE_TYPE_OPTIONS = [
   { value: "can_lam_sang", label: "Cận lâm sàng" },
   { value: "khac", label: "Khác" },
 ];
+
+function normalizeRoomTypeCode(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw === "phong_kham" || raw === "phong_kham_ls") return "phong_kham_ls";
+  if (raw === "phong_dich_vu" || raw === "phong_cls") return "phong_cls";
+  return raw;
+}
+
+function isClinicalRoomType(value) {
+  return normalizeRoomTypeCode(value) === "phong_kham_ls";
+}
+
+function isClsRoomType(value) {
+  return normalizeRoomTypeCode(value) === "phong_cls";
+}
 
 function toTimeInput(value) {
   if (!value) return "";
@@ -79,7 +96,7 @@ function roomFormFromItem(item) {
     maPhong: item.MaPhong || "",
     tenPhong: item.TenPhong || "",
     maKhoa: item.MaKhoa || "",
-    loaiPhong: item.LoaiPhong || "phong_kham_ls",
+    loaiPhong: normalizeRoomTypeCode(item.LoaiPhong) || "phong_kham_ls",
     sucChua: item.SucChua ?? "",
     viTri: item.ViTri || "",
     email: item.Email || "",
@@ -89,6 +106,7 @@ function roomFormFromItem(item) {
     thietBi: Array.isArray(item.ThietBi) ? item.ThietBi.join(", ") : "",
     trangThai: item.TrangThai || "hoat_dong",
     maBacSiPhuTrach: item.MaBacSiPhuTrach || "",
+    maKTVPhuTrach: item.MaKTVPhuTrach || "",
   };
 }
 
@@ -110,12 +128,48 @@ function serviceTypeLabel(value) {
   );
 }
 
+function roomTypeLabel(value) {
+  if (isClinicalRoomType(value)) return "Phòng khám LS";
+  if (isClsRoomType(value)) return "Phòng CLS";
+  return value || "—";
+}
+
+function normalizeStaffRole(item) {
+  return String(item?.vaiTro || item?.role || "").trim().toLowerCase();
+}
+
+function normalizeStaffWorkStatus(item) {
+  return String(
+    item?.trangThaiCongTac || item?.status || item?.TrangThaiCongTac || ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeAccountStatus(item) {
+  return String(
+    item?.trangThaiTaiKhoan || item?.statusAccount || item?.TrangThaiTaiKhoan || ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function isStaffSelectable(item) {
+  const accountStatus = normalizeAccountStatus(item);
+  const workStatus = normalizeStaffWorkStatus(item);
+
+  if (accountStatus === "khoa" || accountStatus === "locked") return false;
+  if (workStatus === "nghi_viec" || workStatus === "offline") return false;
+  return true;
+}
+
 export default function DepartmentAdminModal({
   open,
   onClose,
   departments = [],
   rooms = [],
   services = [],
+  staffMembers = [],
   onCreateDepartment,
   onUpdateDepartment,
   onCreateRoom,
@@ -133,6 +187,8 @@ export default function DepartmentAdminModal({
   const [departmentForm, setDepartmentForm] = useState(EMPTY_DEPARTMENT);
   const [roomForm, setRoomForm] = useState(EMPTY_ROOM);
   const [serviceForm, setServiceForm] = useState(EMPTY_SERVICE);
+  const roomRequiresDoctor = isClinicalRoomType(roomForm.loaiPhong);
+  const roomRequiresTechnician = isClsRoomType(roomForm.loaiPhong);
 
   const sortedDepartments = useMemo(
     () =>
@@ -145,7 +201,14 @@ export default function DepartmentAdminModal({
   const sortedRooms = useMemo(
     () =>
       [...(Array.isArray(rooms) ? rooms : [])]
-        .filter((room) => room.LoaiPhong !== "thu_ngan")
+        .map((room) => ({
+          ...room,
+          LoaiPhong: normalizeRoomTypeCode(room.LoaiPhong || room.loaiPhong),
+        }))
+        .filter(
+          (room) =>
+            isClinicalRoomType(room.LoaiPhong) || isClsRoomType(room.LoaiPhong)
+        )
         .sort((a, b) =>
           String(a.TenPhong || "").localeCompare(String(b.TenPhong || ""), "vi")
         ),
@@ -169,6 +232,85 @@ export default function DepartmentAdminModal({
         ])
       ),
     [sortedRooms]
+  );
+
+  const selectableStaff = useMemo(
+    () =>
+      [...(Array.isArray(staffMembers) ? staffMembers : [])]
+        .filter(isStaffSelectable)
+        .sort((a, b) =>
+          String(a.hoTen || a.name || "").localeCompare(
+            String(b.hoTen || b.name || ""),
+            "vi"
+          )
+        ),
+    [staffMembers]
+  );
+
+  const doctorOptions = useMemo(
+    () =>
+      selectableStaff
+        .filter((item) => {
+          const role = normalizeStaffRole(item);
+          const staffDept = item.maKhoa || item.MaKhoa || item.departmentId || "";
+          return (
+            (role === "bac_si" || role === "doctor") &&
+            (!roomForm.maKhoa || staffDept === roomForm.maKhoa)
+          );
+        })
+        .map((item) => ({
+          value: item.maNhanVien || item.id || item.MaNhanVien || "",
+          label: `${item.hoTen || item.name || "—"}${
+            item.tenKhoa || item.dept ? ` • ${item.tenKhoa || item.dept}` : ""
+          }`,
+        })),
+    [selectableStaff, roomForm.maKhoa]
+  );
+
+  const technicianOptions = useMemo(
+    () =>
+      selectableStaff
+        .filter((item) => {
+          const role = normalizeStaffRole(item);
+          const staffDept = item.maKhoa || item.MaKhoa || item.departmentId || "";
+          return (
+            (role === "ky_thuat_vien" ||
+              role === "kythuatvien" ||
+              role === "technician" ||
+              role === "ktv") &&
+            (!roomForm.maKhoa || staffDept === roomForm.maKhoa)
+          );
+        })
+        .map((item) => ({
+          value: item.maNhanVien || item.id || item.MaNhanVien || "",
+          label: `${item.hoTen || item.name || "—"}${
+            item.tenKhoa || item.dept ? ` • ${item.tenKhoa || item.dept}` : ""
+          }`,
+        })),
+    [selectableStaff, roomForm.maKhoa]
+  );
+
+  const fixedStaffLabel = roomRequiresDoctor
+    ? "Bác sĩ phụ trách cố định"
+    : roomRequiresTechnician
+    ? "KTV phụ trách cố định"
+    : "Nhân sự phụ trách cố định";
+
+  const availableServiceRooms = useMemo(
+    () =>
+      sortedRooms.filter((room) => {
+        const roomType = normalizeRoomTypeCode(
+          room.LoaiPhong || room.loaiPhong || ""
+        );
+        if (serviceForm.loaiDichVu === "kham_lam_sang") {
+          return isClinicalRoomType(roomType);
+        }
+        if (serviceForm.loaiDichVu === "can_lam_sang") {
+          return isClsRoomType(roomType);
+        }
+        return isClinicalRoomType(roomType) || isClsRoomType(roomType);
+      }),
+    [sortedRooms, serviceForm.loaiDichVu]
   );
 
   if (!open) return null;
@@ -227,7 +369,12 @@ export default function DepartmentAdminModal({
         .map((item) => item.trim())
         .filter(Boolean),
       TrangThai: roomForm.trangThai,
-      MaBacSiPhuTrach: roomForm.maBacSiPhuTrach.trim() || null,
+      MaBacSiPhuTrach: roomRequiresDoctor
+        ? roomForm.maBacSiPhuTrach.trim() || null
+        : null,
+      MaKTVPhuTrach: roomRequiresTechnician
+        ? roomForm.maKTVPhuTrach.trim() || null
+        : null,
     };
 
     if (roomEditing?.MaPhong) {
@@ -395,7 +542,7 @@ export default function DepartmentAdminModal({
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-slate-500">
-                        {room.LoaiPhong}
+                        {roomTypeLabel(room.LoaiPhong)}
                         {room.ViTri ? ` • ${room.ViTri}` : ""}
                       </p>
                       <div className="mt-3">
@@ -696,6 +843,10 @@ export default function DepartmentAdminModal({
                           setRoomForm((prev) => ({
                             ...prev,
                             maKhoa: value,
+                            maBacSiPhuTrach:
+                              prev.maKhoa === value ? prev.maBacSiPhuTrach : "",
+                            maKTVPhuTrach:
+                              prev.maKhoa === value ? prev.maKTVPhuTrach : "",
                           }))
                         }
                         options={[
@@ -717,12 +868,17 @@ export default function DepartmentAdminModal({
                           setRoomForm((prev) => ({
                             ...prev,
                             loaiPhong: value,
+                            maBacSiPhuTrach: isClinicalRoomType(value)
+                              ? prev.maBacSiPhuTrach
+                              : "",
+                            maKTVPhuTrach: isClsRoomType(value)
+                              ? prev.maKTVPhuTrach
+                              : "",
                           }))
                         }
                         options={[
                           { value: "phong_kham_ls", label: "Phòng khám LS" },
                           { value: "phong_cls", label: "Phòng CLS" },
-                          { value: "thu_ngan", label: "Thu ngân" },
                         ]}
                         placeholder="Chọn loại phòng"
                       />
@@ -780,18 +936,50 @@ export default function DepartmentAdminModal({
                       />
                     </label>
                     <label className="block text-sm">
-                      <span className="mb-1 block font-medium text-slate-600">Mã BS phụ trách</span>
-                      <input
-                        className="input"
-                        value={roomForm.maBacSiPhuTrach}
-                        onChange={(e) =>
-                          setRoomForm((prev) => ({
-                            ...prev,
-                            maBacSiPhuTrach: e.target.value,
-                          }))
-                        }
-                        placeholder="Để trống nếu chưa gán"
-                      />
+                      <span className="mb-1 block font-medium text-slate-600">
+                        {fixedStaffLabel}
+                      </span>
+                      {roomRequiresDoctor || roomRequiresTechnician ? (
+                        <PopoverSelect
+                          required
+                          value={
+                            roomRequiresDoctor
+                              ? roomForm.maBacSiPhuTrach
+                              : roomForm.maKTVPhuTrach
+                          }
+                          onChange={(value) =>
+                            setRoomForm((prev) => ({
+                              ...prev,
+                              maBacSiPhuTrach: roomRequiresDoctor
+                                ? value
+                                : prev.maBacSiPhuTrach,
+                              maKTVPhuTrach: roomRequiresTechnician
+                                ? value
+                                : prev.maKTVPhuTrach,
+                            }))
+                          }
+                          options={[
+                            {
+                              value: "",
+                              label: roomRequiresDoctor
+                                ? "-- Chọn bác sĩ phụ trách --"
+                                : "-- Chọn KTV phụ trách --",
+                            },
+                            ...(roomRequiresDoctor
+                              ? doctorOptions
+                              : technicianOptions),
+                          ]}
+                          placeholder={
+                            roomRequiresDoctor
+                              ? "Chọn bác sĩ phụ trách"
+                              : "Chọn KTV phụ trách"
+                          }
+                        />
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                          Loại phòng này không dùng nhân sự phụ trách cố định.
+                        </div>
+                      )}
                     </label>
                   </div>
 
@@ -952,6 +1140,25 @@ export default function DepartmentAdminModal({
                           setServiceForm((prev) => ({
                             ...prev,
                             loaiDichVu: value,
+                            maPhong:
+                              (value === "kham_lam_sang" &&
+                                isClinicalRoomType(
+                                  sortedRooms.find(
+                                    (room) => room.MaPhong === prev.maPhong
+                                  )?.LoaiPhong
+                                )) ||
+                              (value === "can_lam_sang" &&
+                                isClsRoomType(
+                                  sortedRooms.find(
+                                    (room) => room.MaPhong === prev.maPhong
+                                  )?.LoaiPhong
+                                )) ||
+                              (value === "khac" &&
+                                sortedRooms.some(
+                                  (room) => room.MaPhong === prev.maPhong
+                                ))
+                                ? prev.maPhong
+                                : "",
                           }))
                         }
                         options={SERVICE_TYPE_OPTIONS}
@@ -972,7 +1179,7 @@ export default function DepartmentAdminModal({
                         }
                         options={[
                           { value: "", label: "-- Chọn phòng --" },
-                          ...sortedRooms.map((room) => ({
+                          ...availableServiceRooms.map((room) => ({
                             value: room.MaPhong,
                             label: `${room.TenPhong}${room.TenKhoa ? ` • ${room.TenKhoa}` : ""}`,
                           })),
@@ -981,6 +1188,16 @@ export default function DepartmentAdminModal({
                       />
                     </label>
                   </div>
+
+                  {serviceForm.loaiDichVu ? (
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200 text-sm text-slate-600">
+                      {serviceForm.loaiDichVu === "kham_lam_sang"
+                        ? "Đang giới hạn danh sách phòng thực hiện ở nhóm phòng khám LS."
+                        : serviceForm.loaiDichVu === "can_lam_sang"
+                        ? "Đang giới hạn danh sách phòng thực hiện ở nhóm phòng CLS."
+                        : "Có thể gắn dịch vụ này với mọi phòng LS hoặc CLS."}
+                    </div>
+                  ) : null}
 
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="block text-sm">

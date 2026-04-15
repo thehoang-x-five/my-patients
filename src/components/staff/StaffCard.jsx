@@ -1,5 +1,3 @@
-
-// src/components/staff/StaffCard.jsx
 import React from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
@@ -7,6 +5,7 @@ import Avatar from "../ui/Avatar.jsx";
 import {
   formatDisplayText,
   formatPresenceStatusLabel,
+  formatRoleLabel,
   formatVietnameseText,
 } from "../../utils/textFormatters.js";
 import { getDemoPublicImage } from "../../utils/demoPublicImages.js";
@@ -15,12 +14,6 @@ const NURSE_WORK_ROLE_LABEL = {
   lam_sang: "Y tá lâm sàng",
   can_lam_sang: "Y tá cận lâm sàng",
   hanh_chinh: "Y tá hành chính",
-};
-
-const STAFFING_LABEL = {
-  dang_cong_tac: "Đang công tác",
-  tam_nghi: "Tạm nghỉ",
-  nghi_viec: "Nghỉ việc",
 };
 
 const getRoomToday = (item) => {
@@ -33,6 +26,7 @@ const getRoomToday = (item) => {
     if (today?.room) return today.room;
   }
 
+  if (item.clsRoom) return item.clsRoom;
   if (item.doctorRoom) return item.doctorRoom;
 
   return "—";
@@ -41,13 +35,13 @@ const getRoomToday = (item) => {
 const getStatusVisual = (statusRaw) => {
   const status = statusRaw || "offline";
 
-  if (status == "online") {
+  if (status === "online") {
     return {
       label: formatPresenceStatusLabel("online"),
       className: "bg-emerald-50 text-emerald-600 ring-emerald-200/60",
     };
   }
-  if (status == "pause") {
+  if (status === "pause") {
     return {
       label: formatPresenceStatusLabel("pause"),
       className: "bg-amber-50 text-amber-600 ring-amber-200/60",
@@ -68,39 +62,38 @@ const getNurseWorkRole = (item) => {
     item?.nurse_kind;
 
   let key = raw;
-
   if (raw) {
     const s = raw.toString().toLowerCase().trim();
-
-    // Lâm sàng
-   if (s == "lam_sang" || s == "y_ta_lam_sang" || s == "ls"|| s.includes("lâm sàng")) {
+    if (
+      s === "lam_sang" ||
+      s === "y_ta_lam_sang" ||
+      s === "ls" ||
+      s.includes("lâm sàng")
+    ) {
       key = "lam_sang";
-    }
-    // Cận lâm sàng
-    else if (
-      s == "can_lam_sang" ||
-      s == "y_ta_can_lam_sang" ||
-      s == "cls" ||
+    } else if (
+      s === "can_lam_sang" ||
+      s === "y_ta_can_lam_sang" ||
+      s === "cls" ||
       s.includes("cận lâm")
     ) {
       key = "can_lam_sang";
-    }
-    // Hành chính
-    else if (
-      s == "hanh_chinh" ||
-      s == "y_ta_hanh_chinh" ||
-      s == "hanhchinh" ||
+    } else if (
+      s === "hanh_chinh" ||
+      s === "y_ta_hanh_chinh" ||
+      s === "hanhchinh" ||
       s.includes("hành chính")
     ) {
       key = "hanh_chinh";
     }
   }
 
-  if (!key && item?.roleType == "clinical") key = "lam_sang";
-  if (!key && item?.roleType == "administrative") key = "hanh_chinh";
+  if (!key && item?.roleType === "clinical") key = "lam_sang";
+  if (!key && item?.roleType === "administrative") key = "hanh_chinh";
 
   return NURSE_WORK_ROLE_LABEL[key] || formatVietnameseText(key, "—");
 };
+
 export default function StaffCard({ item, role, onDetail, onSchedule }) {
   const statusView = getStatusVisual(item.status);
   const staffImage = getDemoPublicImage(item, role);
@@ -112,9 +105,14 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
     0;
 
   const roomToday = getRoomToday(item);
-  const isAdminNurse = role == "nurse" && item.roleType == "administrative";
-  const isDoctor = role == "doctor"||role == "bac_si";
-  const isNurse = role == "nurse"||role == "y_ta";
+  const effectiveRole = role || item.role || item.vaiTro || "";
+  const isAdminNurse =
+    (effectiveRole === "nurse" || effectiveRole === "y_ta") &&
+    item.roleType === "administrative";
+  const isDoctor = effectiveRole === "doctor" || effectiveRole === "bac_si";
+  const isNurse = effectiveRole === "nurse" || effectiveRole === "y_ta";
+  const isTechnician =
+    effectiveRole === "technician" || effectiveRole === "ky_thuat_vien";
 
   let primaryLabel;
   let primaryValue;
@@ -126,13 +124,17 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
     primaryValue = item.doctorRoom || roomToday || "—";
     secondaryLabel = "Lịch hẹn hôm nay";
     secondaryValue = apptCount;
-  }else if (isAdminNurse) {
+  } else if (isTechnician) {
+    primaryLabel = "Phòng CLS phụ trách";
+    primaryValue = item.clsRoom || roomToday || "—";
+    secondaryLabel = "Số ca hôm nay đã làm";
+    secondaryValue = item?.soCaLamClsHomNay ?? 0;
+  } else if (isAdminNurse) {
     primaryLabel = "Vai trò công tác";
     primaryValue = getNurseWorkRole(item);
     secondaryLabel = "Bàn hôm nay";
     secondaryValue = roomToday;
-  } 
-  else if (isNurse) {
+  } else if (isNurse) {
     primaryLabel = "Vai trò công tác";
     primaryValue = getNurseWorkRole(item);
     secondaryLabel = "Phòng hôm nay";
@@ -143,15 +145,17 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
     secondaryLabel = "Lịch hẹn hôm nay";
     secondaryValue = apptCount;
   }
-   
 
-    const todayChipLabel = isDoctor
+  const todayChipLabel = isDoctor
     ? "Phòng phụ trách"
-    : isAdminNurse
-    ? "Bàn hôm nay"
-    : isNurse
-    ? "Phòng hôm nay"
-    : "Phòng";
+    : isTechnician
+      ? "Phòng CLS hôm nay"
+      : isAdminNurse
+        ? "Bàn hôm nay"
+        : isNurse
+          ? "Phòng hôm nay"
+          : "Phòng";
+
   return (
     <motion.article
       initial={{ opacity: 0, y: 8 }}
@@ -159,7 +163,6 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
       whileHover={{ y: -2, scale: 1.005 }}
       className="relative group rounded-2xl bg-white ring-1 ring-slate-200/90 shadow-sm hover:shadow-md hover:ring-teal-200 hover:bg-gradient-to-b hover:from-white hover:to-teal-50 transition p-4"
     >
-      {/* Badges góc phải */}
       <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5 z-10">
         <span
           className={`px-2 py-0.5 rounded-full text-[11px] font-bold ring-1 transition uppercase tracking-wide ${statusView.className}`}
@@ -206,7 +209,9 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
           <li className="flex gap-1">
             <span className="mt-0.5">✨</span>
             <span className="line-clamp-2">
-              {item.skills.join(" · ")}
+              {item.skills
+                .map((skill) => formatDisplayText(skill, skill))
+                .join(" · ")}
             </span>
           </li>
         ) : null}
@@ -214,9 +219,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
           <li className="flex gap-1">
             <span>✉️</span>
             <a
-              href={`mailto:${encodeURIComponent(
-                String(item.email).trim()
-              )}`}
+              href={`mailto:${encodeURIComponent(String(item.email).trim())}`}
               className="text-teal-600 hover:underline decoration-teal-300"
             >
               {item.email}
@@ -227,9 +230,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
           <li className="flex gap-1">
             <span>📞</span>
             <a
-              href={`tel:${encodeURIComponent(
-                String(item.phone).trim()
-              )}`}
+              href={`tel:${encodeURIComponent(String(item.phone).trim())}`}
               className="text-teal-600 hover:underline decoration-teal-300"
             >
               {item.phone}
@@ -238,7 +239,6 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
         )}
       </ul>
 
-      {/* Thống kê */}
       <div className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-xl ring-1 ring-slate-100 p-2 bg-white/60 group-hover:bg-teal-50/50 group-hover:ring-teal-100 transition">
           <div className="text-slate-500 text-xs">{primaryLabel}</div>
@@ -266,13 +266,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
           {item.phone && (
             <a
               className="inline-flex items-center justify-center rounded-full ring-1 ring-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 transition px-2 py-1 text-[13px] font-medium"
-              href={
-                item.phone
-                  ? `tel:${encodeURIComponent(
-                      String(item.phone).trim()
-                    )}`
-                  : "#"
-              }
+              href={`tel:${encodeURIComponent(String(item.phone).trim())}`}
             >
               Gọi
             </a>
@@ -282,7 +276,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
             className="inline-flex items-center justify-center rounded-full ring-1 ring-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 transition px-2 py-1 text-[13px] font-medium"
             onClick={() => onSchedule?.(item)}
           >
-            Lịch trực
+            Lịch làm
           </button>
         </div>
       </footer>

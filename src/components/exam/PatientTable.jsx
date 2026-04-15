@@ -368,8 +368,17 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                       doctorName =
                         fld(
                           p,
+                          "TenKyThuatVienThucHien",
+                          "PhieuKhamClsItem.TenKyThuatVienThucHien",
+                          "PhieuKhamCls.TenKyThuatVienThucHien",
+                          "PhieuKhamClsFull.TenKyThuatVienThucHien",
+                          "TenNhanSuThucHien",
+                          "PhieuKhamClsItem.TenNhanSuThucHien",
+                          "PhieuKhamCls.TenNhanSuThucHien",
+                          "PhieuKhamClsFull.TenNhanSuThucHien",
                           "TenYTaThucHien",
                           "PhieuKhamClsItem.TenYTaThucHien",
+                          "PhieuKhamCls.TenYTaThucHien",
                           "PhieuKhamClsFull.TenYTaThucHien",
                           "PhieuKhamClsFull.TenNguoiLap",
                           "PhieuKhamCls.TenNguoiLap"
@@ -378,6 +387,8 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                           const list = p?.PhieuKhamClsFull?.ListItemDV || p?.PhieuKhamCls?.ListItemDV || [];
                           if (Array.isArray(list) && list.length) {
                             return (
+                              list[0]?.TenKyThuatVienThucHien ||
+                              list[0]?.TenNhanSuThucHien ||
                               list[0]?.TenYTaThucHien ||
                               list[0]?.TenNguoiLap ||
                               list[0]?.NguoiLap ||
@@ -412,6 +423,16 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                           apptTimeRaw = ngayLap;
                         }
                       }
+                    } else {
+                      apptTimeRaw =
+                        fld(
+                          p,
+                          "ThoiGianBatDauLuot",
+                          "thoiGianBatDauLuot",
+                          "PhieuKhamCls.ThoiGianBatDau",
+                          "PhieuKhamClsItem.ThoiGianBatDau",
+                          "PhieuKhamCls.NgayGioLap"
+                        ) || null;
                     }
 
                     const checkinRaw = fld(p, "ThoiGianCheckin", "thoiGianCheckin", "checkIn");

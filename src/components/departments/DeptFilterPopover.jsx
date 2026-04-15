@@ -9,15 +9,18 @@ import { createPortal } from "react-dom";
 import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
 import { useUI } from "../../context/UIContext.jsx";
 
-function FilterPill({ active = false, onClick, children, dot }) {
+function FilterPill({ active = false, onClick, children, dot, disabled = false }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className={[
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition",
         active
           ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+          : disabled
+          ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
           : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/40 hover:text-emerald-700",
       ].join(" ")}
     >
@@ -33,6 +36,7 @@ export default function DeptFilterPopover({
   anchorEl,
   values,
   setValues,
+  lockedRoomType = null,
   onReset,
 }) {
   const { lang } = useUI();
@@ -46,17 +50,17 @@ export default function DeptFilterPopover({
           dialog: "Room filters",
           title: "Room filters",
           keyword: "Keyword",
-          keywordPlaceholder: "Room / department / lead doctor...",
+          keywordPlaceholder: "Room / department / assigned staff...",
           clearSearch: "Clear search",
           status: "Operating status",
           roomType: "Room type",
           sort: "Sort by capacity",
           statusAll: "All",
-          statusOnline: "Online",
-          statusOffline: "Offline",
+          statusOnline: "Active",
+          statusOffline: "Paused",
           roomTypeAll: "All room types",
           roomTypeClinical: "Exam room (clinical)",
-          roomTypeCls: "CLS / service room",
+          roomTypeCls: "CLS room",
           sortNone: "No sorting",
           sortAsc: "Room load ↑",
           sortDesc: "Room load ↓",
@@ -65,17 +69,17 @@ export default function DeptFilterPopover({
           dialog: "Bộ lọc phòng khám",
           title: "Bộ lọc phòng khám",
           keyword: "Từ khóa",
-          keywordPlaceholder: "Tên phòng / khoa / bác sĩ phụ trách...",
+          keywordPlaceholder: "Tên phòng / khoa / nhân sự phụ trách...",
           clearSearch: "Xóa tìm kiếm",
           status: "Trạng thái hoạt động",
           roomType: "Loại phòng",
           sort: "Sắp xếp theo sức chứa",
           statusAll: "Tất cả",
-          statusOnline: "Online",
-          statusOffline: "Offline",
+          statusOnline: "Hoạt động",
+          statusOffline: "Tạm dừng",
           roomTypeAll: "Tất cả loại phòng",
           roomTypeClinical: "Phòng khám (LS)",
-          roomTypeCls: "Phòng CLS / DV",
+          roomTypeCls: "Phòng CLS",
           sortNone: "Không sắp xếp",
           sortAsc: "Tải phòng ↑",
           sortDesc: "Tải phòng ↓",
@@ -279,7 +283,11 @@ export default function DeptFilterPopover({
                     <FilterPill
                       key={item.code}
                       active={roomType === item.code}
-                      onClick={() => apply({ roomType: item.code })}
+                      disabled={!!lockedRoomType && item.code !== lockedRoomType}
+                      onClick={() => {
+                        if (lockedRoomType && item.code !== lockedRoomType) return;
+                        apply({ roomType: item.code });
+                      }}
                       dot={item.dot}
                     >
                       {item.label}

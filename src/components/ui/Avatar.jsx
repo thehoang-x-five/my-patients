@@ -26,7 +26,16 @@ export default function Avatar({
 
   // Ưu tiên status đã normalize trên item (online/pause/offline),
   // nếu prop status được truyền vào thì override.
-  const rawStatus = (item?.status ==="active" )? "online" :((item?.status ==="inactive" )? "offline" :(status ?? item?.status ?? null));
+  let rawStatus = status ?? item?.status ?? item?.trangThaiCongTac ?? item?.trangThaiTaiKhoan ?? item?.trangThai ?? null;
+
+  if (rawStatus === "active" || rawStatus === "dang_cong_tac" || rawStatus === "hoat_dong") {
+    rawStatus = "online";
+  } else if (rawStatus === "inactive" || rawStatus === "nghi_viec" || rawStatus === "khoa") {
+    rawStatus = "offline";
+  } else if (rawStatus === "tam_nghi") {
+    rawStatus = "pause";
+  }
+
   const finalStatus =
     (rawStatus && rawStatus.toString().toLowerCase()) || "offline";
 

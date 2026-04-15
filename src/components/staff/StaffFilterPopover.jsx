@@ -79,45 +79,45 @@ export default function StaffFilterPopover({
   const t =
     lang === "en"
       ? {
-          dialog: "Staff filters",
-          title: "Staff filters",
-          keyword: "Keyword",
-          keywordPlaceholder: "Name / code / department / title...",
-          clearSearch: "Clear search",
-          role: "Role",
-          nurseType: "Nurse type",
-          dept: "Department / room",
-          status: "Work status",
-          allDepartments: "All departments",
-          statusAll: "All",
-          statusOnline: "Online",
-          statusPause: "Paused",
-          statusOffline: "Offline",
-          nurseTypeAll: "All",
-          nurseTypeAdministrative: "Administrative",
-          nurseTypeCls: "Paraclinical",
-          nurseTypeClinical: "Clinical",
-        }
+        dialog: "Staff filters",
+        title: "Staff filters",
+        keyword: "Keyword",
+        keywordPlaceholder: "Name / code / department / title...",
+        clearSearch: "Clear search",
+        role: "Role",
+        nurseType: "Nurse type",
+        dept: "Department / room",
+        status: "Work status",
+        allDepartments: "All departments",
+        statusAll: "All",
+        statusOnline: "Working",
+        statusPause: "Paused",
+        statusOffline: "Inactive",
+        nurseTypeAll: "All",
+        nurseTypeAdministrative: "Administrative",
+        nurseTypeCls: "Paraclinical",
+        nurseTypeClinical: "Clinical",
+      }
       : {
-          dialog: "Bộ lọc nhân sự",
-          title: "Bộ lọc nhân sự",
-          keyword: "Từ khóa",
-          keywordPlaceholder: "Tên / mã / khoa / chức vụ...",
-          clearSearch: "Xóa tìm kiếm",
-          role: "Vai trò",
-          nurseType: "Loại y tá",
-          dept: "Khoa / phòng",
-          status: "Trạng thái làm việc",
-          allDepartments: "Tất cả khoa",
-          statusAll: "Tất cả",
-          statusOnline: "Online",
-          statusPause: "Tạm nghỉ",
-          statusOffline: "Offline",
-          nurseTypeAll: "Tất cả",
-          nurseTypeAdministrative: "Hành chính",
-          nurseTypeCls: "Cận lâm sàng",
-          nurseTypeClinical: "Lâm sàng",
-        };
+        dialog: "Bộ lọc nhân sự",
+        title: "Bộ lọc nhân sự",
+        keyword: "Từ khóa",
+        keywordPlaceholder: "Tên / mã / khoa / chức vụ...",
+        clearSearch: "Xóa tìm kiếm",
+        role: "Vai trò",
+        nurseType: "Loại y tá",
+        dept: "Khoa / phòng",
+        status: "Trạng thái làm việc",
+        allDepartments: "Tất cả khoa",
+        statusAll: "Tất cả",
+        statusOnline: "Đang công tác",
+        statusPause: "Tạm nghỉ",
+        statusOffline: "Nghỉ việc",
+        nurseTypeAll: "Tất cả",
+        nurseTypeAdministrative: "Hành chính",
+        nurseTypeCls: "Cận lâm sàng",
+        nurseTypeClinical: "Lâm sàng",
+      };
 
   const statusSegments = useMemo(
     () => [
@@ -132,9 +132,9 @@ export default function StaffFilterPopover({
   const nurseTypes = useMemo(
     () => [
       { code: "all", label: t.nurseTypeAll },
-      { code: "hanh_chinh", label: t.nurseTypeAdministrative },
-      { code: "can_lam_sang", label: t.nurseTypeCls },
-      { code: "lam_sang", label: t.nurseTypeClinical },
+      { code: "hanhchinh", label: t.nurseTypeAdministrative },
+      { code: "cls", label: t.nurseTypeCls },
+      { code: "ls", label: t.nurseTypeClinical },
     ],
     [t]
   );
@@ -250,7 +250,7 @@ export default function StaffFilterPopover({
 
     setWidthPx(width);
     setPos({ top, left });
-    setMaxH(Math.min(vh - top - 12, role === "nurse" ? 520 : 470));
+    setMaxH(Math.min(vh - top - 12, role === "nurse" ? 600 : 550));
   }
 
   useLayoutEffect(() => {

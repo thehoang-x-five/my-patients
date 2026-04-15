@@ -10,7 +10,9 @@ function isClsType(type) {
     v.includes("cls") ||
     v.includes("cận lâm sàng") ||
     v.includes("can_lam_sang") ||
-    v.includes("dv")
+    v.includes("dv") ||
+    v.includes("dich_vu") ||
+    v.includes("dịch vụ")
   );
 }
 
@@ -74,15 +76,26 @@ export default function DeptModal({ open, dept, onClose }) {
   const totalToday = waiting + done;
   const capacity =
     view.capacityPerDay || view.room?.capacity || 0;
+  const fixedStaffLabel = isCLS
+    ? "KTV phụ trách (cố định)"
+    : "Bác sĩ phụ trách (cố định)";
+  const fixedStaffName = isCLS
+    ? view.technicianInCharge || view.nurseInCharge || "—"
+    : view.doctorInCharge || "—";
+  const isActive =
+    typeof view.room?.status === "boolean"
+      ? view.room.status
+      : view.status === "active" ||
+        String(view.trangThai || "").toLowerCase() === "hoat_dong";
 
 
   const statusBadge = (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border 
-      ${view.room?.status ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-600 border-slate-200"}`}
+      ${isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-600 border-slate-200"}`}
     >
       
-      {view.room?.status ? "Đang hoạt động" : "Không hoạt động"}
+      {isActive ? "Hoạt động" : "Tạm dừng"}
     </span>
   );
 
@@ -180,11 +193,10 @@ export default function DeptModal({ open, dept, onClose }) {
                       <div>Giờ làm việc: <span className="font-medium">T2–6 07:30–16:30 • T7 07:30–11:30</span></div>
                     </div>
                     <div className="text-sm space-y-1">
-                    <div>
-                        BS phụ trách (cố định):{" "}
-                        <b>{view.doctorInCharge || "—"}</b>
+                      <div>
+                        {fixedStaffLabel}: <b>{fixedStaffName}</b>
                       </div>
-                      {view.nurseInCharge ? (
+                      {!isCLS && view.nurseInCharge ? (
                         <div>
                           Điều dưỡng phụ trách: <b>{view.nurseInCharge}</b>
                         </div>

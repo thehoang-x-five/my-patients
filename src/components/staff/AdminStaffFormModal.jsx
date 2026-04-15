@@ -9,11 +9,27 @@ const ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
 ];
 
+const POSITION_OPTIONS = [
+  { value: "bac_si", label: "Bác sĩ", roles: ["bac_si"] },
+  { value: "y_ta_hanh_chinh", label: "Y tá hành chính", roles: ["y_ta"] },
+  { value: "y_ta_lam_sang", label: "Y tá lâm sàng", roles: ["y_ta"] },
+  { value: "y_ta_can_lam_sang", label: "Y tá cận lâm sàng", roles: ["y_ta"] },
+  { value: "ky_thuat_vien", label: "Kỹ thuật viên", roles: ["ky_thuat_vien"] },
+  { value: "admin", label: "Admin", roles: ["admin"] },
+];
+
+const ROLE_DEFAULT_POSITION = {
+  bac_si: "bac_si",
+  y_ta: "",
+  ky_thuat_vien: "ky_thuat_vien",
+  admin: "admin",
+};
+
 const NURSE_TYPE_OPTIONS = [
   { value: "", label: "-- Chọn loại y tá --" },
   { value: "hanhchinh", label: "Hành chính" },
-  { value: "phong_kham", label: "Lâm sàng" },
-  { value: "can_lam_sang", label: "Cận lâm sàng" },
+  { value: "ls", label: "Lâm sàng" },
+  { value: "cls", label: "Cận lâm sàng" },
 ];
 
 const EMPTY_FORM = {
@@ -50,9 +66,9 @@ function normalizeForm(initial, isEdit) {
     tenDangNhap: initial.tenDangNhap || initial.username || "",
     matKhau: "",
     hoTen: initial.hoTen || initial.name || "",
-    vaiTro: initial.vaiTro || initial.role || "y_ta",
-    chucVu: initial.chucVu || initial.position || "",
-    loaiYTa: initial.loaiYTa || initial.nurseType || "",
+    vaiTro: String(initial.vaiTro || initial.role || "y_ta").toLowerCase(),
+    chucVu: String(initial.chucVu || initial.position || "").toLowerCase(),
+    loaiYTa: String(initial.loaiYTa || initial.nurseType || "").toLowerCase(),
     email: initial.email || "",
     dienThoai: initial.dienThoai || initial.phone || "",
     chuyenMon: initial.chuyenMon || initial.specialty || "",
@@ -113,13 +129,49 @@ export default function AdminStaffFormModal({
     [departments]
   );
 
+
+
+  const positionOptions = POSITION_OPTIONS.filter(
+    (opt) => opt.roles.includes(form.vaiTro)
+  ).map(({ value, label }) => ({ value, label }));
+
+  const nurseTypeOptions = useMemo(() => {
+    if (form.chucVu === "y_ta_hanh_chinh") {
+      return [
+        { value: "hanhchinh", label: "Hành chính" },
+      ];
+    }
+    if (form.chucVu === "y_ta_lam_sang") {
+      return [
+        { value: "ls", label: "Lâm sàng" },
+      ];
+    }
+    if (form.chucVu === "y_ta_can_lam_sang") {
+      return [
+        { value: "cls", label: "Cận lâm sàng" },
+      ];
+    }
+    return NURSE_TYPE_OPTIONS;
+  }, [form.chucVu]);
+
   if (!open) return null;
 
   const updateField = (key, value) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value };
-      if (key === "vaiTro" && value !== "y_ta") {
-        next.loaiYTa = "";
+      if (key === "vaiTro") {
+        if (value !== "y_ta") next.loaiYTa = "";
+        next.chucVu = ROLE_DEFAULT_POSITION[value] || value;
+      }
+      if (key === "chucVu") {
+        if (value === "y_ta_hanh_chinh") next.loaiYTa = "hanhchinh";
+        else if (value === "y_ta_lam_sang") next.loaiYTa = "ls";
+        else if (value === "y_ta_can_lam_sang") next.loaiYTa = "cls";
+      }
+      if (key === "loaiYTa") {
+        if (value === "hanhchinh") next.chucVu = "y_ta_hanh_chinh";
+        else if (value === "ls") next.chucVu = "y_ta_lam_sang";
+        else if (value === "cls") next.chucVu = "y_ta_can_lam_sang";
       }
       return next;
     });
@@ -208,11 +260,12 @@ export default function AdminStaffFormModal({
                   />
                 </Field>
                 <Field label="Chức vụ">
-                  <input
-                    className="input"
+                  <PopoverSelect
+                    name="chucVu"
                     value={form.chucVu}
-                    onChange={(e) => updateField("chucVu", e.target.value)}
-                    placeholder="vd: Trưởng khoa"
+                    onChange={(value) => updateField("chucVu", value)}
+                    options={positionOptions}
+                    placeholder="Chọn chức vụ"
                   />
                 </Field>
                 {form.vaiTro === "y_ta" ? (
@@ -221,7 +274,7 @@ export default function AdminStaffFormModal({
                       name="loaiYTa"
                       value={form.loaiYTa}
                       onChange={(value) => updateField("loaiYTa", value)}
-                      options={NURSE_TYPE_OPTIONS}
+                      options={nurseTypeOptions}
                       placeholder="Chọn loại y tá"
                     />
                   </Field>

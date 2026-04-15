@@ -3,28 +3,12 @@ import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import Avatar from "../ui/Avatar.jsx";
 import {
+  formatDisplayText,
   formatNurseTypeLabel,
   formatRoleLabel,
   formatWorkStatusLabel,
 } from "../../utils/textFormatters.js";
 import { getDemoPublicImage } from "../../utils/demoPublicImages.js";
-
-const ROLE_LABELS = {
-  admin: "Admin",
-  bac_si: "Bác sĩ",
-  y_ta: "Y tá",
-  ky_thuat_vien: "KTV",
-};
-
-const NURSE_TYPE_LABELS = {
-  hanhchinh: "Hành chính",
-  hanh_chinh: "Hành chính",
-  hc: "Hành chính",
-  lam_sang: "Lâm sàng",
-  ls: "Lâm sàng",
-  can_lam_sang: "Cận LS",
-  cls: "Cận LS",
-};
 
 const STATUS_BADGE = {
   dang_cong_tac: {
@@ -62,6 +46,14 @@ function StatusBadge({ status }) {
       {formatWorkStatusLabel(status, info.label || "—")}
     </span>
   );
+}
+
+function getDisplayNurseType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "ls") return "Lâm sàng";
+  if (raw === "cls") return "Cận lâm sàng";
+  if (raw === "hanhchinh") return "Hành chính";
+  return formatNurseTypeLabel(value, "—");
 }
 
 function ActionMenu({
@@ -155,16 +147,18 @@ function ActionMenu({
           >
             <span>Sửa thông tin</span>
           </button>
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-violet-700 hover:bg-violet-50"
-            onClick={() => {
-              onSchedule?.(item);
-              setOpen(false);
-            }}
-          >
-            <span>Lịch làm</span>
-          </button>
+          {onSchedule ? (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-violet-700 hover:bg-violet-50"
+              onClick={() => {
+                onSchedule?.(item);
+                setOpen(false);
+              }}
+            >
+              <span>Lịch làm</span>
+            </button>
+          ) : null}
           {isLocked ? (
             <button
               type="button"
@@ -225,6 +219,7 @@ function ActionMenu({
 export default function StaffTable({
   items = [],
   showAuth = false,
+  adminMode = false,
   onDetail,
   onEdit,
   onLock,
@@ -240,24 +235,41 @@ export default function StaffTable({
     );
   }
 
+  const showAdminAccountColumns = showAuth && adminMode;
+  const showMedicalStaffColumns = !showAdminAccountColumns;
+
   return (
     <div className="overflow-auto scrollbar-none rounded-xl bg-white ring-1 ring-slate-200/80">
       <table className="w-full text-left text-[13px]">
         <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-600">
           <tr>
-            <th className="px-3 py-2.5 font-semibold">Nhân viên</th>
-            <th className="px-3 py-2.5 font-semibold">Khoa</th>
-            <th className="px-3 py-2.5 font-semibold">Chức vụ</th>
+            <th className="px-3 py-2.5 font-semibold">
+              {showAdminAccountColumns ? "Tài khoản admin" : "Nhân viên"}
+            </th>
+            {showAdminAccountColumns ? (
+              <th className="px-3 py-2.5 font-semibold">Email</th>
+            ) : (
+              <th className="px-3 py-2.5 font-semibold">Khoa</th>
+            )}
+            {showAdminAccountColumns ? (
+              <th className="px-3 py-2.5 font-semibold">Mã nhân viên</th>
+            ) : (
+              <th className="px-3 py-2.5 font-semibold">Chức vụ</th>
+            )}
             <th className="px-3 py-2.5 font-semibold">SĐT</th>
             {showAuth && (
               <>
-                <th className="px-3 py-2.5 font-semibold">Username</th>
+                <th className="px-3 py-2.5 font-semibold">Tên đăng nhập</th>
                 <th className="px-3 py-2.5 font-semibold">Vai trò</th>
-                <th className="px-3 py-2.5 font-semibold">Loại YT</th>
+                {!showAdminAccountColumns && (
+                  <th className="px-3 py-2.5 font-semibold">Loại YT</th>
+                )}
                 <th className="px-3 py-2.5 font-semibold">Trạng thái TK</th>
               </>
             )}
-            <th className="px-3 py-2.5 font-semibold">TT công tác</th>
+            <th className="px-3 py-2.5 font-semibold">
+              {showAdminAccountColumns ? "Trạng thái hồ sơ" : "TT công tác"}
+            </th>
             {showAuth && <th className="w-12 px-3 py-2.5 font-semibold" />}
           </tr>
         </thead>
@@ -275,24 +287,42 @@ export default function StaffTable({
                   <Avatar src={getDemoPublicImage(item)} item={item} size={32} />
                   <div className="min-w-0">
                     <div className="truncate font-semibold text-slate-800">
-                      {item.name || item.hoTen || "—"}
+                      {formatDisplayText(item.name || item.hoTen, "—")}
                     </div>
-                    {item.email && (
+                    {(showMedicalStaffColumns ? item.email : item.maNhanVien || item.ma_nhan_vien) && (
                       <div className="truncate text-[11px] text-slate-400">
-                        {item.email}
+                        {showMedicalStaffColumns
+                          ? item.email
+                          : item.maNhanVien || item.ma_nhan_vien}
                       </div>
                     )}
                   </div>
                 </div>
               </td>
 
-              <td className="px-3 py-2.5 text-slate-600">
-                {item.dept || item.tenKhoa || item.departmentName || "—"}
-              </td>
+              {showAdminAccountColumns ? (
+                <>
+                  <td className="px-3 py-2.5 text-slate-600">
+                    {formatDisplayText(item.email, "—")}
+                  </td>
+                  <td className="px-3 py-2.5 text-slate-600">
+                    {item.maNhanVien || item.ma_nhan_vien || "—"}
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td className="px-3 py-2.5 text-slate-600">
+                    {formatDisplayText(
+                      item.dept || item.tenKhoa || item.departmentName || item.maKhoa,
+                      "—"
+                    )}
+                  </td>
 
-              <td className="px-3 py-2.5 text-slate-600">
-                {item.position || item.chucVu || "—"}
-              </td>
+                  <td className="px-3 py-2.5 text-slate-600">
+                    {formatDisplayText(item.position || item.chucVu, "—")}
+                  </td>
+                </>
+              )}
 
               <td className="px-3 py-2.5 text-slate-600">
                 {item.phone || item.dienThoai || "—"}
@@ -310,9 +340,11 @@ export default function StaffTable({
                       {formatRoleLabel(item.role || item.vaiTro, "—")}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-[12px] text-slate-500">
-                    {formatNurseTypeLabel(item.nurseType || item.loaiYTa, "—")}
-                  </td>
+                  {!showAdminAccountColumns && (
+                    <td className="px-3 py-2.5 text-[12px] text-slate-500">
+                      {getDisplayNurseType(item.nurseType || item.loaiYTa)}
+                    </td>
+                  )}
                   <td className="px-3 py-2.5">
                     <StatusBadge
                       status={

@@ -398,12 +398,20 @@ export default function Examination() {
         if (Array.isArray(list) && list.length) {
           const it = list.find(
             (x) =>
+              x.MaKyThuatVienThucHien ||
+              x.maKyThuatVienThucHien ||
+              x.MaNhanSuThucHien ||
+              x.maNhanSuThucHien ||
               x.MaYTaThucHien ||
               x.maYTaThucHien ||
               x.MaNguoiLap ||
               x.NguoiLap
           );
           return (
+            it?.MaKyThuatVienThucHien ||
+            it?.maKyThuatVienThucHien ||
+            it?.MaNhanSuThucHien ||
+            it?.maNhanSuThucHien ||
             it?.MaYTaThucHien ||
             it?.maYTaThucHien ||
             it?.MaNguoiLap ||
@@ -416,13 +424,21 @@ export default function Examination() {
 
       const staffCodeCls =
         (isClsQueue &&
-          (raw.MaYTaThucHien ||
+          (raw.MaKyThuatVienThucHien ||
             raw.MaNhanSuThucHien ||
+            raw.MaYTaThucHien ||
             raw.MaYTaHoTro ||
-            raw.maYTaThucHien ||
+            raw.maKyThuatVienThucHien ||
             raw.maNhanSuThucHien ||
+            raw.maYTaThucHien ||
             raw.maYTaHoTro ||
+            raw.PhieuKhamClsItem?.MaKyThuatVienThucHien ||
+            raw.PhieuKhamClsItem?.MaNhanSuThucHien ||
             raw.PhieuKhamClsItem?.MaYTaThucHien ||
+            raw.PhieuKhamCls?.MaKyThuatVienThucHien ||
+            raw.PhieuKhamCls?.MaNhanSuThucHien ||
+            raw.PhieuKhamClsFull?.MaKyThuatVienThucHien ||
+            raw.PhieuKhamClsFull?.MaNhanSuThucHien ||
             raw.PhieuKhamClsFull?.MaYTaThucHien ||
             raw.PhieuKhamClsFull?.MaNguoiLap ||
             clsStaffCodeFromList)) ||
@@ -549,9 +565,35 @@ export default function Examination() {
         null,
       doctor:
         raw.TenBacSiKham ??
+        raw.TenKyThuatVienThucHien ??
+        raw.TenNhanSuThucHien ??
+        phieuClsItem?.TenKyThuatVienThucHien ??
+        phieuClsItem?.TenNhanSuThucHien ??
+        phieuClsFull?.TenKyThuatVienThucHien ??
+        phieuClsFull?.TenNhanSuThucHien ??
         phieuClsFull?.TenNguoiLap ??
         p?.doctor ??
         "",
+      TenKyThuatVienThucHien:
+        raw.TenKyThuatVienThucHien ??
+        phieuClsItem?.TenKyThuatVienThucHien ??
+        phieuClsFull?.TenKyThuatVienThucHien ??
+        p?.TenKyThuatVienThucHien ??
+        p?.tenKyThuatVienThucHien ??
+        null,
+      TenNhanSuThucHien:
+        raw.TenNhanSuThucHien ??
+        phieuClsItem?.TenNhanSuThucHien ??
+        phieuClsFull?.TenNhanSuThucHien ??
+        p?.TenNhanSuThucHien ??
+        p?.tenNhanSuThucHien ??
+        null,
+      TenNguoiLap:
+        raw.TenNguoiLap ??
+        phieuClsFull?.TenNguoiLap ??
+        p?.TenNguoiLap ??
+        p?.tenNguoiLap ??
+        null,
       loai_hang_doi:
         raw.LoaiHangDoi ??
         p?.loai_hang_doi ??
@@ -581,8 +623,11 @@ export default function Examination() {
           phieuClsFull.ListItemDV[0]?.MaChiTietDv) ??
         null,
       maNhanSuThucHien:
+        raw.MaKyThuatVienThucHien ??
         raw.MaNhanSuThucHien ??
+        phieuClsFull?.MaKyThuatVienThucHien ??
         phieuClsFull?.MaNhanSuThucHien ??
+        phieuClsItem?.MaKyThuatVienThucHien ??
         phieuClsItem?.MaNhanSuThucHien ??
         p?.maNhanSuThucHien ??
         null,
@@ -591,6 +636,20 @@ export default function Examination() {
         phieuClsFull?.MaYTaHoTro ??
         phieuClsItem?.MaYTaHoTro ??
         p?.maYTaHoTro ??
+        null,
+      ThoiGianBatDauLuot:
+        raw.ThoiGianBatDauLuot ??
+        phieuClsItem?.ThoiGianBatDau ??
+        phieuClsFull?.ThoiGianBatDau ??
+        p?.ThoiGianBatDauLuot ??
+        p?.thoiGianBatDauLuot ??
+        null,
+      ThoiGianKetThucLuot:
+        raw.ThoiGianKetThucLuot ??
+        phieuClsItem?.ThoiGianKetThuc ??
+        phieuClsFull?.ThoiGianKetThuc ??
+        p?.ThoiGianKetThucLuot ??
+        p?.thoiGianKetThucLuot ??
         null,
       serviceOrder:
         Array.isArray(phieuClsFull?.ListItemDV) &&

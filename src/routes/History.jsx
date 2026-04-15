@@ -1,12 +1,11 @@
 import React, {
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import HistoryToolbar from "../components/history/HistoryToolbar.jsx";
 import HistoryTable from "../components/history/HistoryTable.jsx";
@@ -15,6 +14,7 @@ import HistoryFilterPopover from "../components/history/HistoryFilterPopover.jsx
 import Pagination from "../components/ui/Pagination.jsx";
 
 import { useHistoryVisits, useHistoryTransactions, subscribeHistory } from "../api/history.js";
+import { useUIStore } from "../components/stores/appStore.js";
 
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
@@ -91,8 +91,6 @@ function getTxnKind(row) {
 /* ====== main page ====== */
 export default function History() {
   const { search } = useLocation();
-  const nav = useNavigate();
-  
   useViewportVH();
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
@@ -113,35 +111,68 @@ export default function History() {
   const [visitType, setVisitType] = useState("all"); // all | clinic | service
   const [txnType, setTxnType] = useState("all"); // all | exam | cls | drug | other
   
-  // Highlight state for row animation
-  const [highlightId, setHighlightId] = useState(initHighlight);
+  // ✅ Use UIStore for highlight (like Patients page)
+  const highlightHistoryId = useUIStore((s) => s.highlightHistoryId);
+  const setHighlightHistoryId = useUIStore((s) => s.setHighlightHistoryId);
+  const clearHighlightHistory = useUIStore((s) => s.clearHighlightHistory);
+  const highlightScrolledRef = useRef(false);
 
-  // Sync state when URL search changes externally
+  // ✅ Track when highlight was first shown
+  const highlightTimestampRef = useRef(null);
+
+  // Record timestamp when highlight appears
   useEffect(() => {
-    const s = new URLSearchParams(window.location.search);
+    if (highlightHistoryId && !highlightTimestampRef.current) {
+      highlightTimestampRef.current = Date.now();
+    }
+  }, [highlightHistoryId]);
+
+  // Clear highlight on unmount (only if shown for at least 1 second)
+  useEffect(() => {
+    return () => {
+      if (highlightTimestampRef.current) {
+        const elapsed = Date.now() - highlightTimestampRef.current;
+        // Chỉ clear nếu đã hiển thị ít nhất 1 giây (user đã thấy)
+        if (elapsed >= 1000) {
+          clearHighlightHistory();
+        }
+      }
+    };
+  }, [clearHighlightHistory]);
+
+  // Sync highlight from URL on mount
+  useEffect(() => {
+    if (initHighlight && !highlightHistoryId) {
+      setHighlightHistoryId(initHighlight);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync state when URL search changes externally (e.g. deep-link from Đơn thuốc)
+  useEffect(() => {
+    const s = new URLSearchParams(search);
     const h = s.get("highlight");
     const p = s.get("pid");
     const t = s.get("tab");
     
-    if (h) setHighlightId(h);
-    if (p) { setKw(p); setScope("all"); }
-    if (t) setTab(t);
+    if (h && h !== highlightHistoryId) {
+      setHighlightHistoryId(h);
+      highlightScrolledRef.current = false;
+    }
+    if (p && p !== kw) { setKw(p); setScope("all"); }
+    if (t && t !== tab) setTab(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // Auto clear highlight after 5 seconds
+  // Auto clear highlight after 10 seconds
   useEffect(() => {
-    if (highlightId) {
-      const timer = setTimeout(() => {
-        setHighlightId(null);
-        const s = new URLSearchParams(window.location.search);
-        if (s.has("highlight")) {
-          s.delete("highlight");
-          nav({ search: s.toString() }, { replace: true });
-        }
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [highlightId, nav]);
+    if (!highlightHistoryId) return;
+    const timer = setTimeout(() => {
+      clearHighlightHistory();
+      highlightScrolledRef.current = false;
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [highlightHistoryId, clearHighlightHistory]);
 
   // ✅ Pagination
   const [visitPage, setVisitPage] = useState(1);
@@ -195,7 +226,30 @@ export default function History() {
     return params;
   }, [from, to, scope, kw, visitType, visitPage]);
 
-  // ✅ useHistoryVisits và useHistoryTransactions giờ trả về PagedResult { Items, TotalItems, Page, PageSize }
+  const txnFilterParams = useMemo(() => {
+    const params = {
+      page: txnPage,
+      pageSize: 50,
+    };
+
+    if (from) {
+      params.fromTime = new Date(from).toISOString();
+    }
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      params.toTime = toDate.toISOString();
+    }
+    if (kw && kw.trim()) {
+      params.keyword = kw.trim();
+    }
+    if (txnType !== "all") {
+      params.loaiDotThu = txnType;
+    }
+
+    return params;
+  }, [from, to, kw, txnType, txnPage]);
+
   const {
         data: visitResult = { Items: [], TotalItems: 0, Page: 1, PageSize: 50 },
         refetch: refetchVisits,
@@ -203,18 +257,7 @@ export default function History() {
       const {
         data: txnResult = { Items: [], TotalItems: 0, Page: 1, PageSize: 50 },
         refetch: refetchTxns,
-      } = useHistoryTransactions({
-        page: txnPage,
-        pageSize: 50,
-        fromTime: from ? new Date(from).toISOString() : undefined,
-        toTime: to ? (() => {
-          const toDate = new Date(to);
-          toDate.setHours(23, 59, 59, 999);
-          return toDate.toISOString();
-        })() : undefined,
-        keyword: kw && kw.trim() ? kw.trim() : undefined,
-        loaiDotThu: txnType !== "all" ? txnType : undefined,
-      });
+      } = useHistoryTransactions(txnFilterParams);
 
       // ✅ Lấy Items từ PagedResult
       const visitRows = visitResult.Items || [];
@@ -245,6 +288,21 @@ export default function History() {
 
   // ✅ Filter và sort đã được làm ở backend
   const rows = tab === "visits" ? visitRows : txnRows;
+
+  // Scroll to highlighted row when data loads
+  useEffect(() => {
+    if (!highlightHistoryId || highlightScrolledRef.current) return;
+    // Wait a tick for the DOM to render
+    const raf = requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-highlight-id="${highlightHistoryId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        highlightScrolledRef.current = true;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightHistoryId, visitRows.length, txnRows.length]);
 
   /* ====== stats dựa trên dữ liệu đang lọc ====== */
   // ⚠️ Lưu ý: Stats chỉ tính trên 1 page (50 items), không phải toàn bộ dataset
@@ -341,7 +399,7 @@ export default function History() {
             <HistoryTable
               tab={tab}
               rows={rows}
-              highlightId={highlightId}
+              highlightId={highlightHistoryId}
               onEye={(row, type) =>
                 setDetail({ open: true, type, row })
               }

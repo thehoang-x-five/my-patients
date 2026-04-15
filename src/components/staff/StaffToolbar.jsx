@@ -19,18 +19,18 @@ export default function StaffToolbar({
     lang === "en"
       ? {
           total: "Total staff",
-          online: "Online",
+          online: "Working",
           pause: "Paused",
-          offline: "Offline",
+          offline: "Inactive",
           departments: "Departments",
           reset: "Reset filters",
           filter: "Filters",
         }
       : {
           total: "Tổng nhân sự",
-          online: "Online",
+          online: "Đang công tác",
           pause: "Tạm nghỉ",
-          offline: "Offline",
+          offline: "Nghỉ việc",
           departments: "Khoa",
           reset: "Làm mới bộ lọc",
           filter: "Bộ lọc",

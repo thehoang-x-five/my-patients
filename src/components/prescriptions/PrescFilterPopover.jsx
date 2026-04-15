@@ -2,12 +2,14 @@
 import React, {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
+
 function Chip({ active, dot, children, ...rest }) {
   const base =
     "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-medium cursor-pointer select-none transition";
@@ -15,23 +17,17 @@ function Chip({ active, dot, children, ...rest }) {
     "bg-violet-600/10 text-violet-700 ring-1 ring-violet-300 shadow-sm";
   const inactiveCls =
     "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-violet-300 hover:text-violet-700";
-  const dotCls =
-    dot === "rose"
-      ? "bg-rose-400"
-      : dot === "violet"
-      ? "bg-violet-500"
-      : dot === "amber"
-      ? "bg-amber-400"
-      : dot === "sky"
-      ? "bg-sky-400"
-      : dot === "red"
-          ? "bg-red-400"
-      : dot === "emerald"
-      ? "bg-emerald-400"
-  
-      : dot === "indigo"
-      ? "bg-indigo-300"
-      :"bg-indigo-300";
+  const dotMap = {
+    rose: "bg-rose-400",
+    violet: "bg-violet-500",
+    amber: "bg-amber-400",
+    sky: "bg-sky-400",
+    red: "bg-red-400",
+    emerald: "bg-emerald-400",
+    indigo: "bg-indigo-300",
+    slate: "bg-slate-400",
+  };
+  const dotCls = dotMap[dot] || "bg-indigo-300";
   return (
     <button
       type="button"
@@ -50,9 +46,23 @@ function Chip({ active, dot, children, ...rest }) {
 }
 
 const ORDER_STATUS_SEG = ["Tất cả", "Đã kê", "Chờ phát", "Đã phát", "Đã hủy"];
-const ORDER_RANGE_SEG = ["Tất cả", "Hôm nay", "7 ngày", "30 ngày"];
 
-// Trạng thái kho mới: bỏ "Tạm dừng", thay bằng "Hết hạn"
+const ORDER_RANGE_SEG = [
+  { value: "all", label: "Tất cả" },
+  { value: "today", label: "Hôm nay" },
+  { value: "7d", label: "7 ngày" },
+  { value: "30d", label: "30 ngày" },
+  { value: "custom", label: "Tùy chọn" },
+];
+
+const ORDER_PRICE_SEG = [
+  { value: "all", label: "Tất cả" },
+  { value: "0-100000", label: "< 100k" },
+  { value: "100000-500000", label: "100k – 500k" },
+  { value: "500000-1000000", label: "500k – 1tr" },
+  { value: "1000000-", label: "> 1 triệu" },
+];
+
 const STOCK_STATUS_SEG = [
   { code: "all", label: "Tất cả" },
   { code: "hoat_dong", label: "Hoạt động" },
@@ -77,8 +87,29 @@ export default function PrescFilterPopover({
 
   orderStatus = "Tất cả",
   setOrderStatus = () => {},
-  orderRange = "Tất cả",
+  orderRange = "all",
   setOrderRange = () => {},
+
+  // ✅ NEW: custom date range cho cả 2 tab
+  orderFromDate = "",
+  setOrderFromDate = () => {},
+  orderToDate = "",
+  setOrderToDate = () => {},
+
+  // ✅ NEW: Lọc theo mệnh giá đơn thuốc
+  orderPriceRange = "all",
+  setOrderPriceRange = () => {},
+
+  // ✅ NEW: Lọc theo lô (stock tab)
+  stockLot = "",
+  setStockLot = () => {},
+  lotOptions = [], // dynamic từ data
+
+  // ✅ NEW: custom date range cho kho
+  stockExpFrom = "",
+  setStockExpFrom = () => {},
+  stockExpTo = "",
+  setStockExpTo = () => {},
 
   stockStatus = "all",
   setStockStatus = () => {},
@@ -91,7 +122,6 @@ export default function PrescFilterPopover({
   const anchorNode =
     anchorEl && anchorEl.current ? anchorEl.current : anchorEl || null;
 
-  // esc / click ngoài
   useEffect(() => {
     if (!open) return;
     justOpenedRef.current = true;
@@ -125,17 +155,16 @@ export default function PrescFilterPopover({
     };
   }, [open, onClose, anchorNode]);
 
-  // position
   const [pos, setPos] = useState({ top: 72, left: 16 });
-  const [maxH, setMaxH] = useState(520);
-  const [widthPx, setWidthPx] = useState(340);
+  const [maxH, setMaxH] = useState(600);
+  const [widthPx, setWidthPx] = useState(380);
 
   function computePosition() {
     const gap = 8;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    const W = Math.min(340, vw - 24);
+    const W = Math.min(390, vw - 24);
     const el =
       anchorNode && anchorNode.getBoundingClientRect ? anchorNode : null;
     const r = el ? el.getBoundingClientRect() : null;
@@ -143,14 +172,14 @@ export default function PrescFilterPopover({
     let left = Math.min(Math.max(r ? r.right - W : 16, 12), vw - W - 12);
     let top = (r ? r.bottom : 64) + gap;
 
-    const estH = 380;
+    const estH = 520;
     if (top + estH > vh - 12 && r) {
       top = Math.max(12, r.top - gap - estH);
     }
 
     setWidthPx(W);
     setPos({ top, left });
-    setMaxH(Math.min(vh - top - 12, 520));
+    setMaxH(Math.min(vh - top - 12, 650));
   }
 
   useLayoutEffect(() => {
@@ -187,6 +216,42 @@ export default function PrescFilterPopover({
     else setQStock?.(v);
   };
 
+  // helper: khi chọn quick range → auto compute from/to
+  const handleOrderQuickRange = (value) => {
+    setOrderRange(value);
+    if (value === "all") {
+      setOrderFromDate("");
+      setOrderToDate("");
+      return;
+    }
+    if (value === "custom") return; // giữ nguyên date inputs
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const toStr = today.toISOString().slice(0, 10);
+
+    if (value === "today") {
+      setOrderFromDate(toStr);
+      setOrderToDate(toStr);
+    } else if (value === "7d") {
+      const from = new Date(today);
+      from.setDate(from.getDate() - 6);
+      setOrderFromDate(from.toISOString().slice(0, 10));
+      setOrderToDate(toStr);
+    } else if (value === "30d") {
+      const from = new Date(today);
+      from.setDate(from.getDate() - 29);
+      setOrderFromDate(from.toISOString().slice(0, 10));
+      setOrderToDate(toStr);
+    }
+  };
+
+  const uniqueLots = useMemo(() => {
+    const raw = Array.isArray(lotOptions) ? lotOptions : [];
+    const set = new Set(raw.filter(Boolean).map((l) => String(l).trim()));
+    return Array.from(set).sort();
+  }, [lotOptions]);
+
   return createPortal(
     <AnimatePresence>
       {open && (
@@ -216,7 +281,7 @@ export default function PrescFilterPopover({
               </div>
             </div>
 
-            <div className="p-2 grid gap-2 overflow-y-auto scrollbar-none text-[13px] text-slate-700">
+            <div className="p-2.5 grid gap-2.5 overflow-y-auto scrollbar-none text-[13px] text-slate-700" style={{ maxHeight: maxH - 100 }}>
               {/* Từ khóa */}
               <label className="text-[13px]">
                 Từ khóa
@@ -251,8 +316,8 @@ export default function PrescFilterPopover({
               {isOrders ? (
                 <>
                   {/* Trạng thái đơn */}
-                  <div className="mt-1">
-                    Trạng thái đơn
+                  <div>
+                    <span className="text-xs font-medium text-slate-500">Trạng thái đơn</span>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {ORDER_STATUS_SEG.map((s) => (
                         <Chip
@@ -277,17 +342,93 @@ export default function PrescFilterPopover({
                     </div>
                   </div>
 
-                  {/* Mốc thời gian */}
-                  <div className="mt-2">
-                    Mốc thời gian
+                  {/* ✅ Khoảng thời gian — mẫu giống Báo cáo */}
+                  <div>
+                    <span className="text-xs font-medium text-slate-500">Khoảng thời gian</span>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {ORDER_RANGE_SEG.map((r) => (
                         <Chip
-                          key={r}
-                          active={orderRange === r}
-                          onClick={() => setOrderRange(r)}
+                          key={r.value}
+                          active={orderRange === r.value}
+                          onClick={() => handleOrderQuickRange(r.value)}
                         >
-                          {r}
+                          {r.label}
+                        </Chip>
+                      ))}
+                    </div>
+
+                    {/* Date pickers — hiện khi "Tùy chọn" hoặc khi đã có giá trị custom */}
+                    {(orderRange === "custom" || orderFromDate || orderToDate) && (
+                      <div className="mt-2 rounded-2xl bg-indigo-50/60 ring-1 ring-indigo-100 px-2.5 py-2.5">
+                        <div className="flex items-center justify-between text-[11px] mb-1.5">
+                          <span className="font-medium text-slate-500">
+                            Khoảng ngày cụ thể
+                          </span>
+                          <span className="text-[10px] text-indigo-600/70">
+                            Chọn nhanh bằng lịch ↓
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="flex-1 text-[11px] text-slate-500">
+                            Từ ngày
+                            <div className="mt-0.5 relative">
+                              <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs text-indigo-500">
+                                📅
+                              </span>
+                              <input
+                                type="date"
+                                value={orderFromDate || ""}
+                                onChange={(e) => {
+                                  setOrderFromDate(e.target.value);
+                                  setOrderRange("custom");
+                                }}
+                                className="w-full rounded-xl pl-7 pr-2.5 py-1.5 bg-white text-sm ring-1 ring-slate-200/80 focus:ring-2 focus:ring-indigo-500 outline-none"
+                              />
+                            </div>
+                          </label>
+                          <span className="text-slate-400 text-xs mt-4">–</span>
+                          <label className="flex-1 text-[11px] text-slate-500">
+                            Đến ngày
+                            <div className="mt-0.5 relative">
+                              <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs text-indigo-500">
+                                📅
+                              </span>
+                              <input
+                                type="date"
+                                value={orderToDate || ""}
+                                onChange={(e) => {
+                                  setOrderToDate(e.target.value);
+                                  setOrderRange("custom");
+                                }}
+                                className="w-full rounded-xl pl-7 pr-2.5 py-1.5 bg-white text-sm ring-1 ring-slate-200/80 focus:ring-2 focus:ring-indigo-500 outline-none"
+                              />
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ✅ Lọc theo mệnh giá đơn thuốc */}
+                  <div>
+                    <span className="text-xs font-medium text-slate-500">Mệnh giá đơn thuốc</span>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {ORDER_PRICE_SEG.map((p) => (
+                        <Chip
+                          key={p.value}
+                          active={orderPriceRange === p.value}
+                          onClick={() => setOrderPriceRange(p.value)}
+                          dot={
+                            p.value === "all"
+                              ? "slate"
+                              : p.value === "1000000-"
+                              ? "rose"
+                              : p.value.startsWith("500000")
+                              ? "amber"
+                              : "indigo"
+                          }
+                        >
+                          {p.label}
                         </Chip>
                       ))}
                     </div>
@@ -296,8 +437,8 @@ export default function PrescFilterPopover({
               ) : (
                 <>
                   {/* Trạng thái kho */}
-                  <div className="mt-1">
-                    Trạng thái kho
+                  <div>
+                    <span className="text-xs font-medium text-slate-500">Trạng thái kho</span>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {STOCK_STATUS_SEG.map((s) => (
                         <Chip
@@ -323,8 +464,8 @@ export default function PrescFilterPopover({
                   </div>
 
                   {/* Đơn vị thuốc */}
-                  <div className="mt-2">
-                    Đơn vị thuốc
+                  <div>
+                    <span className="text-xs font-medium text-slate-500">Đơn vị thuốc</span>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       <Chip active={!unit} onClick={() => setUnit("")}>
                         Tất cả
@@ -347,6 +488,65 @@ export default function PrescFilterPopover({
                       >
                         Ống
                       </Chip>
+                    </div>
+                  </div>
+
+                  {/* ✅ Lọc theo lô — danh sách dynamic từ dữ liệu */}
+                  {uniqueLots.length > 0 && (
+                    <div>
+                      <span className="text-xs font-medium text-slate-500">Lọc theo lô</span>
+                      <div className="mt-1.5 flex flex-wrap gap-2 max-h-[140px] overflow-y-auto scrollbar-none p-1 -ml-1">
+                        <Chip active={!stockLot} onClick={() => setStockLot("")}>
+                          Tất cả
+                        </Chip>
+                        {uniqueLots.map((lot) => (
+                          <Chip
+                            key={lot}
+                            active={stockLot === lot}
+                            onClick={() => setStockLot(lot)}
+                          >
+                            {lot}
+                          </Chip>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ✅ Hạn sử dụng — date range cho kho */}
+                  <div>
+                    <span className="text-xs font-medium text-slate-500">Hạn sử dụng</span>
+                    <div className="mt-1.5 rounded-2xl bg-indigo-50/60 ring-1 ring-indigo-100 px-2.5 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <label className="flex-1 text-[11px] text-slate-500">
+                          Từ ngày
+                          <div className="mt-0.5 relative">
+                            <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs text-indigo-500">
+                              📅
+                            </span>
+                            <input
+                              type="date"
+                              value={stockExpFrom || ""}
+                              onChange={(e) => setStockExpFrom(e.target.value)}
+                              className="w-full rounded-xl pl-7 pr-2.5 py-1.5 bg-white text-sm ring-1 ring-slate-200/80 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                          </div>
+                        </label>
+                        <span className="text-slate-400 text-xs mt-4">–</span>
+                        <label className="flex-1 text-[11px] text-slate-500">
+                          Đến ngày
+                          <div className="mt-0.5 relative">
+                            <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs text-indigo-500">
+                              📅
+                            </span>
+                            <input
+                              type="date"
+                              value={stockExpTo || ""}
+                              onChange={(e) => setStockExpTo(e.target.value)}
+                              className="w-full rounded-xl pl-7 pr-2.5 py-1.5 bg-white text-sm ring-1 ring-slate-200/80 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                          </div>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </>

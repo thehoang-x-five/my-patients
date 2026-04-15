@@ -129,8 +129,22 @@ export default function Prescriptions() {
 
   // filter nâng cao
   const [orderStatus, setOrderStatus] = useState("Tất cả");
-  const [orderRange, setOrderRange] = useState("Tất cả");
-  const [stockStatus, setStockStatus] = useState("all"); // all | hoat_dong | het_han | sap_het_han | sap_het_ton
+  const [orderRange, setOrderRange] = useState("all");
+  const [stockStatus, setStockStatus] = useState("all");
+
+  // ✅ NEW: custom date range (giống Báo cáo)
+  const [orderFromDate, setOrderFromDate] = useState("");
+  const [orderToDate, setOrderToDate] = useState("");
+
+  // ✅ NEW: lọc theo mệnh giá đơn thuốc
+  const [orderPriceRange, setOrderPriceRange] = useState("all");
+
+  // ✅ NEW: lọc theo lô (kho)
+  const [stockLot, setStockLot] = useState("");
+
+  // ✅ NEW: lọc theo hạn sử dụng (kho)
+  const [stockExpFrom, setStockExpFrom] = useState("");
+  const [stockExpTo, setStockExpTo] = useState("");
 
   const [filterOpen, setFilterOpen] = useState(false);
   const filterBtnRef = useRef(null);
@@ -155,34 +169,9 @@ export default function Prescriptions() {
     setStockStatus("all");
   }, [setQStock, setUnit, setStockStatus]);
 
-  // ✅ Map orderRange → fromDate/toDate
-  const getOrderDateRange = () => {
-    if (orderRange === "Tất cả") return { fromDate: null, toDate: null };
-    
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(startOfToday.getTime() + 86400000 - 1);
-    
-    if (orderRange === "Hôm nay") {
-      return {
-        fromDate: startOfToday.toISOString(),
-        toDate: endOfToday.toISOString(),
-      };
-    }
-    
-    const days = orderRange === "7 ngày" ? 7 : orderRange === "30 ngày" ? 30 : 0;
-    if (days > 0) {
-      const fromDate = new Date(startOfToday.getTime() - (days - 1) * 86400000);
-      return {
-        fromDate: fromDate.toISOString(),
-        toDate: endOfToday.toISOString(),
-      };
-    }
-    
-    return { fromDate: null, toDate: null };
-  };
-
-  const { fromDate, toDate } = getOrderDateRange();
+  // ✅ Date range: dùng orderFromDate/orderToDate trực tiếp (popover quản lý)
+  const fromDate = orderFromDate ? new Date(orderFromDate + "T00:00:00").toISOString() : null;
+  const toDate = orderToDate ? new Date(orderToDate + "T23:59:59").toISOString() : null;
 
   // ✅ Dùng searchRxOrders với filtering và pagination
   const ordersQuery = useSearchRxOrders({
@@ -194,11 +183,13 @@ export default function Prescriptions() {
     pageSize: 50,
   });
 
-  // ✅ Dùng searchStock với phân trang
+  // ✅ Dùng searchStock với phân trang + hạn sử dụng
   const stockQuery = useSearchStock({
     keyword: qStockDef || "",
     status: stockStatus === "all" ? null : stockStatus,
     unit: unit || "",
+    expFrom: stockExpFrom || null,
+    expTo: stockExpTo || null,
     page: stockPage,
     pageSize: 50,
   });
@@ -283,28 +274,52 @@ export default function Prescriptions() {
   // ✅ Reset orderPage khi filter thay đổi
   useEffect(() => {
     if (orderPage > 1) setOrderPage(1);
-  }, [qOrdersDef, orderStatus, orderRange]);
+  }, [qOrdersDef, orderStatus, orderRange, orderFromDate, orderToDate, orderPriceRange]);
 
-  // ✅ Filter và sort đã được làm ở backend
-  const filteredOrders = orders;
+  // ✅ Filter orders: FE lọc thêm theo mệnh giá (BE chỉ filter status + keyword + date)
+  const filteredOrders = useMemo(() => {
+    if (!orders || !orders.length) return [];
+    if (orderPriceRange === "all") return orders;
 
-  // ✅ Filter kho thuốc - unit đã được filter ở BE (DonViTinh)
-  // Keyword và status đã được filter ở BE
-  // Chỉ filter ẩn thuốc tạm dừng ở FE (UI logic, không ảnh hưởng pagination)
+    const [minStr, maxStr] = orderPriceRange.split("-");
+    const min = Number(minStr) || 0;
+    const max = maxStr ? Number(maxStr) : Infinity;
+
+    return orders.filter((o) => {
+      const total = Number(o.total) || 0;
+      return total >= min && total < max;
+    });
+  }, [orders, orderPriceRange]);
+
+  // ✅ Filter kho thuốc - thêm lọc theo lô ở FE
   const filteredStock = useMemo(() => {
     if (!stock || !stock.length) return [];
   
     return stock.filter((r) => {
       const statusCode = getDrugStatusCode(r);
-      // 🔒 Không hiển thị thuốc tạm dừng
-      return statusCode !== "tam_dung";
+      if (statusCode === "tam_dung") return false;
+
+      // Lọc theo lô (FE side)
+      if (stockLot) {
+        const lot = String(r.lot || r.soLo || r.SoLo || "").trim();
+        if (lot !== stockLot) return false;
+      }
+      return true;
     });
+  }, [stock, stockLot]);
+
+  // ✅ Trích danh sách lô unique từ data stock (dynamic)
+  const lotOptions = useMemo(() => {
+    if (!stock || !stock.length) return [];
+    return stock
+      .map((r) => String(r.lot || r.soLo || r.SoLo || "").trim())
+      .filter(Boolean);
   }, [stock]);
   
   // ✅ Reset page khi filter thay đổi
   useEffect(() => {
     if (stockPage > 1) setStockPage(1);
-  }, [qStockDef, stockStatus, unit]);
+  }, [qStockDef, stockStatus, unit, stockLot, stockExpFrom, stockExpTo]);
 
   // ===== Stats đơn thuốc + kho thuốc =====
 const ordersCount = filteredOrders.length;
@@ -394,9 +409,15 @@ const stockNearOutCount = filteredStock.filter((r) => {
     setQOrders("");
     setQStock("");
     setOrderStatus("Tất cả");
-    setOrderRange("Tất cả");
+    setOrderRange("all");
+    setOrderFromDate("");
+    setOrderToDate("");
+    setOrderPriceRange("all");
     setUnit("");
     setStockStatus("all");
+    setStockLot("");
+    setStockExpFrom("");
+    setStockExpTo("");
     setNearOnly(false);
   };
 
@@ -552,8 +573,21 @@ const stockNearOutCount = filteredStock.filter((r) => {
         setOrderStatus={setOrderStatus}
         orderRange={orderRange}
         setOrderRange={setOrderRange}
+        orderFromDate={orderFromDate}
+        setOrderFromDate={setOrderFromDate}
+        orderToDate={orderToDate}
+        setOrderToDate={setOrderToDate}
+        orderPriceRange={orderPriceRange}
+        setOrderPriceRange={setOrderPriceRange}
         stockStatus={stockStatus}
         setStockStatus={setStockStatus}
+        stockLot={stockLot}
+        setStockLot={setStockLot}
+        lotOptions={lotOptions}
+        stockExpFrom={stockExpFrom}
+        setStockExpFrom={setStockExpFrom}
+        stockExpTo={stockExpTo}
+        setStockExpTo={setStockExpTo}
         onResetFilters={handleResetFilters}
       />
 

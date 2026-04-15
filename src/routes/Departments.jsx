@@ -31,7 +31,14 @@ import {
 } from "../api/departments.js";
 import { useAdminUsers } from "../api/admin.js";
 import { useAuthStore, useUIStore } from "../components/stores/appStore.js";
-import { isAdmin as checkIsAdmin } from "../utils/permissions.js";
+import {
+  isAdmin as checkIsAdmin,
+  isClinicalNurse,
+  isClsNurse,
+  isDoctor,
+  isReceptionNurse,
+  isTechnician,
+} from "../utils/permissions.js";
 import { useUI } from "../context/UIContext.jsx";
 
 import useViewportVH from "../hooks/useViewportVH";
@@ -139,7 +146,7 @@ function buildWeekDaysFromDuty(list) {
     return null;
   };
 
-  const result = { fixedDoctor: null };
+  const result = { fixedDoctor: null, fixedTechnician: null };
 
   for (const raw of list) {
     const dto = raw || {};
@@ -204,8 +211,24 @@ function buildWeekDaysFromDuty(list) {
       dto.doctor ||
       "";
 
+    const technician =
+      dto.KyThuatVien ||
+      dto.kyThuatVien ||
+      dto.TenKTV ||
+      dto.tenKTV ||
+      dto.TenKyThuatVien ||
+      dto.tenKyThuatVien ||
+      dto.TechnicianName ||
+      dto.technicianName ||
+      dto.technician ||
+      "";
+
     if (doctor && !result.fixedDoctor) {
       result.fixedDoctor = doctor;
+    }
+
+    if (technician && !result.fixedTechnician) {
+      result.fixedTechnician = technician;
     }
 
     const slot = {
@@ -241,6 +264,66 @@ function isClsRoom(r) {
   );
 }
 
+function normalizeDutyStaffNurseType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (
+    raw === "ls" ||
+    raw === "lam_sang" ||
+    raw === "phong_kham" ||
+    raw === "y_ta_lam_sang"
+  ) {
+    return "lam_sang";
+  }
+  if (
+    raw === "cls" ||
+    raw === "can_lam_sang" ||
+    raw === "y_ta_can_lam_sang"
+  ) {
+    return "can_lam_sang";
+  }
+  if (
+    raw === "hanhchinh" ||
+    raw === "hanh_chinh" ||
+    raw === "hc" ||
+    raw === "y_ta_hanh_chinh"
+  ) {
+    return "hanh_chinh";
+  }
+  return raw;
+}
+
+function isEligibleDutyStaff(item, roomIsCls, roomContext = null) {
+  const role = String(item?.role || item?.vaiTro || "").trim().toLowerCase();
+  const nurseType = normalizeDutyStaffNurseType(
+    item?.nurseType || item?.loaiYTa || item?.LoaiYTa
+  );
+  const workStatus = item?.status || item?.trangThaiCongTac;
+  const accountStatus = item?.trangThaiTaiKhoan || item?.statusAccount;
+  const staffId = item?.id || item?.maNhanVien || item?.MaNhanVien || "";
+  const fixedDoctorId =
+    roomContext?.headDoctor ||
+    roomContext?._raw?.MaBacSiPhuTrach ||
+    roomContext?.doctorId ||
+    "";
+
+  if (workStatus !== "dang_cong_tac" || accountStatus === "khoa") {
+    return false;
+  }
+
+  if (roomIsCls) {
+    return (
+      role === "ky_thuat_vien" ||
+      (role === "y_ta" && nurseType === "can_lam_sang")
+    );
+  }
+
+  return (
+    (role === "bac_si" && !!fixedDoctorId && staffId === fixedDoctorId) ||
+    (role === "y_ta" && nurseType === "lam_sang")
+  );
+}
+
 export default function Departments() {
   const ROOMS_PAGE_SIZE = 18;
 
@@ -261,12 +344,18 @@ export default function Departments() {
   );
 
   const todayKey = dayKeyToday();
+  const lockedRoomType = useMemo(() => {
+    if (userIsAdmin || isReceptionNurse(user)) return null;
+    if (isDoctor(user) || isClinicalNurse(user)) return "ls";
+    if (isTechnician(user) || isClsNurse(user)) return "cls";
+    return null;
+  }, [user, userIsAdmin]);
 
   // ===== Bộ lọc (popover) =====
   const [filters, setFilters] = useState({
     keyword: "",
     status: "all", // all | online | offline
-    roomType: "all", // all | ls | cls
+    roomType: lockedRoomType || "all", // all | ls | cls
     sort: "none", // none | capacity_asc | capacity_desc
   });
   const [page, setPage] = useState(1);
@@ -279,8 +368,8 @@ export default function Departments() {
   };
 
   const mapRoomTypeToBackend = (roomType) => {
-    if (roomType === "ls") return "phong_kham_ls";
-    if (roomType === "cls") return "phong_cls";
+    if (roomType === "ls") return "ls";
+    if (roomType === "cls") return "cls";
     return null;
   };
 
@@ -288,6 +377,15 @@ export default function Departments() {
   useEffect(() => {
     setPage(1);
   }, [filters.keyword, filters.status, filters.roomType]);
+
+  useEffect(() => {
+    if (!lockedRoomType) return;
+    setFilters((prev) =>
+      prev.roomType === lockedRoomType
+        ? prev
+        : { ...prev, roomType: lockedRoomType }
+    );
+  }, [lockedRoomType]);
 
   // Query với filters từ backend
   const { data: depRoomsData, isLoading: depRoomsLoading } = useDepartmentRooms({
@@ -421,49 +519,39 @@ export default function Departments() {
     const currentRoom = schedule?.dept;
     const roomIsCls = currentRoom ? isClsRoom(currentRoom) : false;
 
-    return staffItems
-      .filter((item) => {
-        const role = item.role || item.vaiTro;
-        const nurseType = String(item.nurseType || item.loaiYTa || "")
-          .trim()
-          .toLowerCase();
-        const workStatus = item.status || item.trangThaiCongTac;
-        const accountStatus = item.trangThaiTaiKhoan || item.statusAccount;
+    const byId = new Map(
+      staffItems.map((item) => [item.id || item.maNhanVien, item])
+    );
+    const options = [];
+    const seen = new Set();
 
-        if (workStatus !== "dang_cong_tac" || accountStatus === "khoa") {
-          return false;
-        }
+    const pushOption = (value, label) => {
+      if (!value || seen.has(value)) return;
+      seen.add(value);
+      options.push({ value, label });
+    };
 
-        if (role === "ky_thuat_vien") {
-          return roomIsCls;
-        }
-
-        if (role !== "y_ta") {
-          return false;
-        }
-
-        if (roomIsCls) {
-          return (
-            nurseType === "" ||
-            nurseType === "cls" ||
-            nurseType === "can_lam_sang"
-          );
-        }
-
-        return (
-          nurseType === "" ||
-          nurseType === "ls" ||
-          nurseType === "lam_sang" ||
-          nurseType === "hanhchinh" ||
-          nurseType === "hanh_chinh" ||
-          nurseType === "hc"
+    staffItems
+      .filter((item) => isEligibleDutyStaff(item, roomIsCls, currentRoom))
+      .forEach((item) => {
+        const value = item.id || item.maNhanVien;
+        pushOption(
+          value,
+          `${item.name || item.hoTen}${item.dept ? ` • ${item.dept}` : ""}`
         );
-      })
-      .map((item) => ({
-        value: item.id || item.maNhanVien,
-        label: `${item.name || item.hoTen}${item.dept ? ` • ${item.dept}` : ""}`,
-      }));
-  }, [adminStaffRes, schedule]);
+      });
+
+    (roomDutyWeek?.items || []).forEach((item) => {
+      const id = item?.maNhanVien;
+      if (!id || seen.has(id)) return;
+
+      const staff = byId.get(id);
+      const name = staff?.name || staff?.hoTen || item?.tenNhanVien || id;
+      pushOption(id, `${name} • Không hợp lệ với loại phòng`);
+    });
+
+    return options;
+  }, [adminStaffRes, roomDutyWeek, schedule]);
 
   // modal chi tiết
   const [detail, setDetail] = useState({ open: false, dept: null });
@@ -508,7 +596,7 @@ export default function Departments() {
     setFilters({
       keyword: "",
       status: "all", // all | online | offline
-      roomType: "all", // all | ls | cls
+      roomType: lockedRoomType || "all", // all | ls | cls
       sort: "none", // none | capacity_asc | capacity_desc
     });
   };
@@ -683,6 +771,7 @@ export default function Departments() {
         anchorEl={filterBtnRef}
         values={filters}
         setValues={setFilters}
+        lockedRoomType={lockedRoomType}
         onReset={handleResetFilters}
       />
 
@@ -721,6 +810,7 @@ export default function Departments() {
         departments={departmentCatalog}
         rooms={roomCatalog}
         services={serviceCatalog}
+        staffMembers={adminStaffRes?.items || []}
         onCreateDepartment={handleCreateDepartment}
         onUpdateDepartment={handleUpdateDepartment}
         onCreateRoom={handleCreateRoom}

@@ -19,11 +19,26 @@ const SHIFT_OPTIONS = [
   { value: "Tối", time: "17:00 - 21:00" },
 ];
 
+function isClsType(type) {
+  const v = String(type || "").toLowerCase();
+  return (
+    v.includes("cls") ||
+    v.includes("cận lâm sàng") ||
+    v.includes("can_lam_sang") ||
+    v.includes("dv") ||
+    v.includes("dich_vu") ||
+    v.includes("dịch vụ")
+  );
+}
+
 function toDateInput(value) {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function startOfWeek(value) {
@@ -52,6 +67,20 @@ export default function RoomScheduleManagerModal({
   isPending = false,
 }) {
   const [draft, setDraft] = useState([]);
+  const roomType =
+    dept?.room?.type ||
+    dept?.roomType ||
+    dept?.loaiPhong ||
+    dept?.loai_phong ||
+    "";
+  const isCls = isClsType(roomType);
+  const fixedStaffLabel = isCls ? "KTV phụ trách" : "Bác sĩ phụ trách";
+  const fixedStaffName = isCls
+    ? dutyWeek?.technicianName || dept?.technicianInCharge || "Chưa gán"
+    : dutyWeek?.doctorName || dept?.doctorInCharge || "Chưa gán";
+  const weekHelperText = isCls
+    ? "Mỗi ca có thể phân công nhiều nhân sự CLS trực. KTV phụ trách cố định được suy ra từ cấu hình phòng hiện tại."
+    : "Mỗi ca có thể phân công nhiều nhân sự trực. Lịch bác sĩ được suy ra từ bác sĩ phụ trách phòng hiện tại.";
 
   const weekStart = useMemo(
     () => startOfWeek(dutyWeek?.today || new Date()),
@@ -160,7 +189,7 @@ export default function RoomScheduleManagerModal({
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   <span className="rounded-full bg-indigo-50 px-2.5 py-1 font-semibold text-indigo-700 ring-1 ring-indigo-200">
-                    Bác sĩ phụ trách: {dutyWeek?.doctorName || dept.doctorInCharge || "Chưa gán"}
+                    {fixedStaffLabel}: {fixedStaffName}
                   </span>
                   <span className="rounded-full bg-slate-50 px-2.5 py-1 font-medium text-slate-600 ring-1 ring-slate-200">
                     Tuần bắt đầu {toDateInput(weekStart).split("-").reverse().join("/")}
@@ -179,7 +208,7 @@ export default function RoomScheduleManagerModal({
 
           <div className="flex-1 overflow-y-auto scrollbar-none px-6 py-5">
             <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
-              Mỗi ca có thể phân công nhiều nhân sự trực. Lịch bác sĩ được suy ra từ bác sĩ phụ trách phòng hiện tại.
+              {weekHelperText}
             </div>
 
             <div className="mt-4 grid gap-4">
@@ -226,7 +255,7 @@ export default function RoomScheduleManagerModal({
                                   key={assignment.tempId}
                                   className="flex items-center gap-2"
                                 >
-                                  <div className="flex-1">
+                                  <div className="flex-1 min-w-0">
                                     <PopoverSelect
                                       name={`assignment-${slot.key}-${index}`}
                                       value={assignment.employeeId}
@@ -258,7 +287,7 @@ export default function RoomScheduleManagerModal({
                                         )
                                       )
                                     }
-                                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-200 text-red-600 transition hover:bg-red-50"
+                                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-200 text-red-600 transition hover:bg-red-50"
                                     title="Gỡ nhân sự"
                                   >
                                     −

@@ -535,6 +535,33 @@ const svcMap = useMemo(() => {
   const serviceName =
     patient?.serviceName || patient?.ten_dich_vu || patient?.dich_vu || "";
 
+  const clsStaffName =
+    patient?.TenKyThuatVienThucHien ||
+    patient?.tenKyThuatVienThucHien ||
+    patient?.TenNhanSuThucHien ||
+    patient?.tenNhanSuThucHien ||
+    patient?.doctor ||
+    "";
+
+  const clsCreatedBy =
+    patient?.TenNguoiLap ||
+    patient?.tenNguoiLap ||
+    "";
+
+  const formatDateTime = (value) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString("vi-VN");
+  };
+
+  const clsStartTime = formatDateTime(
+    patient?.ThoiGianBatDauLuot || patient?.thoiGianBatDauLuot
+  );
+  const clsEndTime = formatDateTime(
+    patient?.ThoiGianKetThucLuot || patient?.thoiGianKetThucLuot
+  );
+
   // Hoàn tất CLS
   async function handleFinishCLS() {
     const maChiTietDv =
@@ -1149,9 +1176,14 @@ const svcMap = useMemo(() => {
                         <b>Phòng thực hiện:</b> {patient.room}
                       </p>
                     )}
-                    {patient.doctor && (
+                    {clsStaffName && (
                       <p>
-                        <b>Người chỉ định:</b> {patient.doctor}
+                        <b>KTV / Nhân sự thực hiện:</b> {clsStaffName}
+                      </p>
+                    )}
+                    {clsCreatedBy && (
+                      <p>
+                        <b>Người lập phiếu:</b> {clsCreatedBy}
                       </p>
                     )}
                   </div>
@@ -1165,6 +1197,16 @@ const svcMap = useMemo(() => {
                     {serviceName && (
                       <p>
                         <b>Loại dịch vụ:</b> {serviceName}
+                      </p>
+                    )}
+                    {clsStartTime && (
+                      <p>
+                        <b>Bắt đầu:</b> {clsStartTime}
+                      </p>
+                    )}
+                    {clsEndTime && (
+                      <p>
+                        <b>Kết thúc:</b> {clsEndTime}
                       </p>
                     )}
                     {(patient.CapCuu || patient.capCuu || patient.cap_cuu) && (
@@ -1284,7 +1326,7 @@ const svcMap = useMemo(() => {
           toast.success(
             result?.status === "deferred"
               ? "Đã lưu hóa đơn ở trạng thái chưa thu."
-              : "Thanh toán thành công!"
+              : "Lập phiếu và thanh toán thành công."
           );
         }}
       />

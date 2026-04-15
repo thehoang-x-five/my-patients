@@ -126,7 +126,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                       label="Mã BN"
                       value={
                         patientCode ? (
-                          <Underlined to={`/patients?pid=${patientCode}`}>
+                          <Underlined to={`/patients?pid=${patientCode}&view=all`}>
                             {patientCode}
                           </Underlined>
                         ) : (
@@ -326,7 +326,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     {/* Link hồ sơ BN */}
                     <div className="text-sm">
                       {patientCode && (
-                        <Underlined to={`/patients?pid=${patientCode}`}>
+                        <Underlined to={`/patients?pid=${patientCode}&view=all`}>
                           Xem hồ sơ bệnh nhân
                         </Underlined>
                       )}
@@ -377,7 +377,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
 
                     <div className="text-sm">
                       {patientCode && (
-                        <Underlined to={`/patients?pid=${patientCode}`}>
+                        <Underlined to={`/patients?pid=${patientCode}&view=all`}>
                           Xem hồ sơ bệnh nhân
                         </Underlined>
                       )}

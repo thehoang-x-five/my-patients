@@ -16,7 +16,6 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
         text-left text-[13px] font-semibold text-slate-600
         shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)]
       "
-      
     >
       {children}
     </thead>
@@ -44,12 +43,11 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
     </td>
   );
 
-  const Row = ({ children, i, isHighlighted }) => (
+  const Row = ({ children, i, isHighlighted, dataHighlightId }) => (
     <motion.tr
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: i * 0.02, duration: 0.2 }}
-      whileHover={{ y: -2 }}
       className={`
         group
         hover:bg-sky-100/50
@@ -58,6 +56,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
         shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)]
         ${isHighlighted ? "flash-emerald-once z-10" : "odd:bg-slate-50/40"}
       `}
+      {...(dataHighlightId ? { "data-highlight-id": dataHighlightId } : {})}
     >
       {children}
     </motion.tr>
@@ -125,7 +124,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
 
   const renderVisitTypeChip = (row) => {
     const t = (row.type || "").toLowerCase();
-    if (t === "service" || t === "dv"  ||t.includes("service")) {
+    if (t === "service" || t === "dv" || t.includes("service")) {
       return (
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
           Khám dịch vụ
@@ -196,7 +195,12 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
               const visitCode = getVisitCode(r);
               const isHighlight = highlightId && (visitCode === highlightId || r.id === highlightId);
               return (
-              <Row key={`${visitCode}-${i}`} i={i} isHighlighted={isHighlight}>
+              <Row
+                key={`${visitCode}-${i}`}
+                i={i}
+                isHighlighted={isHighlight}
+                dataHighlightId={visitCode}
+              >
                 <Td first>
                   <span className="inline-flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shadow-[0_0_0_3px_rgba(56,189,248,.25)]" />
@@ -259,7 +263,12 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
               const txnCode = r.invoiceId || r.id;
               const isHighlight = highlightId && txnCode === highlightId;
               return (
-              <Row key={`${txnCode}-${i}`} i={i} isHighlighted={isHighlight}>
+              <Row
+                key={`${txnCode}-${i}`}
+                i={i}
+                isHighlighted={isHighlight}
+                dataHighlightId={txnCode}
+              >
                 <Td first>
                   <span className="inline-flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_0_3px_rgba(6,182,212,.25)]" />

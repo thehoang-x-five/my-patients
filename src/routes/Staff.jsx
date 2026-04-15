@@ -40,6 +40,7 @@ import {
   useUpdateStaffDutyWeek,
   subscribeStaff,
   useDepartments,
+  useStaffDetailQuery,
 } from "../api/staff.js";
 import { useRoomCatalog } from "../api/departments.js";
 
@@ -152,23 +153,23 @@ export default function Staff() {
     role === "doctor"
       ? "bac_si"
       : role === "nurse"
-      ? "y_ta"
-      : role === "technician"
-      ? "ky_thuat_vien"
-      : role === "adminRole"
-      ? "admin"
-      : "";
+        ? "y_ta"
+        : role === "technician"
+          ? "ky_thuat_vien"
+          : role === "adminRole"
+            ? "admin"
+            : "";
 
   const apiStatus =
     filters.status === "all"
       ? undefined
       : filters.status === "online"
-      ? "dang_cong_tac"
-      : filters.status === "pause"
-      ? "tam_nghi"
-      : filters.status === "offline"
-      ? "nghi_viec"
-      : undefined;
+        ? "dang_cong_tac"
+        : filters.status === "pause"
+          ? "tam_nghi"
+          : filters.status === "offline"
+            ? "nghi_viec"
+            : undefined;
 
   const apiNurseKind =
     role === "nurse" && filters.nurseType !== "all"
@@ -176,7 +177,10 @@ export default function Staff() {
       : undefined;
 
   const apiDept = filters.dept || undefined;
-  const pageSize = viewMode === "table" ? TABLE_PAGE_SIZE : CARD_PAGE_SIZE;
+  const isAdminRoleView = userIsAdmin && role === "adminRole";
+  const effectiveViewMode = isAdminRoleView ? "table" : viewMode;
+  const pageSize =
+    effectiveViewMode === "table" ? TABLE_PAGE_SIZE : CARD_PAGE_SIZE;
 
   // Non-admin: dùng staff API bình thường
   const { data: staffData, isLoading: staffLoading } = useStaff({
@@ -194,15 +198,16 @@ export default function Staff() {
     () => ({
       q: deferredKeyword || undefined,
       vaiTro: apiRole || undefined,
+      loaiYTa: apiNurseKind,
       trangThai: apiStatus,
       maKhoa: apiDept,
       page,
       pageSize,
     }),
-    [deferredKeyword, apiRole, apiStatus, apiDept, page, pageSize]
+    [deferredKeyword, apiRole, apiNurseKind, apiStatus, apiDept, page, pageSize]
   );
 
-  const isTableAdmin = userIsAdmin && viewMode === "table";
+  const isTableAdmin = userIsAdmin && effectiveViewMode === "table";
 
   const { data: adminData, isLoading: adminLoading } = useAdminUsers(
     adminFilter,
@@ -280,19 +285,23 @@ export default function Staff() {
     () =>
       userIsAdmin
         ? [
-            { key: "all", label: lang === "en" ? "All" : "Tất cả" },
-            { key: "doctor", label: lang === "en" ? "Doctors" : "Bác sĩ" },
-            { key: "nurse", label: lang === "en" ? "Nurses" : "Y tá" },
-            {
-              key: "technician",
-              label: lang === "en" ? "Technicians" : "KTV",
-            },
-            { key: "adminRole", label: "Admin" },
-          ]
+          { key: "all", label: lang === "en" ? "All" : "Tất cả" },
+          { key: "doctor", label: lang === "en" ? "Doctors" : "Bác sĩ" },
+          { key: "nurse", label: lang === "en" ? "Nurses" : "Y tá" },
+          {
+            key: "technician",
+            label: lang === "en" ? "Technicians" : "KTV",
+          },
+          { key: "adminRole", label: "Admin" },
+        ]
         : [
-            { key: "doctor", label: lang === "en" ? "Doctors" : "Bác sĩ" },
-            { key: "nurse", label: lang === "en" ? "Nurses" : "Y tá" },
-          ],
+          { key: "doctor", label: lang === "en" ? "Doctors" : "Bác sĩ" },
+          { key: "nurse", label: lang === "en" ? "Nurses" : "Y tá" },
+          {
+            key: "technician",
+            label: lang === "en" ? "Technicians" : "KTV",
+          },
+        ],
     [lang, userIsAdmin]
   );
 
@@ -300,26 +309,33 @@ export default function Staff() {
     () =>
       userIsAdmin
         ? [
-            { key: "all", label: "Tất cả" },
-            { key: "doctor", label: "Bác sĩ" },
-            { key: "nurse", label: "Y tá" },
-            { key: "technician", label: "KTV" },
-            { key: "adminRole", label: "Admin" },
-          ]
+          { key: "all", label: "Tất cả" },
+          { key: "doctor", label: "Bác sĩ" },
+          { key: "nurse", label: "Y tá" },
+          { key: "technician", label: "KTV" },
+          { key: "adminRole", label: "Admin" },
+        ]
         : [
-            { key: "doctor", label: "Bác sĩ" },
-            { key: "nurse", label: "Y tá" },
-          ],
+          { key: "doctor", label: "Bác sĩ" },
+          { key: "nurse", label: "Y tá" },
+          { key: "technician", label: "KTV" },
+        ],
     [userIsAdmin]
   );
 
   // ====== LỊCH TRỰC + LỊCH LÀM VIỆC ======
   const activeId =
     active?.id ?? active?.maNhanSu ?? active?.maNhanVien ?? null;
-  const todayStr = useMemo(
-    () => new Date().toISOString().slice(0, 10),
-    []
-  );
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
+  const { data: activeStaffDetail } = useStaffDetailQuery(activeId, {
+    enabled: userIsAdmin && showSchedule && !!activeId,
+  });
 
   const { data: duty } = useDutyRoom(activeId, todayStr);
   const { data: sched } = useStaffSchedule(activeId);
@@ -396,18 +412,18 @@ export default function Staff() {
   );
 
   const confirmLock = useCallback(() => {
-      if (!lockTarget) return;
-      lockUnlock.mutate({
-        id: lockTarget.id || lockTarget.maNhanVien,
-        data: { TrangThai: "khoa" },
-      }, {
-        onSuccess: () => {
-          toast.success("Đã khóa tài khoản");
-          setLockTarget(null);
-        },
-        onError: (error) => toast.error(error?.message || "Không thể khóa tài khoản"),
-      });
-    },
+    if (!lockTarget) return;
+    lockUnlock.mutate({
+      id: lockTarget.id || lockTarget.maNhanVien,
+      data: { TrangThai: "khoa" },
+    }, {
+      onSuccess: () => {
+        toast.success("Đã khóa tài khoản");
+        setLockTarget(null);
+      },
+      onError: (error) => toast.error(error?.message || "Không thể khóa tài khoản"),
+    });
+  },
     [lockTarget, lockUnlock]
   );
 
@@ -464,12 +480,15 @@ export default function Staff() {
             closeSchedule();
           },
           onError: (error) => {
-            toast.error(error?.message || "Không thể cập nhật lịch làm");
+            toast.error(
+              error?.message ||
+              "Không thể cập nhật lịch làm"
+            );
           },
         }
       );
     },
-    [active, updateStaffDutyWeek]
+    [active, closeSchedule, updateStaffDutyWeek]
   );
 
   // ====== REALTIME ======
@@ -487,8 +506,15 @@ export default function Staff() {
   }, [userIsAdmin]);
 
   useEffect(() => {
+    if (isAdminRoleView) {
+      setViewMode("table");
+      setShowSchedule(false);
+    }
+  }, [isAdminRoleView]);
+
+  useEffect(() => {
     setPage(1);
-  }, [role, filters.keyword, filters.status, filters.dept, filters.nurseType, viewMode]);
+  }, [role, filters.keyword, filters.status, filters.dept, filters.nurseType, effectiveViewMode]);
 
   useEffect(() => {
     if (!isLoading && page > totalPages) {
@@ -523,7 +549,7 @@ export default function Staff() {
 
           {(canToggleStaffView(user) || userIsAdmin) && (
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-              {canToggleStaffView(user) && (
+              {canToggleStaffView(user) && !isAdminRoleView && (
                 <ViewToggle mode={viewMode} onChange={setViewMode} />
               )}
 
@@ -565,12 +591,13 @@ export default function Staff() {
               className="flex-1 min-h-0"
             >
               <div className="h-full min-h-0 overflow-auto scrollbar-none">
-                {viewMode === "table" && canViewStaffAuth(user) ? (
+                {effectiveViewMode === "table" && canViewStaffAuth(user) ? (
                   <StaffTable
                     items={items}
                     showAuth={canViewStaffAuth(user)}
+                    adminMode={isAdminRoleView}
                     onDetail={openDetail}
-                    onSchedule={openSchedule}
+                    onSchedule={isAdminRoleView ? undefined : openSchedule}
                     onEdit={openEdit}
                     onLock={canLockUnlockStaff(user) ? handleLock : undefined}
                     onUnlock={
@@ -643,7 +670,7 @@ export default function Staff() {
       {userIsAdmin ? (
         <StaffScheduleManagerModal
           open={showSchedule}
-          item={active}
+          item={activeStaffDetail || active}
           today={sched?.today || todayStr}
           weekItems={sched?.week || []}
           rooms={roomCatalog}

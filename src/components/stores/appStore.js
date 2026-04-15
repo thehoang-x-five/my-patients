@@ -331,6 +331,11 @@ const createUiSlice = (set, get) => ({
   setHighlightRoomId: (roomId) => set({ highlightRoomId: roomId }),
   clearHighlightRoom: () => set({ highlightRoomId: null }),
 
+  // ✅ Highlight for History page (visits/transactions)
+  highlightHistoryId: null,
+  setHighlightHistoryId: (id) => set({ highlightHistoryId: id }),
+  clearHighlightHistory: () => set({ highlightHistoryId: null }),
+
   // ----- Prefill & UX cho trang Lịch hẹn -----
   // { patient_name, patient_code, note, type, dept, doctor, date, time }
   apptPrefill: null,

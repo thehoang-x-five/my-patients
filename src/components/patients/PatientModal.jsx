@@ -1,4 +1,4 @@
-﻿﻿// src/components/patients/PatientModal.jsx
+// src/components/patients/PatientModal.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -54,6 +54,7 @@ import { saveFollowupContext } from "../../utils/followupContext.js";
 // Permission helpers
 import {
   canCreateAppointment,
+  isReceptionNurse,
 } from "../../utils/permissions.js";
 
 // (giả sử các helper addVisit, addTransaction, listAppointmentHolds, getLastVisit,
@@ -76,6 +77,7 @@ export default function PatientModal({
   // ✅ Check permissions
   const user = useAuthStore((s) => s.user);
   const canCreateAppt = canCreateAppointment(user);
+  const isReceptionUser = isReceptionNurse(user);
 
 
 
@@ -475,6 +477,7 @@ export default function PatientModal({
   // Override service items when prefetched from CLS orders
   const [servicePrefill, setServicePrefill] = useState([]);
   const [serviceRoomPrefill, setServiceRoomPrefill] = useState([]);
+  const [serviceStaffPrefill, setServiceStaffPrefill] = useState([]);
   const [serviceNotePrefill, setServiceNotePrefill] = useState([]);
   const [servicePricePrefill, setServicePricePrefill] = useState([]);
   const [clsOrderId, setClsOrderId] = useState("");
@@ -1159,35 +1162,69 @@ export default function PatientModal({
             const rooms = list.map(
               (it) => it.TenPhong || it.MaPhong || it.tenPhong || ""
             );
+            const staffs = list.map(
+              (it) =>
+                it.TenKyThuatVienThucHien ||
+                it.tenKyThuatVienThucHien ||
+                it.TenNhanSuThucHien ||
+                it.tenNhanSuThucHien ||
+                it.TenYTaThucHien ||
+                it.tenYTaThucHien ||
+                ""
+            );
             const notes = list.map((it) => it.GhiChu || it.ghiChu || "");
             const prices = list.map((it) => Number(it.PhiDV || it.phiDV || 0) || 0);
             setServicePrefill(services);
             setServiceRoomPrefill(rooms);
+            setServiceStaffPrefill(staffs);
             setServiceNotePrefill(notes);
             setServicePricePrefill(prices);
             const staffItem = list.find(
               (it) =>
+                it.MaKyThuatVienThucHien ||
+                it.maKyThuatVienThucHien ||
+                it.MaNhanSuThucHien ||
+                it.maNhanSuThucHien ||
                 it.MaYTaThucHien ||
                 it.maYTaThucHien ||
                 it.MaNguoiLap ||
                 it.NguoiLap
             );
             const staffCode =
+              staffItem?.MaKyThuatVienThucHien ||
+              staffItem?.maKyThuatVienThucHien ||
+              staffItem?.MaNhanSuThucHien ||
+              staffItem?.maNhanSuThucHien ||
               staffItem?.MaYTaThucHien ||
               staffItem?.maYTaThucHien ||
               staffItem?.MaNguoiLap ||
               staffItem?.NguoiLap ||
+              first?.MaKyThuatVienThucHien ||
+              first?.MaNhanSuThucHien ||
               first?.PhieuKhamClsFull?.MaYTaThucHien ||
               first?.PhieuKhamClsFull?.MaNguoiLap ||
               first?.MaNguoiLap ||
               "";
             setClsStaffCode(staffCode);
             setClsOrderId(first?.MaPhieuKhamCls || first?.maPhieuKhamCls || "");
+            setExam((s) => ({
+              ...s,
+              note:
+                first?.GhiChu ||
+                first?.ghiChu ||
+                s.note ||
+                "",
+            }));
             // Prefill khoa/phòng nếu có
             const tenKhoa =
               first?.TenKhoa || first?.tenKhoa || first?.MaKhoa || "";
             const tenPhong =
-              first?.TenPhong || first?.tenPhong || first?.MaPhong || "";
+              first?.TenPhong ||
+              first?.tenPhong ||
+              first?.MaPhong ||
+              list[0]?.TenPhong ||
+              list[0]?.MaPhong ||
+              "";
             if (tenKhoa || tenPhong) {
               setExam((s) => ({
                 ...s,
@@ -1203,6 +1240,7 @@ export default function PatientModal({
           else {
             setServicePrefill([]);
             setServiceRoomPrefill([]);
+            setServiceStaffPrefill([]);
             setServiceNotePrefill([]);
             setServicePricePrefill([]);
             setClsOrderId("");
@@ -1212,6 +1250,7 @@ export default function PatientModal({
           console.warn("Prefetch CLS orders failed:", err);
           setServicePrefill([]);
           setServiceRoomPrefill([]);
+          setServiceStaffPrefill([]);
           setServiceNotePrefill([]);
           setServicePricePrefill([]);
           setClsOrderId("");
@@ -1221,6 +1260,7 @@ export default function PatientModal({
     } else {
       setServicePrefill([]);
       setServiceRoomPrefill([]);
+      setServiceStaffPrefill([]);
       setServiceNotePrefill([]);
       setServicePricePrefill([]);
       setClsOrderId("");
@@ -1379,6 +1419,14 @@ export default function PatientModal({
 
   const [serviceNotes, setServiceNotes] = useState([]);
   const [serviceRooms, setServiceRooms] = useState([]);
+  const serviceStaffs = useMemo(() => {
+    if (servicePrefill.length) {
+      return serviceStaffPrefill.length
+        ? serviceStaffPrefill
+        : serviceItems.map(() => "");
+    }
+    return serviceItems.map(() => "");
+  }, [serviceItems, servicePrefill, serviceStaffPrefill]);
   useEffect(() => {
     if (servicePrefill.length) {
       setServiceNotes(serviceNotePrefill.length ? serviceNotePrefill : serviceItems.map(() => ""));
@@ -1769,7 +1817,7 @@ export default function PatientModal({
     toast.success(
       result?.status === "deferred"
         ? "Đã lưu hóa đơn ở trạng thái chưa thu."
-        : "Thanh toán thành công."
+        : "Lập phiếu và thanh toán thành công."
     );
 
     if (nextPrintPayload) {
@@ -2137,7 +2185,7 @@ export default function PatientModal({
 
       try {
         await updateClsOrderStatus(clsOrderId, "dang_thuc_hien");
-        toast.success("Lập phiếu CLS thành công.");
+        // Toast sẽ hiển thị sau khi thanh toán xong (trong handlePaymentComplete)
 
         // Refetch patient detail to get updated status
         if (refetchPatientDetail) {
@@ -2187,6 +2235,7 @@ export default function PatientModal({
               room: serviceRooms[i] || `Phòng ${sv}`,
               price: priceOfService(sv),
               note: serviceNotes[i] || "",
+              technician: serviceStaffs[i] || "",
             })),
           },
         });
@@ -2295,15 +2344,8 @@ export default function PatientModal({
         clinicalExamResult?.nguoiLap ||
         tenNguoiLapPhieu;
 
-      // Show BE message if provided
-      const createdMsg =
-        clinicalExamResult?.message ||
-        clinicalExamResult?.Message ||
-        clinicalExamResult?.msg ||
-        clinicalExamResult?.Msg;
-      if (createdMsg) {
-        toast.success(createdMsg);
-      }
+      // Toast sẽ hiển thị sau khi thanh toán xong (trong handlePaymentComplete)
+      // Không hiển thị toast BE message ở đây để tránh toast trùng lặp
 
       // Lưu mã phiếu khám LS để process-mode có thể lấy final diagnosis
       if (maPhieuKham) {
@@ -2897,6 +2939,7 @@ export default function PatientModal({
                     setServiceNotes={setServiceNotes}
                     serviceRooms={serviceRooms}
                     setServiceRooms={setServiceRooms}
+                    serviceStaffs={serviceStaffs}
                     priceOfService={priceOfService}
                     totalServiceFee={totalServiceFee}
                     examExtras={examExtras}
@@ -2909,6 +2952,7 @@ export default function PatientModal({
                     handleDirectExam={handleDirectExam}
                     handleFollowupExam={handleFollowupExam}
                     currentUser={currentUserInfo}
+                    serviceNoteReadOnly={isServiceIntake && isReceptionUser}
                   />
                 )}
 

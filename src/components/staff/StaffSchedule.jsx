@@ -1,7 +1,10 @@
-// src/components/staff/StaffSchedule.jsx
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
+import {
+  formatDisplayText,
+  formatRoleLabel,
+} from "../../utils/textFormatters.js";
 
 const Backdrop = ({ open, onClick, children }) => (
   <AnimatePresence>
@@ -20,6 +23,15 @@ const Backdrop = ({ open, onClick, children }) => (
 );
 
 const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_LABELS = {
+  Mon: "Thứ 2",
+  Tue: "Thứ 3",
+  Wed: "Thứ 4",
+  Thu: "Thứ 5",
+  Fri: "Thứ 6",
+  Sat: "Thứ 7",
+  Sun: "Chủ nhật",
+};
 const dayKey = () =>
   ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
 
@@ -32,47 +44,30 @@ const SHIFT_HOURS = {
 const normalizeShiftLabel = (shift) => {
   if (!shift) return null;
   const s = String(shift).trim();
-  if (!s) return null;
   const lower = s.toLowerCase();
-
   if (lower === "sang" || lower === "sáng") return "Sáng";
   if (lower === "chieu" || lower === "chiều") return "Chiều";
   if (lower === "toi" || lower === "tối") return "Tối";
   if (lower === "nghi" || lower === "nghỉ") return "Nghỉ";
-
   return s;
 };
 
 const formatShift = (shiftRaw, startTime, endTime) => {
   if (!shiftRaw || shiftRaw === "—") return "—";
-
   const label = normalizeShiftLabel(shiftRaw);
   if (!label) return "—";
   if (label === "Nghỉ") return "Nghỉ";
 
-  const toHM = (t) => {
-    if (!t) return "";
-    const str = String(t);
-    const parts = str.split(":");
-    if (parts.length >= 2) {
-      const hh = parts[0].padStart(2, "0");
-      const mm = parts[1].padStart(2, "0");
-      return `${hh}:${mm}`;
-    }
-    return str;
+  const toHM = (value) => {
+    if (!value) return "";
+    const parts = String(value).split(":");
+    if (parts.length < 2) return String(value);
+    return `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}`;
   };
 
   const start = toHM(startTime);
   const end = toHM(endTime);
-
-  let timeRange = "";
-  if (start && end) {
-    timeRange = `${start}–${end}`;
-  } else {
-    const hours = SHIFT_HOURS[label];
-    if (hours) timeRange = hours;
-  }
-
+  const timeRange = start && end ? `${start}–${end}` : SHIFT_HOURS[label] || "";
   return timeRange ? `${label} (${timeRange})` : label;
 };
 
@@ -84,37 +79,39 @@ export default function StaffSchedule({
   onClose,
 }) {
   if (!item) return null;
+  const displayName = item.name || item.hoTen || item.maNhanVien || "Nhân sự";
 
   const rawRole = item.role || item.vaiTro || item.VaiTro || null;
-    const isDoctor = rawRole === "bac_si" || rawRole === "doctor";
-    const isNurse = rawRole === "y_ta" || rawRole === "nurse";
-    const thirdColumnHeader = isDoctor ? "Trạng thái" : "Phòng/Bàn";
-  // Chuẩn hóa dutyRooms (api trả về mảng week) -> map theo thứ
+  const isDoctor = rawRole === "bac_si" || rawRole === "doctor";
+  const isTechnician =
+    rawRole === "ky_thuat_vien" || rawRole === "technician";
+  const thirdColumnHeader = (isDoctor || isTechnician)
+    ? "Trạng thái"
+    : "Phòng/Bàn";
+
+  const modalTitle = isTechnician
+    ? "Lịch làm CLS"
+    : isDoctor
+      ? "Lịch phòng khám"
+      : "Lịch làm & phòng trực";
+
   const dutyByDay = {};
-  if (dutyRooms) {
-    if (Array.isArray(dutyRooms)) {
-      for (const row of dutyRooms) {
-        if (!row) continue;
-        const day = row.day || row.Thu || row.thu;
-        if (!day) continue;
-        dutyByDay[day] = row;
-      }
-    } else if (typeof dutyRooms === "object") {
-      WEEK.forEach((d) => {
-        const value = dutyRooms[d];
-        if (value == null) return;
-        if (typeof value === "object") {
-          dutyByDay[d] = { day: d, ...value };
-        } else {
-          dutyByDay[d] = { day: d, tenPhong: value };
-        }
-      });
+  if (Array.isArray(dutyRooms)) {
+    for (const row of dutyRooms) {
+      if (!row?.day) continue;
+      dutyByDay[row.day] = row;
     }
+  } else if (dutyRooms && typeof dutyRooms === "object") {
+    WEEK.forEach((day) => {
+      const value = dutyRooms[day];
+      if (!value) return;
+      dutyByDay[day] =
+        typeof value === "object" ? { day, ...value } : { day, tenPhong: value };
+    });
   }
 
   const getDayData = (day) => {
     const duty = dutyByDay[day] || {};
-
     const shiftRaw =
       (schedule && schedule[day]) ??
       duty.shift ??
@@ -123,123 +120,69 @@ export default function StaffSchedule({
       duty.ca_truc ??
       null;
 
-    const start =
-      duty.gioBatDau ??
-      duty.gio_bat_dau ??
-      duty.gioBD ??
-      duty.gio_bd ??
-      duty.GioBatDau ??
-      null;
-    const end =
-      duty.gioKetThuc ??
-      duty.gio_ket_thuc ??
-      duty.gioKT ??
-      duty.gio_kt ??
-      duty.GioKetThuc ??
-      null;
+    const shiftDisplay = formatShift(
+      shiftRaw,
+      duty.gioBatDau ?? duty.GioBatDau,
+      duty.gioKetThuc ?? duty.GioKetThuc
+    );
 
-    const shiftDisplay = formatShift(shiftRaw, start, end);
-
-    let roomText = "—";
-    if (isDoctor) {
-      // Bác sĩ: cột thứ 3 hiển thị trạng thái làm việc
+    if (isDoctor || isTechnician) {
       const label = normalizeShiftLabel(shiftRaw);
-      if (!label || label === "Nghỉ") roomText = "Nghỉ";
-      else roomText = "Làm việc";
-    } else {
-      // Y tá / điều dưỡng: cột thứ 3 là phòng/bàn
-      const name =
-        duty.tenPhong ??
-        duty.tenPhongHoacBanHomNay ??
-        duty.tenBan ??
-        duty.TenPhong ??
-        duty.TenPhongHoacBanHomNay ??
-        duty.maPhong ??
-        null;
-      roomText = name || "—";
+      return {
+        shiftDisplay,
+        roomText: !label || label === "Nghỉ" ? "Nghỉ" : "Làm việc",
+      };
     }
 
-    return { shiftDisplay, roomText };
+    return {
+      shiftDisplay,
+      roomText: formatDisplayText(
+        duty.tenPhong ??
+          duty.tenPhongHoacBanHomNay ??
+          duty.TenPhong ??
+          duty.maPhong,
+        "—"
+      ),
+    };
   };
 
   const today = dayKey();
   const todayData = getDayData(today);
-  const shiftToday = todayData.shiftDisplay || "—";
-  const roomToday = todayData.roomText || "—";
 
-  // In lịch KHÔNG mở tab mới: dùng iframe ẩn
   function printSched() {
-    const rowsHtml = WEEK.map((d) => {
-      const { shiftDisplay, roomText } = getDayData(d);
-      const shift = shiftDisplay || "—";
-      const third = roomText || "—";
-      return `<tr>
-        <td>${d}</td>
-        <td>${shift}</td>
-        <td>${third}</td>
-      </tr>`;
+    const rowsHtml = WEEK.map((day) => {
+      const { shiftDisplay, roomText } = getDayData(day);
+      return `<tr><td>${DAY_LABELS[day] || day}</td><td>${shiftDisplay || "—"}</td><td>${roomText || "—"}</td></tr>`;
     }).join("");
 
     const html = `
       <html>
         <head>
-          <title>Lịch trực - ${item.name}</title>
+          <title>Lịch làm - ${displayName}</title>
           <style>
             * { box-sizing: border-box; }
-            body {
-              font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-              padding: 16px;
-              color: #0f172a;
-            }
-            h1 {
-              font-size: 20px;
-              margin: 0 0 4px 0;
-            }
-            p {
-              margin: 0 0 8px 0;
-              font-size: 13px;
-              color: #475569;
-            }
-            table {
-              border-collapse: collapse;
-              width: 100%;
-              margin-top: 8px;
-              font-size: 13px;
-            }
-            th, td {
-              border: 1px solid #e2e8f0;
-              padding: 6px 8px;
-              text-align: left;
-            }
-            th {
-              background: #e6fcf5;
-              color: #134e4a;
-              font-weight: 600;
-            }
-            tbody tr:nth-child(even) {
-              background: #f9fafb;
-            }
-            @media print {
-              body {
-                padding: 8px;
-              }
-            }
+            body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 16px; color: #0f172a; }
+            h1 { font-size: 20px; margin: 0 0 4px 0; }
+            p { margin: 0 0 8px 0; font-size: 13px; color: #475569; }
+            table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 13px; }
+            th, td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; }
+            th { background: #e6fcf5; color: #134e4a; font-weight: 600; }
+            tbody tr:nth-child(even) { background: #f9fafb; }
           </style>
         </head>
         <body>
-          <h1>Lịch trực: ${item.name}</h1>
-          <p>Khoa: ${item.dept || "-"}</p>
+          <h1>Lịch làm: ${displayName}</h1>
+          <p>Vai trò: ${formatRoleLabel(rawRole, "Nhân sự y tế")}</p>
+          <p>Khoa: ${item.dept || item.tenKhoa || "-"}</p>
           <table>
             <thead>
               <tr>
                 <th>Thứ</th>
-                <th>Ca &amp; giờ</th>
+                <th>Ca & giờ</th>
                 <th>${thirdColumnHeader}</th>
               </tr>
             </thead>
-            <tbody>
-              ${rowsHtml}
-            </tbody>
+            <tbody>${rowsHtml}</tbody>
           </table>
         </body>
       </html>
@@ -258,10 +201,9 @@ export default function StaffSchedule({
     const doc = iframe.contentDocument || (win && win.document);
     if (!doc || !win) return;
 
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-
+    doc.open();
+    doc.write(html);
+    doc.close();
     win.focus();
     win.print();
 
@@ -280,16 +222,15 @@ export default function StaffSchedule({
         className="w-full max-w-xl max-h-[90vh] rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* HEADER (Sticky) */}
         <header className="sticky top-0 z-10 backdrop-blur bg-white/80 border-b border-slate-200 p-4 flex items-center justify-between">
           <div>
             <h2 className="text-[15px] font-semibold text-slate-900">
-              Lịch trực &amp; bàn trực
+              {modalTitle}
             </h2>
             <p className="text-[13px] text-slate-500">
               Nhân sự:{" "}
               <span className="font-medium text-slate-800">
-                {item.name} – {item.position}
+                {displayName} – {formatRoleLabel(rawRole, "Nhân sự y tế")}
               </span>
             </p>
           </div>
@@ -313,109 +254,45 @@ export default function StaffSchedule({
           </div>
         </header>
 
-        {/* BODY (Scrollable) */}
-        <div className="flex-1 overflow-y-auto scrollbar-none p-4 space-y-3 text-[14px]">
-          <Card className ="border-0">
-            <div className="flex items-center justify-between text-[13px] text-slate-600 mb-3">
-              <span className="text-[14px]">
-                Hôm nay:{" "}
-                <b className="font-semibold text-teal-700">
-                  {today}
-                </b>{" "}
-                • Ca:{" "}
-                <b className="font-semibold text-teal-700">
-                  {shiftToday}
-                </b>{" "}
-                • {thirdColumnHeader}:{" "}
-                <b className="font-semibold text-teal-700">
-                  {roomToday}
-                </b>
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-[13px] text-slate-500 hover:text-slate-800 px-2 py-1"
-                onClick={printSched}
-              >
-                In
-              </Button>
-            </div>
+        <div className="p-4 border-b border-slate-100 bg-slate-50/60">
+          <div className="flex flex-wrap gap-2 text-[12px]">
+            <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-1 text-teal-700 ring-1 ring-teal-200">
+              Hôm nay: {todayData.shiftDisplay || "—"}
+            </span>
+            <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-1 text-sky-700 ring-1 ring-sky-200">
+              {thirdColumnHeader}: {todayData.roomText || "—"}
+            </span>
+          </div>
+        </div>
 
-            <div className="max-h-80 overflow-y-auto scrollbar-none text-[13px] rounded-lg border border-slate-200">
-              <table className="w-full border-collapse">
-                <thead className="sticky top-0 z-10 bg-slate-50">
-                  <tr className="border-b border-slate-200">
-                    <th className="px-3 py-2 text-left font-semibold text-slate-700 w-16 text-[13px]">
-                      Thứ
-                    </th>
-                    <th className="px-3 py-2 text-left font-semibold text-slate-700 text-[13px]">
-                      Ca &amp; giờ
-                    </th>
-                    <th className="px-3 py-2 text-left font-semibold text-slate-700 w-32 text-[13px]">
-                      {thirdColumnHeader}
-                    </th>
+        <div className="flex-1 overflow-y-auto p-4">
+          <table className="w-full text-left text-[13px]">
+            <thead className="text-slate-500 uppercase tracking-wide text-[11px]">
+              <tr className="border-b border-slate-100">
+                <th className="py-2 font-semibold">Thứ</th>
+                <th className="py-2 font-semibold">Ca & giờ</th>
+                <th className="py-2 font-semibold">{thirdColumnHeader}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {WEEK.map((day) => {
+                const { shiftDisplay, roomText } = getDayData(day);
+                const isToday = day === today;
+                return (
+                  <tr
+                    key={day}
+                    className={isToday ? "bg-teal-50/40" : "bg-white"}
+                  >
+                    <td className="py-3 font-medium text-slate-800">{DAY_LABELS[day] || day}</td>
+                    <td className="py-3 text-slate-600">{shiftDisplay || "—"}</td>
+                    <td className="py-3 text-slate-600">{roomText || "—"}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {WEEK.map((d) => {
-                    const isToday = d === today;
-                    const { shiftDisplay, roomText } = getDayData(d);
-                    const shift = shiftDisplay || "—";
-                    const third = roomText || "—";
-
-                    return (
-                      <motion.tr
-                        key={d}
-                        whileHover={{ scale: 1.002, y: -1 }}
-                        className={`border-b border-slate-100 last:border-b-0 transition-colors ${
-                          isToday
-                            ? "bg-teal-50"
-                            : "hover:bg-teal-50/40"
-                        }`}
-                      >
-                        <td
-                          className={`px-3 py-2 ${
-                            isToday
-                              ? "font-semibold text-teal-800"
-                              : ""
-                          }`}
-                        >
-                          {d}
-                        </td>
-                        <td className="px-3 py-2">
-                          {shift === "—" ? (
-                            <span className="text-slate-400">—</span>
-                          ) : (
-                            shift
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          {third === "—" ? (
-                            <span className="text-slate-400">—</span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 ring-teal-200 text-[12px]">
-                              {third}
-                            </span>
-                          )}
-                        </td>
-                      </motion.tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </motion.section>
     </Backdrop>
-  );
-}
-
-// Card wrapper (giữ nguyên, nếu anh đang dùng Card riêng thì bỏ/đổi import cho đúng)
-function Card({ children ,className}) {
-  return (
-    <section className={`rounded-xl border border-slate-200 bg-white shadow-sm p-4 ${className}`}>
-      {children}
-    </section>
   );
 }

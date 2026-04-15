@@ -24,6 +24,7 @@ export default function PatientExamMode({
   setServiceNotes,
   serviceRooms,
   setServiceRooms,
+  serviceStaffs = [],
   priceOfService,
   totalServiceFee,
   examExtras,
@@ -39,6 +40,7 @@ export default function PatientExamMode({
   clsItems = [],
   clsResults = [],
   currentUser,
+  serviceNoteReadOnly = false,
 }) {
   // ====== 1. Mã lịch hẹn + loại hẹn + hình thức tiếp nhận ======
   const apptCode =
@@ -429,36 +431,53 @@ export default function PatientExamMode({
                     key={idx}
                     className="rounded-xl p-2 bg-white ring-1 ring-amber-100"
                   >
-                    <div className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-6 md:col-span-6 font-semibold text-sm truncate">
+                    <div className="grid grid-cols-12 gap-2 items-start">
+                      <div className="col-span-12 md:col-span-5 font-semibold text-sm truncate">
                         {sv}
                       </div>
-                      <div className="col-span-3 md:col-span-3 text-sm font-bold text-emerald-700 tabular-nums">
+                      <div className="col-span-4 md:col-span-2 text-sm font-bold text-emerald-700 tabular-nums">
                         {serviceItems.length
                           ? priceOfService(sv).toLocaleString("vi-VN")
                           : 0}
                       </div>
-                      <div className="col-span-3 md:col-span-3">
+                      <div className="col-span-4 md:col-span-2">
+                        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                          Phòng
+                        </div>
                         <div className="w-full rounded-lg px-2 py-1.5 ring-1 ring-slate-200 bg-slate-50 text-sm text-slate-700 min-h-[34px] flex items-center">
                           {serviceRooms[idx] || "—"}
+                        </div>
+                      </div>
+                      <div className="col-span-4 md:col-span-3">
+                        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                          KTV / Nhân sự
+                        </div>
+                        <div className="w-full rounded-lg px-2 py-1.5 ring-1 ring-slate-200 bg-slate-50 text-sm text-slate-700 min-h-[34px] flex items-center">
+                          {serviceStaffs[idx] || "Chưa phân công"}
                         </div>
                       </div>
                     </div>
                     <input
                       value={serviceNotes[idx] || ""}
                       onChange={(e) => {
+                        if (serviceNoteReadOnly) return;
                         const v = e.target.value;
                         setServiceNotes((s) =>
                           s.map((x, i) => (i === idx ? v : x))
                         );
                       }}
-                      className="mt-2 w-full rounded-lg px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
+                      className={`mt-2 w-full rounded-lg px-3 py-2 ring-1 outline-none text-sm ${
+                        serviceNoteReadOnly
+                          ? "ring-slate-200 bg-slate-50 text-slate-700"
+                          : "ring-slate-300 focus:ring-2 focus:ring-emerald-500 bg-white"
+                      }`}
                       placeholder={
                         serviceItems.length
                           ? "Ghi chú riêng cho dịch vụ này"
                           : "Không có nội dung"
                       }
                       disabled={!serviceItems.length}
+                      readOnly={serviceNoteReadOnly}
                     />
                   </div>
                 )
@@ -469,13 +488,24 @@ export default function PatientExamMode({
               <textarea
                 rows={2}
                 value={exam.note}
-                onChange={(e) =>
-                  setExam((s) => ({ ...s, note: e.target.value }))
-                }
-                className="mt-2 w-full rounded-xl px-3 py-2 ring-1 ring-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none bg-white text-sm"
+                onChange={(e) => {
+                  if (serviceNoteReadOnly) return;
+                  setExam((s) => ({ ...s, note: e.target.value }));
+                }}
+                className={`mt-2 w-full rounded-xl px-3 py-2 ring-1 outline-none text-sm ${
+                  serviceNoteReadOnly
+                    ? "ring-slate-200 bg-slate-50 text-slate-700"
+                    : "ring-slate-300 focus:ring-2 focus:ring-emerald-500 bg-white"
+                }`}
+                readOnly={serviceNoteReadOnly}
                 placeholder="Ghi chú chung"
               />
             </label>
+            {serviceNoteReadOnly && (
+              <div className="mt-2 text-xs text-slate-500">
+                Y tá hành chính chỉ xem ghi chú bác sĩ trong phiếu CLS.
+              </div>
+            )}
             <div className="mt-3 flex items-center justify-end gap-3">
               <span className="text-sm text-slate-600">Tổng phí</span>
               <span className="text-base font-extrabold text-emerald-700">

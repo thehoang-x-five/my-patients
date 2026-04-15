@@ -14,6 +14,7 @@ export const fetchAdminUsers = (filter = {}) => {
   const params = new URLSearchParams();
   if (filter.q) params.set("q", filter.q);
   if (filter.vaiTro) params.set("vaiTro", filter.vaiTro);
+  if (filter.loaiYTa) params.set("loaiYTa", filter.loaiYTa);
   if (filter.trangThai) params.set("trangThai", filter.trangThai);
   if (filter.maKhoa) params.set("maKhoa", filter.maKhoa);
   params.set("page", String(filter.page || 1));

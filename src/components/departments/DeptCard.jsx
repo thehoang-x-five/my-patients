@@ -9,7 +9,9 @@ function isClsType(type) {
     v.includes("cls") ||
     v.includes("cận lâm sàng") ||
     v.includes("can_lam_sang") ||
-    v.includes("dv")
+    v.includes("dv") ||
+    v.includes("dich_vu") ||
+    v.includes("dịch vụ")
   );
 }
 
@@ -32,10 +34,10 @@ function StatusBadge({ active }) {
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ring-1
         ${active ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-slate-50 text-slate-600 ring-slate-200"}`}
-      aria-label={active ? "Đang hoạt động" : "Không hoạt động"}
+      aria-label={active ? "Hoạt động" : "Tạm dừng"}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-slate-400"}`} />
-      {active ? "Đang hoạt động" : "Không hoạt động"}
+      {active ? "Hoạt động" : "Tạm dừng"}
     </span>
   );
 }
@@ -70,10 +72,19 @@ export default function DeptCard({ dept, onOpenDetail, onOpenSchedule, pulse = f
   const waiting = dept.waitingPatients || 0;
   const done = dept.examinedPatients || 0;
   const total = waiting + done;
-  const hasNurse = !!(dept.nurseInCharge && String(dept.nurseInCharge).trim());
   const kb = kindBadge(
     room.type || dept.roomType || dept.loaiPhong || dept.loai_phong
   );
+  const isCls = isClsType(
+    room.type || dept.roomType || dept.loaiPhong || dept.loai_phong
+  );
+  const fixedStaffLabel = isCls
+    ? "KTV phụ trách (cố định)"
+    : "Bác sĩ phụ trách (cố định)";
+  const fixedStaffName = isCls
+    ? dept.technicianInCharge || dept.nurseInCharge || "—"
+    : dept.doctorInCharge || "—";
+  const hasNurse = !isCls && !!(dept.nurseInCharge && String(dept.nurseInCharge).trim());
 
   return (
     <motion.article
@@ -119,9 +130,9 @@ export default function DeptCard({ dept, onOpenDetail, onOpenSchedule, pulse = f
         >
           <div className={`grid ${hasNurse ? "grid-cols-2" : "grid-cols-1"} gap-2 text-sm`}>
             <div>
-              <div className="text-[11px] text-indigo-700/80">BS phụ trách (cố định)</div>
+              <div className="text-[11px] text-indigo-700/80">{fixedStaffLabel}</div>
               <b className="block truncate text-slate-900 group-hover:text-indigo-900 transition-colors">
-                {dept.doctorInCharge || "—"}
+                {fixedStaffName}
               </b>
             </div>
             {hasNurse && (
