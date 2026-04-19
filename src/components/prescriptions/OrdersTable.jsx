@@ -170,10 +170,12 @@ export default function OrdersTable({
                   canCancel &&
                   onCancel &&
                   /^(da_ke|cho_phat)$/i.test(o.status || o.trangThai || "");
+                // BE tạo đơn với trạng thái "da_ke"; "cho_phat" chủ yếu từ seed/legacy.
+                // Phát thuốc (PUT .../status → da_phat) chấp nhận từ cả hai trạng thái trước khi đã phát.
                 const canDispenseRow =
                   canDispense &&
                   onDispense &&
-                  /^(cho_phat)$/i.test(o.status || o.trangThai || "");
+                  /^(da_ke|cho_phat)$/i.test(o.status || o.trangThai || "");
 
                 return (
                   <Row key={o.id || o.code || i} i={i}>
