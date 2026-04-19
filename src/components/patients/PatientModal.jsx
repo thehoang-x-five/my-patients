@@ -25,7 +25,9 @@ import {
   useExamServices,
   useServiceInfo,
   useCreateClinicalExam,
+  getClsSummary,
   searchClsOrders,
+  updateClsSummaryStatus,
   updateClsOrderStatus,
 } from "../../api/examination";
 import { getStoredAccessToken } from "../../api/http.js";
@@ -531,6 +533,9 @@ export default function PatientModal({
   };
   const [diagnosisData, setDiagnosisData] = useState(DIAG_INIT);
   const [svcResults, setSvcResults] = useState([]);
+  const [serviceProcessSummary, setServiceProcessSummary] = useState(null);
+  const [serviceProcessMeta, setServiceProcessMeta] = useState(null);
+  const [processingServiceReturn, setProcessingServiceReturn] = useState(false);
 
   // ---------- Y tá xử lý ----------
   const [rx, setRx] = useState([]);
@@ -617,6 +622,221 @@ export default function PatientModal({
     }));
   }, [patientForView]);
 
+  const parseMaybeJson = (value) => {
+    if (!value || typeof value !== "string") return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  };
+
+  const normalizeServiceProcessResults = (summaryLike) => {
+    const summary = parseMaybeJson(summaryLike);
+    const parseAttachments = (raw) => {
+      if (!raw) return [];
+
+      if (Array.isArray(raw)) {
+        return raw
+          .map((item, index) => {
+            if (typeof item === "string") {
+              return {
+                id: `file-${index + 1}`,
+                name: item,
+                url: "",
+              };
+            }
+
+            if (item && typeof item === "object") {
+              return {
+                id: item.id || item.name || item.fileName || `file-${index + 1}`,
+                name:
+                  item.name ||
+                  item.fileName ||
+                  item.filename ||
+                  item.url ||
+                  `Tệp ${index + 1}`,
+                url: item.url || item.href || item.path || "",
+              };
+            }
+
+            return null;
+          })
+          .filter(Boolean);
+      }
+
+      if (typeof raw === "string") {
+        const trimmed = raw.trim();
+        if (!trimmed) return [];
+
+        if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+          try {
+            return parseAttachments(JSON.parse(trimmed));
+          } catch {
+            return [
+              {
+                id: trimmed,
+                name: trimmed,
+                url: "",
+              },
+            ];
+          }
+        }
+
+        return [
+          {
+            id: trimmed,
+            name: trimmed,
+            url: "",
+          },
+        ];
+      }
+
+      return [];
+    };
+
+    const arr =
+      summary?.KetQua ||
+      summary?.ketQua ||
+      summary?.Items ||
+      summary?.items ||
+      (Array.isArray(summary) ? summary : []);
+
+    if (!Array.isArray(arr)) return [];
+
+    return arr.map((row, idx) => {
+      const attachmentsRaw =
+        row?.TepDinhKem ||
+        row?.tepDinhKem ||
+        row?.Attachments ||
+        row?.attachments ||
+        [];
+      return {
+        id:
+          row?.MaKetQua ||
+          row?.maKetQua ||
+          row?.MaChiTietDv ||
+          row?.maChiTietDv ||
+          `${idx}`,
+        service:
+          row?.TenDichVu ||
+          row?.tenDichVu ||
+          row?.DichVu ||
+          row?.dichVu ||
+          row?.MaDichVu ||
+          row?.maDichVu ||
+          `Dich vu ${idx + 1}`,
+        result:
+          row?.NoiDungKetQua ||
+          row?.noiDungKetQua ||
+          row?.KetQua ||
+          row?.ketQua ||
+          row?.Result ||
+          row?.result ||
+          row?.KetLuanChuyen ||
+          row?.ketLuanChuyen ||
+          row?.GhiChu ||
+          row?.ghiChu ||
+          "Chua co ket qua",
+        note: row?.GhiChu || row?.ghiChu || "",
+        technician:
+          row?.TenKyThuatVienThucHien ||
+          row?.tenKyThuatVienThucHien ||
+          row?.TenNhanSuThucHien ||
+          row?.tenNhanSuThucHien ||
+          row?.NguoiThucHien ||
+          row?.nguoiThucHien ||
+          "",
+        timeText:
+          row?.ThoiGianTao ||
+          row?.thoiGianTao ||
+          row?.ThoiGian ||
+          row?.thoiGian ||
+          "",
+        attachments: parseAttachments(attachmentsRaw),
+      };
+    });
+  };
+
+  const loadServiceProcessData = async (maPhieuKham, currentPid) => {
+    if (!maPhieuKham || !currentPid) return;
+
+    try {
+      const clinicalDetail = await getClinicalExam(maPhieuKham);
+      if (!clinicalDetail) return;
+
+      const detailPatientId =
+        clinicalDetail?.MaBenhNhan || clinicalDetail?.maBenhNhan || "";
+      if (detailPatientId && detailPatientId !== currentPid) {
+        console.warn(
+          `[PatientModal] Service summary mismatch: ${detailPatientId} != ${currentPid}`
+        );
+        return;
+      }
+
+      const maPhieuTongHop =
+        clinicalDetail?.MaPhieuKqKhamCls ||
+        clinicalDetail?.maPhieuKqKhamCls ||
+        null;
+
+      let summaryDto = null;
+      if (maPhieuTongHop) {
+        try {
+          summaryDto = await getClsSummary(maPhieuTongHop);
+        } catch (err) {
+          console.warn("Lấy phiếu tổng hợp CLS thất bại:", err);
+        }
+      }
+
+      const rawSummary =
+        summaryDto?.SnapshotJson ||
+        summaryDto?.snapshotJson ||
+        clinicalDetail?.SnapshotKqKhamCls ||
+        clinicalDetail?.snapshotKqKhamCls ||
+        clinicalDetail?.clsSummary ||
+        clinicalDetail?.ClsSummary ||
+        null;
+
+      setServiceProcessSummary(parseMaybeJson(rawSummary));
+      setServiceProcessMeta({
+        maPhieuTongHop:
+          summaryDto?.MaPhieuTongHop ||
+          summaryDto?.maPhieuTongHop ||
+          maPhieuTongHop ||
+          "",
+        maPhieuKhamCls:
+          summaryDto?.MaPhieuKhamCls ||
+          summaryDto?.maPhieuKhamCls ||
+          parseMaybeJson(rawSummary)?.MaPhieuKhamCls ||
+          parseMaybeJson(rawSummary)?.maPhieuKhamCls ||
+          "",
+        maPhieuKham:
+          clinicalDetail?.MaPhieuKham || clinicalDetail?.maPhieuKham || maPhieuKham,
+        trangThai:
+          summaryDto?.TrangThai ||
+          summaryDto?.trangThai ||
+          "cho_xu_ly",
+        thoiGianXuLy:
+          summaryDto?.ThoiGianXuLy || summaryDto?.thoiGianXuLy || null,
+        ghiChu:
+          summaryDto?.GhiChu ||
+          summaryDto?.ghiChu ||
+          clinicalDetail?.TrieuChung ||
+          clinicalDetail?.trieuChung ||
+          "",
+      });
+      setDiagnosisData((prev) => ({
+        ...prev,
+        MaPhieuKham:
+          clinicalDetail?.MaPhieuKham || clinicalDetail?.maPhieuKham || maPhieuKham,
+      }));
+      setSvcResults(normalizeServiceProcessResults(rawSummary));
+    } catch (err) {
+      console.error("Tải dữ liệu tổng hợp CLS thất bại:", err);
+      toast.error("Không thể tải phiếu tổng hợp kết quả CLS.");
+    }
+  };
+
 
   useEffect(() => {
     if (!open) {
@@ -625,6 +845,9 @@ export default function PatientModal({
       setDiagnosisData(DIAG_INIT); // Clear diagnosis data
       setRx([]); // Clear prescriptions
       setSvcResults([]); // Clear service results
+      setServiceProcessSummary(null);
+      setServiceProcessMeta(null);
+      setProcessingServiceReturn(false);
 
       // ✅ Reset cache
       cachedDiagnosisPatientRef.current = null; // ✅ Clear cache
@@ -777,6 +1000,9 @@ export default function PatientModal({
     setShowRoomSelect(false);
 
     setRx([]);
+    setServiceProcessSummary(null);
+    setServiceProcessMeta(null);
+    setProcessingServiceReturn(false);
 
     if (patient && mode === "process") {
       // ✅ RESET diagnosis data về DIAG_INIT khi mở modal mới (tránh cache cũ)
@@ -810,6 +1036,12 @@ export default function PatientModal({
       console.log(
         `[PatientModal] Process mode - currentPid: ${currentPid}, maPhieuKham: ${maPhieuKham}`
       );
+
+      if (isSvcProcessing && maPhieuKham && currentPid) {
+        cachedMaPhieuKhamRef.current = maPhieuKham;
+        void loadServiceProcessData(maPhieuKham, currentPid);
+        return;
+      }
 
       if (maPhieuKham && currentPid) {
         // ✅ Check if already validating to prevent duplicate getClinicalExam calls
@@ -864,7 +1096,11 @@ export default function PatientModal({
             );
 
             // ✅ Always call fetchFinalDiagnosis - it will handle cache and duplicate prevention internally
-            fetchFinalDiagnosis(currentPid);
+            if (isSvcProcessing) {
+              void loadServiceProcessData(maPhieuKham, currentPid);
+            } else {
+              fetchFinalDiagnosis(currentPid);
+            }
 
             // ✅ Clear validation flag after successful validation
             isValidatingPhieuKhamRef.current = null;
@@ -934,7 +1170,11 @@ export default function PatientModal({
 
                   // ✅ Always call fetchFinalDiagnosis - it will handle cache and duplicate prevention internally
                   setTimeout(() => {
-                    fetchFinalDiagnosis(currentPid);
+                    if (isSvcProcessing) {
+                      void loadServiceProcessData(foundMaPhieuKham, currentPid);
+                    } else {
+                      fetchFinalDiagnosis(currentPid);
+                    }
                     // ✅ Clear search flag after calling fetchFinalDiagnosis
                     isSearchingPhieuKhamRef.current = null;
                   }, 100);
@@ -972,7 +1212,7 @@ export default function PatientModal({
 
     const t = setTimeout(() => firstRef.current?.focus(), 60);
     return () => clearTimeout(t);
-  }, [open, patient, patientForView, mode, today, isDirty, patientId]); // ✅ Thêm patientId để reset khi đổi bệnh nhân
+  }, [open, patient, patientForView, mode, today, isDirty, patientId, isSvcProcessing]); // ✅ Thêm patientId để reset khi đổi bệnh nhân
 
   // ✅ Reset cache khi đổi bệnh nhân
   useEffect(() => {
@@ -2719,35 +2959,102 @@ export default function PatientModal({
   }
 
   // ----------------- DỊCH VỤ: TRẢ VỀ BÁC SĨ -----------------
-  function handleServiceReturnToDoctor() {
-    const pid = form?.id;
-    if (!pid) return;
-    const fromDoctor =
-      patient?.serviceOrder?.fromDoctor ||
-      booking.doctor ||
-      "Bác sĩ chỉ định";
+  async function handleServiceReturnToDoctor() {
+    const pid =
+      form?.id ||
+      form?.MaBenhNhan ||
+      form?.maBenhNhan ||
+      patient?.id ||
+      patient?.MaBenhNhan ||
+      patient?.maBenhNhan ||
+      "";
+    const maPhieuKham =
+      cachedMaPhieuKhamRef.current ||
+      diagnosisData?.MaPhieuKham ||
+      diagnosisData?.maPhieuKham ||
+      patient?.MaPhieuKham ||
+      patient?.maPhieuKham ||
+      "";
 
-    const now = new Date().toISOString().slice(0, 10);
-    const svcNote = (svcResults || [])
-      .map(
-        (r, i) =>
-          `#${i + 1} ${r.service}: ${r.result || "—"}${r.note ? ` • ${r.note}` : ""
-          }`
-      )
-      .join("\n");
+    if (!pid || !maPhieuKham) {
+      toast.error("Không tìm thấy phiếu khám để trả về bác sĩ.");
+      return;
+    }
 
-    // Lịch sử khám sẽ được cập nhật khi hoàn tất dịch vụ qua API examination
+    try {
+      setProcessingServiceReturn(true);
 
-    markServiceDone(pid);
-    markWaitDoctorReview(pid);
-    enqueueReturnToDoctor({
-      pid,
-      name: form?.name || pid,
-      dept: "Phòng khám",
-      doctor: fromDoctor,
-      note: "Đã có kết quả dịch vụ",
-    });
-    onClose?.();
+      const clinicalDetail = await getClinicalExam(maPhieuKham);
+      if (!clinicalDetail) {
+        throw new Error("Không tìm thấy chi tiết phiếu khám.");
+      }
+
+      const maKhoa = clinicalDetail?.MaKhoa || clinicalDetail?.maKhoa || "";
+      const maPhong = clinicalDetail?.MaPhong || clinicalDetail?.maPhong || "";
+      const maBacSiKham =
+        clinicalDetail?.MaBacSiKham || clinicalDetail?.maBacSiKham || "";
+      const maNguoiLap =
+        currentUserInfo.code ||
+        clinicalDetail?.MaNguoiLap ||
+        clinicalDetail?.maNguoiLap ||
+        "";
+      const maDichVuKham =
+        clinicalDetail?.MaDichVuKham || clinicalDetail?.maDichVuKham || "";
+
+      if (!maKhoa || !maPhong || !maBacSiKham || !maNguoiLap || !maDichVuKham) {
+        throw new Error("Phiếu khám thiếu thông tin để mở lại lượt service_return.");
+      }
+
+      await createClinicalExamMut.mutateAsync({
+        MaBenhNhan: pid,
+        MaKhoa: maKhoa,
+        MaPhong: maPhong,
+        MaBacSiKham: maBacSiKham,
+        MaNguoiLap: maNguoiLap,
+        MaDichVuKham: maDichVuKham,
+        HinhThucTiepNhan: "service_return",
+        MaLichHen:
+          clinicalDetail?.MaLichHen || clinicalDetail?.maLichHen || null,
+        NgayLap: new Date().toISOString(),
+        TrieuChung:
+          clinicalDetail?.TrieuChung ||
+          clinicalDetail?.trieuChung ||
+          exam?.symptoms ||
+          "",
+      });
+
+      const maPhieuTongHop =
+        serviceProcessMeta?.maPhieuTongHop ||
+        serviceProcessMeta?.MaPhieuTongHop ||
+        clinicalDetail?.MaPhieuKqKhamCls ||
+        clinicalDetail?.maPhieuKqKhamCls ||
+        "";
+
+      if (maPhieuTongHop) {
+        try {
+          await updateClsSummaryStatus(maPhieuTongHop, "da_hoan_tat");
+        } catch (err) {
+          console.warn("Cập nhật trạng thái tổng hợp CLS thất bại:", err);
+        }
+      }
+
+      await refetchPatientDetail?.();
+      await onMutatePatient?.(pid, { status: STATUSES.WAIT_EXAM });
+      toast.success("Đã trả bệnh nhân về hàng đợi bác sĩ.");
+      onClose?.();
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.Message ||
+        err?.response?.data?.title ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Không thể xử lý và trả bệnh nhân về bác sĩ.";
+      console.error("Trả kết quả CLS về bác sĩ thất bại:", err);
+      toast.error(msg);
+    } finally {
+      setProcessingServiceReturn(false);
+    }
   }
 
   // Lắng nghe Custom Events để mở Select Modal từ component con
@@ -2876,7 +3183,9 @@ export default function PatientModal({
                       : mode === "add"
                         ? "Thêm bệnh nhân"
                         : mode === "process"
-                          ? "Xử lý chẩn đoán"
+                          ? isSvcProcessing
+                            ? "Xử lý tổng hợp CLS"
+                            : "Xử lý chẩn đoán"
                           : "Hồ sơ bệnh nhân"}
                 </h3>
                 <motion.button
@@ -2968,6 +3277,9 @@ export default function PatientModal({
                     totalDrugAmount={totalDrugAmount}
                     handleFinishDoctor={handleFinishDoctor}
                     svcResults={svcResults}
+                    clsSummary={serviceProcessSummary}
+                    serviceProcessMeta={serviceProcessMeta}
+                    processingServiceReturn={processingServiceReturn}
                     setSvcResults={setSvcResults}
                     handleServiceReturnToDoctor={handleServiceReturnToDoctor}
                   />
@@ -3244,12 +3556,16 @@ export default function PatientModal({
             totalServiceFee={totalServiceFee}
             clsSummary={print.payload?.clsSummary ?? clsSummaryPrint}
             creatorName={print.payload?.creatorName || currentUser || ""}
-            services={(serviceItems || []).map((sv, i) => ({
+            services={
+              print.payload?.services ||
+              (serviceItems || []).map((sv, i) => ({
               name: sv,
               room: serviceRooms[i] || `Phòng ${sv}`,
               price: priceOfService(sv),
               note: serviceNotes[i] || "",
-            }))}
+              technician: serviceStaffs[i] || "",
+              }))
+            }
             feePaid={
               print.payload?.feePaid ??
               (isServiceIntake ? totalServiceFee > 0 : (booking.price || 0) > 0)

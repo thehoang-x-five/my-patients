@@ -32,6 +32,91 @@ function emptyRow() {
   };
 }
 
+function parseAttachmentValue(raw) {
+  if (!raw) return [];
+
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item, index) => {
+        if (typeof item === "string") {
+          return {
+            id: `file-${index + 1}`,
+            name: item,
+            url: "",
+          };
+        }
+        if (item && typeof item === "object") {
+          return {
+            id: item.id || item.name || item.fileName || `file-${index + 1}`,
+            name:
+              item.name ||
+              item.fileName ||
+              item.filename ||
+              item.url ||
+              `Tệp ${index + 1}`,
+            url: item.url || item.href || item.path || "",
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+  }
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        return parseAttachmentValue(JSON.parse(trimmed));
+      } catch {
+        return [
+          {
+            id: trimmed,
+            name: trimmed,
+            url: "",
+          },
+        ];
+      }
+    }
+
+    return [
+      {
+        id: trimmed,
+        name: trimmed,
+        url: "",
+      },
+    ];
+  }
+
+  return [];
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error(`Không thể đọc tệp ${file?.name || ""}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function buildAttachmentPayload(files) {
+  if (!Array.isArray(files) || !files.length) return [];
+
+  const items = await Promise.all(
+    files.map(async (file, index) => ({
+      id:
+        file?.name ||
+        `file-${index + 1}-${Date.now()}`,
+      name: file?.name || `Tệp ${index + 1}`,
+      url: await fileToDataUrl(file),
+    }))
+  );
+
+  return items;
+}
+
 export default function ExamDetail({
   patient,
   onBack,
@@ -507,6 +592,8 @@ const svcMap = useMemo(() => {
     (src === "service_return" || patient?.nguon_label === "Trả từ dịch vụ");
 
   // Dữ liệu kết quả dịch vụ kèm theo (tùy backend, cố gắng map linh hoạt)
+  const shouldShowOrderSection = !isCLS && !isReturnFromService;
+  const shouldShowReturnedResultsSection = !isCLS && isReturnFromService;
   const rawServiceResults =
     patient?.serviceResults || // dạng mong muốn
     patient?.clsResults ||
@@ -524,11 +611,13 @@ const svcMap = useMemo(() => {
           `Dịch vụ ${i + 1}`,
         note: x.note || x.ghi_chu || "",
         result: x.result || x.ket_qua || "",
-        files:
+        files: parseAttachmentValue(
           x.files ||
-          x.attachments ||
-          x.tep_dinh_kem ||
-          [],
+            x.attachments ||
+            x.tep_dinh_kem ||
+            x.TepDinhKem ||
+            []
+        ),
       }))
     : [];
 
@@ -581,12 +670,13 @@ const svcMap = useMemo(() => {
       null;
 
     try {
+      const attachmentPayload = await buildAttachmentPayload(clsFiles);
       await createClsResultMut.mutateAsync({
         MaChiTietDv: maChiTietDv,
         TrangThaiChot: "da_co_ket_qua",
         NoiDungKetQua: clsResult || dx.note || "",
         MaNhanSuThucHien: staffCode,
-        TepDinhKem: "",
+        TepDinhKem: JSON.stringify(attachmentPayload),
       });
       toast.success("Đã gửi kết quả CLS.");
       onBack?.();
@@ -706,7 +796,8 @@ const svcMap = useMemo(() => {
           {!isCLS && (
             <>
               {/* Phiếu khám (Chỉ định dịch vụ) */}
-              <motion.section
+              {shouldShowOrderSection && (
+                <motion.section
                 {...fadeIn}
                 className="rounded-2xl p-4 mt-3  bg-white shadow-sm border border-slate-200"
               >
@@ -823,10 +914,11 @@ const svcMap = useMemo(() => {
                     </Button>
                   </div>
                 </div>
-              </motion.section>
+                </motion.section>
+              )}
 
               {/* Kết quả dịch vụ trả về (nếu lượt này là Trả từ dịch vụ) */}
-              {isReturnFromService && serviceResults.length > 0 && (
+              {shouldShowReturnedResultsSection && (
                 <motion.section
                   {...fadeIn}
                   className="rounded-2xl p-4 mt-3 bg-white shadow-sm border border-slate-200"
@@ -839,7 +931,14 @@ const svcMap = useMemo(() => {
                     quay lại khám lâm sàng.
                   </p>
                   <div className="overflow-x-auto scrollbar-none">
-                    <table className="min-w-full text-sm">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col className="w-12" />
+                        <col className="w-44" />
+                        <col className="w-56" />
+                        <col className="w-[30rem]" />
+                        <col className="w-44" />
+                      </colgroup>
                       <thead className="text-left text-slate-700 sticky top-0 bg-white/95 backdrop-blur">
                         <tr className="bg-gradient-to-b from-sky-50 to-white">
                           <th className="px-2 py-2 w-10">STT</th>
@@ -850,7 +949,7 @@ const svcMap = useMemo(() => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {serviceResults.map((row, idx) => (
+                        {serviceResults.length > 0 ? serviceResults.map((row, idx) => (
                           <tr
                             key={row.id || idx}
                             className="align-top hover:bg-sky-50/40 transition-colors"
@@ -859,19 +958,19 @@ const svcMap = useMemo(() => {
                               {idx + 1}
                             </td>
                             <td className="px-2 py-2">
-                              <div className="font-semibold text-slate-900">
+                              <div className="font-semibold text-slate-900 break-all max-h-24 overflow-y-auto scrollbar-none">
                                 {row.name}
                               </div>
                             </td>
                             <td className="px-2 py-2">
-                              <div className="text-sm text-slate-700 whitespace-pre-wrap">
+                              <div className="text-sm text-slate-700 whitespace-pre-wrap break-all max-h-24 overflow-y-auto scrollbar-none">
                                 {row.note || (
                                   <span className="text-slate-400">—</span>
                                 )}
                               </div>
                             </td>
                             <td className="px-2 py-2">
-                              <div className="text-sm text-slate-700 whitespace-pre-wrap max-h-24 overflow-y-auto scrollbar-none">
+                              <div className="text-sm text-slate-700 whitespace-pre-wrap break-all max-h-28 overflow-y-auto scrollbar-none">
                                 {row.result || (
                                   <span className="text-slate-400">
                                     Chưa nhập
@@ -886,13 +985,28 @@ const svcMap = useMemo(() => {
                                   {row.files.map((f, i) => (
                                     <li
                                       key={f.id || f.name || i}
-                                      className="truncate"
+                                      className="break-all"
                                     >
-                                      📎{" "}
-                                      {f.name ||
-                                        f.fileName ||
-                                        f.filename ||
-                                        `Tệp ${i + 1}`}
+                                      {f.url ? (
+                                        <a
+                                          href={f.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-sky-700 underline underline-offset-2 hover:text-sky-800"
+                                        >
+                                          {f.name ||
+                                            f.fileName ||
+                                            f.filename ||
+                                            `Tệp ${i + 1}`}
+                                        </a>
+                                      ) : (
+                                        <span>
+                                          {f.name ||
+                                            f.fileName ||
+                                            f.filename ||
+                                            `Tệp ${i + 1}`}
+                                        </span>
+                                      )}
                                     </li>
                                   ))}
                                 </ul>
@@ -903,7 +1017,16 @@ const svcMap = useMemo(() => {
                               )}
                             </td>
                           </tr>
-                        ))}
+                        )) : (
+                          <tr>
+                            <td
+                              colSpan={5}
+                              className="px-3 py-6 text-center text-sm text-slate-500"
+                            >
+                              Chưa có kết quả dịch vụ trả về cho lượt khám này.
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -1340,3 +1463,4 @@ const svcMap = useMemo(() => {
     </>
   );
 }
+

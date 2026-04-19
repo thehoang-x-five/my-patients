@@ -256,7 +256,7 @@ export default function PatientsTable({
           view: "View patient",
           edit: "Edit patient",
           createExam: "Create exam sheet",
-          processDiagnosis: "Process and diagnose",
+          processDiagnosis: "Process",
           returnHome: "Cancel visit",
           returnHomeTitle: "Cancel today's visit",
           returnHomeMessage: (name) =>
@@ -283,7 +283,7 @@ export default function PatientsTable({
           view: "Xem bệnh nhân",
           edit: "Sửa bệnh nhân",
           createExam: "Lập phiếu khám",
-          processDiagnosis: "Xử lý và chẩn đoán",
+          processDiagnosis: "Xử lý",
           returnHome: "Bỏ về",
           returnHomeTitle: "Xác nhận bỏ về",
           returnHomeMessage: (name) =>
@@ -398,9 +398,9 @@ export default function PatientsTable({
                   let showProcessBtn = false;
 
                   if (accountActive && hasTodayStatus) {
-                    if (isWaitIntake || isWaitProcService) {
+                    if (isWaitIntake) {
                       showExamBtn = true;
-                    } else if (isWaitProc) {
+                    } else if (isWaitProc || isWaitProcService) {
                       showProcessBtn = true;
                     }
                   }
@@ -409,7 +409,9 @@ export default function PatientsTable({
                     accountActive &&
                     hasTodayStatus &&
                     hasServiceOrder &&
-                    !serviceDispatched
+                    !serviceDispatched &&
+                    !isWaitProc &&
+                    !isWaitProcService
                   ) {
                     showExamBtn = true;
                   }

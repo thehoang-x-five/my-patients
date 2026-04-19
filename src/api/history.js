@@ -650,6 +650,7 @@ export function useCreateHistoryVisit() {
     onSuccess: () => {
       try {
         qc.invalidateQueries({ queryKey: ["history", "visits"] });
+        qc.invalidateQueries({ queryKey: ["queue"], exact: false });
       } catch (err) {}
     },
   });

@@ -463,6 +463,24 @@ export async function getClsResultsByOrder(maPhieuKhamCls) {
   return unwrapArray(res);
 }
 
+// Lấy phiếu tổng hợp CLS theo mã
+export async function getClsSummary(maPhieuTongHop) {
+  if (!maPhieuTongHop) return null;
+  const res = await http.get(`${CLS_BASE}/summary/${maPhieuTongHop}`);
+  return unwrap(res);
+}
+
+// Cập nhật trạng thái phiếu tổng hợp CLS
+export async function updateClsSummaryStatus(maPhieuTongHop, trangThai) {
+  if (!maPhieuTongHop) throw new Error("Thiếu maPhieuTongHop");
+  if (!trangThai) throw new Error("Thiếu trangThai");
+
+  const res = await http.put(`${CLS_BASE}/summary/${maPhieuTongHop}/status`, {
+    TrangThai: trangThai,
+  });
+  return unwrap(res);
+}
+
 
 
 

@@ -32,27 +32,6 @@ export function getStoredAccessToken() {
 }
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE || "/api";
-const httpFallbackBaseUrl =
-  /^https:\/\/localhost:7146\/api\/?$/i.test(configuredBaseUrl)
-    ? "http://localhost:5286/api"
-    : null;
-
-function shouldRetryWithHttpFallback(err) {
-  if (!httpFallbackBaseUrl) return false;
-
-  const cfg = err?.config;
-  if (!cfg || cfg._httpFallbackTried) return false;
-  if (err?.response) return false;
-
-  const baseUrl = cfg.baseURL || configuredBaseUrl;
-  if (typeof baseUrl !== "string" || !/^https:\/\/localhost:7146\/api\/?$/i.test(baseUrl)) {
-    return false;
-  }
-
-  const code = err?.code || "";
-  const message = String(err?.message || "");
-  return code === "ECONNABORTED" || code === "ERR_NETWORK" || /timeout|network/i.test(message);
-}
 
 /** Axios singleton */
 export const http = axios.create({
@@ -78,14 +57,6 @@ http.interceptors.request.use((cfg) => {
 http.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (shouldRetryWithHttpFallback(err)) {
-      return http.request({
-        ...err.config,
-        baseURL: httpFallbackBaseUrl,
-        _httpFallbackTried: true,
-      });
-    }
-
     const { response } = err || {};
     if (response?.status === 401) {
       const url = response?.config?.url || "";

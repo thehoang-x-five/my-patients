@@ -190,6 +190,41 @@ export default function Examination() {
     p?.id ??
     p?.pid ??
     null;
+
+  const patchQueueStatusCache = (maHangDoi, nextStatus) => {
+    if (!maHangDoi || !nextStatus) return;
+
+    const patchItem = (item) => {
+      if (!item || typeof item !== "object") return item;
+      const itemKey = keyOf(item);
+      if (String(itemKey || "") !== String(maHangDoi)) return item;
+      return {
+        ...item,
+        TrangThai: nextStatus,
+        trangThai: nextStatus,
+        status: nextStatus,
+      };
+    };
+
+    qc.setQueriesData({ queryKey: ["queue"], exact: false }, (old) => {
+      if (!old) return old;
+      if (Array.isArray(old)) return old.map(patchItem);
+      if (Array.isArray(old?.Items)) {
+        return {
+          ...old,
+          Items: old.Items.map(patchItem),
+        };
+      }
+      if (Array.isArray(old?.items)) {
+        return {
+          ...old,
+          items: old.items.map(patchItem),
+        };
+      }
+      if (typeof old === "object") return patchItem(old);
+      return old;
+    });
+  };
   
   // Chuẩn hóa chữ cái đầu cho nhãn hiển thị (ví dụ: "nam" -> "Nam")
   function titleCase(val) {
@@ -472,6 +507,8 @@ export default function Examination() {
         TrangThai: "dang_thuc_hien",
       });
       markInProgress();
+      patchQueueStatusCache(maHangDoiForVisit, "dang_thuc_hien");
+      qc.invalidateQueries({ queryKey: ["queue"], exact: false });
       createdVisitMaLuot =
         visitRes?.MaLuotKham ??
         visitRes?.maLuotKham ??
@@ -521,6 +558,9 @@ export default function Examination() {
       ...p,
       queueId: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
       id: queueItem?.MaHangDoi ?? raw.MaHangDoi ?? key,
+      TrangThai: "dang_thuc_hien",
+      trangThai: "dang_thuc_hien",
+      status: "dang_thuc_hien",
       pid: queueItem?.MaBenhNhan ?? raw.MaBenhNhan ?? p?.pid ?? null,
       name:
         phieuLsFull?.HoTen ??

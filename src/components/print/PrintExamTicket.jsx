@@ -33,30 +33,37 @@ export default function PrintExamTicket({
 
     const fmt = (n) => (Number(n || 0) || 0).toLocaleString("vi-VN");
     const ds = new Date().toLocaleString("vi-VN");
+    const firstText = (...values) => {
+      for (const value of values) {
+        if (value == null) continue;
+        const text = String(value).trim();
+        if (text) return text;
+      }
+      return "";
+    };
 
     // Chuẩn hóa dịch vụ: cho phép truyền string hoặc object
     const normServices = (Array.isArray(services) ? services : []).map((it) => {
       if (typeof it === "string") {
         return { name: it, room: `Phòng ${it}`, price: 0, note: "", technician: "" };
       }
-      // Extract technician name from various possible field names
-      const technician = 
-        it?.technician ||
-        it?.TenKyThuatVien ||
-        it?.tenKyThuatVien ||
-        it?.TenKyThuatVienThucHien ||
-        it?.tenKyThuatVienThucHien ||
-        it?.TenNhanSuThucHien ||
-        it?.tenNhanSuThucHien ||
-        it?.kyThuatVien ||
-        it?.KyThuatVien ||
-        it?.TenKTV ||
-        it?.tenKTV ||
-        "";
-      
-      // Debug log to see what data we're receiving
-      console.log("[PrintExamTicket] Service item:", it);
-      console.log("[PrintExamTicket] Extracted technician:", technician);
+      const technician = firstText(
+        it?.technician,
+        it?.ktv,
+        it?.KTV,
+        it?.TenKTV,
+        it?.tenKTV,
+        it?.TenKTVPhuTrach,
+        it?.tenKTVPhuTrach,
+        it?.TenKyThuatVien,
+        it?.tenKyThuatVien,
+        it?.TenKyThuatVienThucHien,
+        it?.tenKyThuatVienThucHien,
+        it?.TenNhanSuThucHien,
+        it?.tenNhanSuThucHien,
+        it?.kyThuatVien,
+        it?.KyThuatVien
+      );
       
       return {
         name: it?.name ?? "",
