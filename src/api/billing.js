@@ -68,6 +68,27 @@ export async function searchInvoices(filter = {}) {
   return res.data; // PagedResult<InvoiceHistoryRecordDto>
 }
 
+/**
+ * Tìm hoá đơn loại "thuoc" gắn đúng mã đơn thuốc (dùng tab xử lý BN / tránh vòng lặp thu↔phát).
+ */
+export async function findDrugInvoiceByPrescription(maBenhNhan, maDonThuoc) {
+  if (!maBenhNhan || !maDonThuoc) return null;
+  const data = await searchInvoices({
+    MaBenhNhan: maBenhNhan,
+    LoaiDotThu: "thuoc",
+    Page: 1,
+    PageSize: 100,
+  });
+  const items = data?.Items ?? data?.items ?? [];
+  const target = String(maDonThuoc).trim();
+  return (
+    items.find(
+      (row) =>
+        String(row.MaDonThuoc ?? row.maDonThuoc ?? "").trim() === target
+    ) || null
+  );
+}
+
 // Cập nhật trạng thái hóa đơn (Hủy, Hoàn tác...)
 // PUT /api/billing/invoices/{maHoaDon}/status
 export async function updateInvoiceStatus({ id, status }) {
@@ -175,6 +196,8 @@ export async function confirmInvoice(maHoaDon, payload = {}) {
       payload.phuongThucThanhToan ??
       payload.method ??
       PHUONG_THUC_THANH_TOAN.TIEN_MAT,
+    MaNhanSuThu: payload.MaNhanSuThu ?? payload.maNhanSuThu ?? null,
+    MaGiaoDich: payload.MaGiaoDich ?? payload.maGiaoDich ?? null,
     GhiChu: payload.GhiChu ?? payload.ghiChu ?? payload.note ?? null,
   };
   const res = await http.put(`${BASE}/invoices/${maHoaDon}/confirm`, body);

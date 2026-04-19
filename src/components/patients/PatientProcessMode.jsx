@@ -84,6 +84,11 @@ export default function PatientProcessMode({
   serviceProcessMeta = null,
   processingServiceReturn = false,
   handleServiceReturnToDoctor,
+  /** Trạng thái đơn từ API: da_ke | cho_phat | da_phat | … */
+  prescriptionOrderStatus = "",
+  canCollectAndDispenseMedicine = false,
+  onCollectAndDispenseMedicine,
+  collectDispenseBusy = false,
 }) {
   const serviceRows = React.useMemo(() => {
     if (!Array.isArray(svcResults) || !svcResults.length) return [];
@@ -315,6 +320,14 @@ export default function PatientProcessMode({
     diagnosisData?.prescriptionCode ||
     "";
 
+  const rxStatusRaw = String(prescriptionOrderStatus || "").toLowerCase().trim();
+  const rxIsDispensed = rxStatusRaw === "da_phat";
+  const showInlineDispense =
+    rx.length > 0 &&
+    prescriptionCode &&
+    canCollectAndDispenseMedicine &&
+    typeof onCollectAndDispenseMedicine === "function";
+
   const dxPrimary = diagnosisData?.ChanDoanSoBo ?? diagnosisData?.dxPrimary ?? "";
   const dxFinal = diagnosisData?.ChanDoanCuoi ?? diagnosisData?.dxSecondary ?? "";
 
@@ -539,6 +552,46 @@ export default function PatientProcessMode({
               {totalDrugAmount.toLocaleString("vi-VN")}đ
             </b>
           </div>
+
+          {rx.length > 0 && prescriptionCode ? (
+            <div className="mt-3 rounded-xl px-3 py-2.5 ring-1 ring-slate-200/80 bg-white/90 text-[12px] text-slate-600 space-y-2">
+              <div className="flex flex-wrap items-center gap-2 justify-between">
+                <span>
+                  Trạng thái đơn:{" "}
+                  <b className="text-slate-800">
+                    {rxIsDispensed
+                      ? "Đã phát thuốc"
+                      : rxStatusRaw === "cho_phat"
+                        ? "Chờ phát"
+                        : rxStatusRaw === "da_ke" || !rxStatusRaw
+                          ? "Đã kê / chờ xử lý"
+                          : prescriptionOrderStatus || "—"}
+                  </b>
+                </span>
+                {showInlineDispense && !rxIsDispensed ? (
+                  <button
+                    type="button"
+                    disabled={collectDispenseBusy}
+                    onClick={() => onCollectAndDispenseMedicine?.()}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {collectDispenseBusy
+                      ? "Đang xử lý…"
+                      : "Thu phí thuốc & phát thuốc"}
+                  </button>
+                ) : null}
+                {showInlineDispense && rxIsDispensed ? (
+                  <span className="text-[11px] font-semibold text-emerald-700">
+                    Có thể hoàn tất phiếu khám
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-[11px] leading-snug text-slate-500">
+                Hệ thống thu tiền thuốc trước, sau đó mới trừ tồn kho khi phát. Luồng tách ở trang
+                Nhà thuốc / Công nợ vẫn dùng được như cũ.
+              </p>
+            </div>
+          ) : null}
         </motion.div>
 
         <div className="flex items-center justify-end gap-3 mt-2 pt-2 border-t border-slate-200">

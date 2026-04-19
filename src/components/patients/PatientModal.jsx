@@ -34,7 +34,15 @@ import { getStoredAccessToken } from "../../api/http.js";
 // History (lượt khám)
 import { useCreateHistoryVisit } from "../../api/history";
 import { getClinicalExam, getFinalDiagnosis, useCompleteExam } from "../../api/examination";
-import { getPrescriptionByCode } from "../../api/pharmacy.js";
+import {
+  getPrescriptionByCode,
+  updatePrescriptionStatus,
+} from "../../api/pharmacy.js";
+import {
+  findDrugInvoiceByPrescription,
+  confirmInvoice,
+} from "../../api/billing.js";
+import { PHUONG_THUC_THANH_TOAN } from "../../constants/enums.js";
 import { useExamStore, useUIStore, useAuthStore } from "../stores/appStore.js";
 import { useNavigate } from "react-router-dom";
 
@@ -58,6 +66,7 @@ import { saveFollowupContext } from "../../utils/followupContext.js";
 import {
   canCreateAppointment,
   isReceptionNurse,
+  canDispenseMedicine,
 } from "../../utils/permissions.js";
 
 // (giả sử các helper addVisit, addTransaction, listAppointmentHolds, getLastVisit,
@@ -540,6 +549,9 @@ export default function PatientModal({
 
   // ---------- Y tá xử lý ----------
   const [rx, setRx] = useState([]);
+  /** Trạng thái đơn thuốc (da_ke, da_phat, …) sau khi tải / phát tại tab xử lý */
+  const [prescriptionOrderStatus, setPrescriptionOrderStatus] = useState("");
+  const [processTabDispenseBusy, setProcessTabDispenseBusy] = useState(false);
   const addRx = () =>
     setRx((s) => [
       ...s,
@@ -561,12 +573,19 @@ export default function PatientModal({
   const totalDrugAmount = useMemo(
     () =>
       rx.reduce((sum, r) => {
-        const qty = Number(r.qty || 0);
-        const price = Number(r.price || 0);
+        const line =
+          r.ThanhTien ?? r.thanhTien ?? r.amount ?? r.lineTotal ?? null;
+        if (line != null && Number(line)) return sum + (Number(line) || 0);
+        const qty =
+          Number(r.qty ?? r.SoLuong ?? r.soLuong ?? 0) || 0;
+        const price =
+          Number(r.price ?? r.DonGia ?? r.donGia ?? 0) || 0;
         return sum + (isFinite(qty * price) ? qty * price : 0);
       }, 0),
     [rx]
   );
+
+  const allowProcessTabDispense = canDispenseMedicine(user);
 
   const isSvcProcessing = useMemo(() => {
     if (isSvcProcessingStatus) return true;
@@ -845,6 +864,8 @@ export default function PatientModal({
       setIsDirty(false);
       setDiagnosisData(DIAG_INIT); // Clear diagnosis data
       setRx([]); // Clear prescriptions
+      setPrescriptionOrderStatus("");
+      setProcessTabDispenseBusy(false);
       setSvcResults([]); // Clear service results
       setServiceProcessSummary(null);
       setServiceProcessMeta(null);
@@ -1001,6 +1022,8 @@ export default function PatientModal({
     setShowRoomSelect(false);
 
     setRx([]);
+    setPrescriptionOrderStatus("");
+    setProcessTabDispenseBusy(false);
     setServiceProcessSummary(null);
     setServiceProcessMeta(null);
     setProcessingServiceReturn(false);
@@ -2313,6 +2336,7 @@ export default function PatientModal({
       if (!dxRes) {
         console.log("[fetchFinalDiagnosis] API returned null/undefined");
         setRx([]);
+        setPrescriptionOrderStatus("");
         toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
@@ -2335,6 +2359,7 @@ export default function PatientModal({
         console.warn("[fetchFinalDiagnosis] Phiếu chẩn đoán không có mã bệnh nhân");
         console.warn("[fetchFinalDiagnosis] Response keys:", Object.keys(dxRes));
         setRx([]);
+        setPrescriptionOrderStatus("");
         toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
@@ -2346,6 +2371,7 @@ export default function PatientModal({
           `Bỏ qua kết quả này để tránh hiển thị sai dữ liệu.`
         );
         setRx([]);
+        setPrescriptionOrderStatus("");
         toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
@@ -2383,12 +2409,19 @@ export default function PatientModal({
         try {
           const presc = await getPrescriptionByCode(maDonThuoc);
           setRx(prescriptionItemsToProcessRows(presc?.items));
+          setPrescriptionOrderStatus(
+            String(presc?.status || presc?.rawStatus || "")
+              .toLowerCase()
+              .trim()
+          );
         } catch (rxErr) {
           console.warn("[fetchFinalDiagnosis] Không tải được chi tiết đơn thuốc:", rxErr);
           setRx([]);
+          setPrescriptionOrderStatus("");
         }
       } else {
         setRx([]);
+        setPrescriptionOrderStatus("");
       }
 
       // ✅ CACHE: Mark this patient's diagnosis as cached
@@ -2827,6 +2860,91 @@ export default function PatientModal({
         feeInfo: { total: lateFee, paid: isLate, showFee: isLate },
       },
     });
+  }
+
+  /**
+   * Tab xử lý: thu phí hoá đơn thuốc (nếu còn chưa thu) rồi phát thuốc (da_phat).
+   * Đúng thứ tự backend; luồng Nhà thuốc / Công nợ vẫn dùng song song.
+   */
+  async function handleProcessTabCollectAndDispense() {
+    const pid =
+      form?.id ||
+      form?.MaBenhNhan ||
+      form?.maBenhNhan ||
+      patient?.id ||
+      patient?.MaBenhNhan ||
+      patient?.maBenhNhan ||
+      "";
+    const maDonThuoc =
+      diagnosisData?.MaDonThuoc ||
+      diagnosisData?.maDonThuoc ||
+      diagnosisData?.prescriptionCode ||
+      "";
+
+    if (!pid) {
+      toast.error("Thiếu mã bệnh nhân.");
+      return;
+    }
+    if (!maDonThuoc) {
+      toast.error("Không có đơn thuốc để xử lý.");
+      return;
+    }
+    if (String(prescriptionOrderStatus).toLowerCase().trim() === "da_phat") {
+      toast.info("Đơn thuốc đã được phát.");
+      return;
+    }
+
+    setProcessTabDispenseBusy(true);
+    try {
+      const inv = await findDrugInvoiceByPrescription(pid, maDonThuoc);
+      if (!inv) {
+        toast.error(
+          "Không tìm thấy hoá đơn thuốc. Kiểm tra tại Công nợ hoặc Nhà thuốc."
+        );
+        return;
+      }
+
+      const maHoaDon = inv.MaHoaDon || inv.maHoaDon;
+      const invStatus = String(
+        inv.TrangThai || inv.trangThai || ""
+      ).toLowerCase();
+
+      if (invStatus === "chua_thu") {
+        await confirmInvoice(maHoaDon, {
+          PhuongThucThanhToan: PHUONG_THUC_THANH_TOAN.TIEN_MAT,
+          MaNhanSuThu: currentUserInfo.code || undefined,
+        });
+      } else if (invStatus !== "da_thu") {
+        toast.error(
+          `Hoá đơn thuốc đang ở trạng thái "${inv.TrangThai || inv.trangThai || invStatus}" — không thể thu/phát tại đây.`
+        );
+        return;
+      }
+
+      await updatePrescriptionStatus(maDonThuoc, "da_phat");
+
+      const presc = await getPrescriptionByCode(maDonThuoc);
+      setRx(prescriptionItemsToProcessRows(presc?.items));
+      setPrescriptionOrderStatus(
+        String(presc?.status || presc?.rawStatus || "")
+          .toLowerCase()
+          .trim()
+      );
+
+      toast.success(
+        "Đã xử lý thu phí thuốc (nếu cần) và phát thuốc. Bạn có thể bấm Hoàn tất và thu phí phiếu khám."
+      );
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.Message ||
+        err?.message ||
+        "Không thể thu phí / phát thuốc.";
+      toast.error(msg);
+      console.error("[handleProcessTabCollectAndDispense]", err);
+    } finally {
+      setProcessTabDispenseBusy(false);
+    }
   }
 
   // ----------------- HOÀN TẤT & THU PHÍ (THƯỜNG) -----------------
@@ -3306,6 +3424,14 @@ export default function PatientModal({
                     processingServiceReturn={processingServiceReturn}
                     setSvcResults={setSvcResults}
                     handleServiceReturnToDoctor={handleServiceReturnToDoctor}
+                    prescriptionOrderStatus={prescriptionOrderStatus}
+                    canCollectAndDispenseMedicine={allowProcessTabDispense}
+                    onCollectAndDispenseMedicine={
+                      allowProcessTabDispense
+                        ? handleProcessTabCollectAndDispense
+                        : undefined
+                    }
+                    collectDispenseBusy={processTabDispenseBusy}
                   />
                 )}
               </div>
