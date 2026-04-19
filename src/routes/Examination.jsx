@@ -319,12 +319,18 @@ export default function Examination() {
       console.log('[Examination] Hàng đợi phòng cập nhật:', items);
       qc.invalidateQueries({ queryKey: ['queue'] });
     });
+
+    const offFinalDx = on('FinalDiagnosisChanged', () => {
+      qc.invalidateQueries({ queryKey: ['queue'], exact: false });
+      qc.invalidateQueries({ queryKey: ['examinations'], exact: false });
+    });
     
     return () => {
       offClinicalCreated?.();
       offClinicalUpdated?.();
       offQueueChanged?.();
       offQueueByRoom?.();
+      offFinalDx?.();
     };
   }, [qc]);
 
@@ -867,6 +873,10 @@ export default function Examination() {
     };
 
     await dxMut.mutateAsync(finalPayload);
+    // dxMut dùng skipInvalidate — ClinicalExamUpdated trên SignalR chỉ tới BS được gán + nhóm phòng,
+    // nên luôn refetch hàng đợi sau khi lưu chẩn đoán để PatientTable có PhieuKhamLs.TrangThai mới (vd. da_lap_chan_doan).
+    await qc.invalidateQueries({ queryKey: ["queue"], exact: false });
+    await qc.invalidateQueries({ queryKey: ["examinations"], exact: false });
     setInProgress((prev) => {
       const s = new Set(prev);
       s.delete(key);

@@ -28,6 +28,23 @@ function fld(obj, ...paths) {
   return undefined;
 }
 
+/** Hiển thị cột ghi chú: slug BE → tiếng Việt (vd. kham_moi → Khám mới). */
+function humanizeQueueGhiChu(raw) {
+  if (raw == null) return "";
+  const s = String(raw).trim();
+  if (!s) return "";
+  const lower = s.toLowerCase();
+  if (lower === "kham_moi") return "Khám mới";
+  if (lower === "tai_kham") return "Tái khám";
+  if (lower === "kham_lam_sang") return "Khám lâm sàng";
+  if (lower === "can_lam_sang") return "Cận lâm sàng";
+  return s
+    .replace(/\bkham_moi\b/gi, "Khám mới")
+    .replace(/\btai_kham\b/gi, "Tái khám")
+    .replace(/\bkham_lam_sang\b/gi, "Khám lâm sàng")
+    .replace(/\bcan_lam_sang\b/gi, "Cận lâm sàng");
+}
+
 function InitialAvatar({ name = "", id = "" }) {
   const seed = (name || id || "A").charCodeAt(0) % 5;
   const colors = [
@@ -436,7 +453,12 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                     }
 
                     const checkinRaw = fld(p, "ThoiGianCheckin", "thoiGianCheckin", "checkIn");
-                    const noteText = fld(p, "Nhan", "nhan", "GhiChu", "note", "symptoms");
+                    const rawNote = fld(p, "Nhan", "nhan", "GhiChu", "ghiChu", "note", "symptoms");
+                    const loaiLuotRaw = fld(p, "LoaiLuot", "loaiLuot");
+                    const noteText =
+                      humanizeQueueGhiChu(rawNote) ||
+                      humanizeQueueGhiChu(loaiLuotRaw) ||
+                      "";
 
                     // ✅ Queue status for cancel button visibility
                     const queueStatus = (p.TrangThai || p.trangThai || p.status || "").toLowerCase();

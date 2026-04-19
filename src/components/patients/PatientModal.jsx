@@ -34,6 +34,7 @@ import { getStoredAccessToken } from "../../api/http.js";
 // History (lượt khám)
 import { useCreateHistoryVisit } from "../../api/history";
 import { getClinicalExam, getFinalDiagnosis, useCompleteExam } from "../../api/examination";
+import { getPrescriptionByCode } from "../../api/pharmacy.js";
 import { useExamStore, useUIStore, useAuthStore } from "../stores/appStore.js";
 import { useNavigate } from "react-router-dom";
 
@@ -1246,7 +1247,7 @@ export default function PatientModal({
   }, [open, patient, patientId]);
 
   // ❌ REMOVED: Don't reset cache when switching tabs
-  // Cache logic is now handled entirely by cachedDiagnosisPatientRef in fetchFinalDiagnosis
+  // cachedDiagnosisPatientRef: đánh dấu đã tải chẩn đoán (đổi BN thì xóa); không còn dùng để skip GET.
   // Only clear cache when patient changes (above useEffect) or modal closes
 
 
@@ -2212,6 +2213,20 @@ export default function PatientModal({
   // Tránh double submit phiếu khám
   const [creatingExam, setCreatingExam] = useState(false);
 
+  /** Map normalizePrescription().items → dòng thuốc cho PatientProcessMode */
+  function prescriptionItemsToProcessRows(items) {
+    if (!Array.isArray(items) || !items.length) return [];
+    return items.map((it) => ({
+      MaThuoc: it.code,
+      TenThuoc: it.name,
+      DonViTinh: it.unit,
+      SoLuong: it.qty,
+      DonGia: it.price,
+      ThanhTien: it.amount,
+      ChiDinhSuDung: [it.dose, it.usage].filter(Boolean).join(" — ") || "",
+    }));
+  }
+
   // ----------------- FETCH FINAL DIAGNOSIS FOR PROCESS MODE -----------------
   const fetchFinalDiagnosis = async (explicitPatientId = null) => {
     // ✅ Check if already fetching to prevent duplicate calls
@@ -2275,17 +2290,8 @@ export default function PatientModal({
       console.log(`[fetchFinalDiagnosis] Cached maPhieuKham: ${currentMaPhieuKham}`);
     }
 
-    // ✅ CHECK CACHE: Nếu đã có data cached cho bệnh nhân này, show toast và skip fetch
-    // Di chuyển cache check xuống đây SAU KHI đã kiểm tra maPhieuKham
-    if (cachedDiagnosisPatientRef.current === currentPatientId) {
-      console.log(
-        `[fetchFinalDiagnosis] ✅ Using cached diagnosis for patient ${currentPatientId}. ` +
-        `Skipping API call.`
-      );
-      // ✅ Show success toast để user biết data đã sẵn sàng (từ cache)
-      toast.success("Đã tải chẩn đoán cuối.");
-      return; // Data already in diagnosisData state
-    }
+    // Không skip theo cachedDiagnosisPatientRef: sau khi BS kê đơn + xuất chẩn đoán,
+    // cần gọi lại GET final-diagnosis + GET đơn thuốc; cache cũ khiến rx/MaDonThuoc không cập nhật.
 
     console.log(
       `[fetchFinalDiagnosis] Fetching diagnosis for patient: ${currentPatientId}, ` +
@@ -2306,6 +2312,7 @@ export default function PatientModal({
 
       if (!dxRes) {
         console.log("[fetchFinalDiagnosis] API returned null/undefined");
+        setRx([]);
         toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
@@ -2327,6 +2334,7 @@ export default function PatientModal({
       if (!diagnosisPatientId) {
         console.warn("[fetchFinalDiagnosis] Phiếu chẩn đoán không có mã bệnh nhân");
         console.warn("[fetchFinalDiagnosis] Response keys:", Object.keys(dxRes));
+        setRx([]);
         toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
@@ -2337,6 +2345,7 @@ export default function PatientModal({
           `current=${currentPatientId}, diagnosis=${diagnosisPatientId}. ` +
           `Bỏ qua kết quả này để tránh hiển thị sai dữ liệu.`
         );
+        setRx([]);
         toast.error("Chưa có chẩn đoán cuối cho bệnh nhân này.");
         return;
       }
@@ -2353,19 +2362,34 @@ export default function PatientModal({
         taiKham: huongXuTri.includes("tai_kham") || huongXuTri.includes("Tái khám"),
       };
 
+      const maDonThuoc =
+        dxRes.MaDonThuoc || dxRes.maDonThuoc || null;
+
       setDiagnosisData((prev) => ({
         ...prev,
         MaPhieuChanDoan: dxRes.MaPhieuChanDoan || dxRes.maPhieuChanDoan,
         MaPhieuKham: dxRes.MaPhieuKham || dxRes.maPhieuKham,
-        MaDonThuoc: dxRes.MaDonThuoc || dxRes.maDonThuoc,
+        MaDonThuoc: maDonThuoc,
         dxPrimary: dxRes.ChanDoanSoBo || dxRes.dxPrimary || "",
         dxSecondary: dxRes.ChanDoanCuoi || dxRes.dxSecondary || "",
         summary: dxRes.NoiDungKham || dxRes.summary || "",
         orders: dxRes.PhatDoDieuTri || dxRes.orders || "",
         advice: dxRes.LoiKhuyen || dxRes.advice || "",
         followupFlags: flags,
-        prescriptionCode: dxRes.MaDonThuoc || dxRes.maDonThuoc || "",
+        prescriptionCode: maDonThuoc || "",
       }));
+
+      if (maDonThuoc) {
+        try {
+          const presc = await getPrescriptionByCode(maDonThuoc);
+          setRx(prescriptionItemsToProcessRows(presc?.items));
+        } catch (rxErr) {
+          console.warn("[fetchFinalDiagnosis] Không tải được chi tiết đơn thuốc:", rxErr);
+          setRx([]);
+        }
+      } else {
+        setRx([]);
+      }
 
       // ✅ CACHE: Mark this patient's diagnosis as cached
       cachedDiagnosisPatientRef.current = currentPatientId;

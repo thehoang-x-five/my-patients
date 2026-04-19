@@ -346,6 +346,15 @@ export async function searchRxOrders({ keyword, status, fromDate, toDate, page =
   };
 }
 
+// GET /api/pharmacy/prescriptions/{maDonThuoc}
+export async function getPrescriptionByCode(maDonThuoc) {
+  if (!maDonThuoc) return null;
+  const data = await get(
+    `/pharmacy/prescriptions/${encodeURIComponent(String(maDonThuoc).trim())}`
+  );
+  return normalizePrescription(data);
+}
+
 // Deprecated: sử dụng searchRxOrders thay thế
 export async function getRxOrders() {
   const result = await searchRxOrders({ page: 1, pageSize: 1000 });
