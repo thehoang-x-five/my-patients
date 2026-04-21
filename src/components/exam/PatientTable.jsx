@@ -221,14 +221,31 @@ function tone(item, active) {
   return "teal";
 }
 
-function ActionButton({ active, status, hasPendingCls, source, onClick }) {
+function ActionButton({ active, status, hasPendingCls, source, clinicalExamStatus, onClick }) {
   // Ưu tiên BE status (TrangThai) trước, fallback về local inProgress
   const qs = (status || "").toLowerCase();
+  const examStatus = (clinicalExamStatus || "").toLowerCase();
   const isInProgress = active || qs === "dang_thuc_hien" || qs === "dang_kham";
   const isDone = qs === "da_phuc_vu" || qs === "hoan_tat";
+  const isAwaitingProcessing =
+    examStatus === "da_lap_chan_doan" ||
+    examStatus === "cho_xu_ly";
 
   // Đã hoàn tất → không hiện nút
   if (isDone) return null;
+
+  if (isAwaitingProcessing) {
+    return (
+      <motion.button
+        disabled
+        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-2 py-1.5 mt-0 text-sm font-semibold text-slate-500 shadow cursor-not-allowed"
+        aria-label="Chờ xử lý"
+        title="Ca khám đã xuất chẩn đoán và đang chờ xử lý tiếp"
+      >
+        Chờ xử lý
+      </motion.button>
+    );
+  }
 
   // Đang đi CLS (phiếu CLS tồn tại, chưa trở về) → khóa nút
   const isWaitingCls = isInProgress && hasPendingCls && source !== "service_return";
@@ -630,6 +647,7 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                                 status={queueStatus}
                                 hasPendingCls={!isClsQueue && !!fld(p, "HasPendingCls", "hasPendingCls")}
                                 source={fld(p, "Nguon", "nguon", "source") || ""}
+                                clinicalExamStatus={fld(p, "PhieuKhamLs.TrangThai", "PhieuKhamLsFull.TrangThai") || ""}
                                 onClick={() => onStart(p)}
                               />
                             ) : (

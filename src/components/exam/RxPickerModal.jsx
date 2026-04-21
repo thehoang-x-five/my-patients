@@ -4,6 +4,32 @@ import React, { useEffect, useMemo, useRef, useState, useDeferredValue } from "r
 import Button from "../ui/Button.jsx";
 import { useSearchStock } from "../../api/pharmacy.js";
 
+function parseExpiryDate(raw) {
+  if (!raw) return null;
+  const value = raw instanceof Date ? raw : new Date(raw);
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function getDrugAvailability(drug) {
+  const qty = Number(drug?.qty || 0);
+  const status = String(drug?.status || "").toLowerCase();
+  const expiry = parseExpiryDate(drug?.exp);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (qty <= 0) return { allowed: false, reason: "het_ton" };
+  if (status === "tam_dung" || status === "tam_ngung") {
+    return { allowed: false, reason: "tam_dung" };
+  }
+  if (status === "het_han") return { allowed: false, reason: "het_han" };
+  if (expiry) {
+    expiry.setHours(0, 0, 0, 0);
+    if (expiry < today) return { allowed: false, reason: "het_han" };
+  }
+
+  return { allowed: true, reason: null };
+}
+
 export default function RxPickerModal({ open, onClose, onPickMany }) {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState([]); // [{code,name,unit,price,dose,qty,usage}]
@@ -41,8 +67,15 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
 
   const filtered = stock; // Đã được filter ở BE
 
+  const availableStock = useMemo(
+    () => filtered.filter((item) => getDrugAvailability(item).allowed),
+    [filtered]
+  );
+  const blockedCount = Math.max(0, filtered.length - availableStock.length);
+
   const alreadyPicked = (code) => rows.some((r) => r.code === code);
   function addDrug(d) {
+    if (!getDrugAvailability(d).allowed) return;
     if (!alreadyPicked(d.code)) {
       setRows((s) => [...s, { ...d, dose: "", qty: 1 }]); // 👈 thay "" -> 1
     }
@@ -55,7 +88,7 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
     if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
       if (isSearch) {
         e.preventDefault();
-        const first = filtered[0];
+        const first = availableStock[0];
         if (first) addDrug(first);
       }
       return;
@@ -86,7 +119,7 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
                   <p className="text-sm text-slate-600">Chọn từ kho • Nhập liều dùng / số lượng</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="tag bg-sky-50 text-sky-700 border-sky-200">Kết quả: <b className="ml-1">{stockTotalItems}</b></span>
+                  <span className="tag bg-sky-50 text-sky-700 border-sky-200">Khả dụng: <b className="ml-1">{availableStock.length}</b></span>
                   <span className="tag bg-teal-50 text-teal-700 border-teal-200">Đã chọn: <b className="ml-1">{rows.length}</b></span>
                   <Button onClick={onClose} aria-label="Đóng" className="!px-2">✕</Button>
                 </div>
@@ -113,7 +146,12 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
                   {isFetching && (
                     <div className="p-3 text-sm text-slate-500">Đang tải kho thuốc...</div>
                   )}
-                  {!isFetching && filtered.map((d, i) => {
+                  {!isFetching && blockedCount > 0 && (
+                    <div className="px-3 py-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg mb-2">
+                      Đã ẩn {blockedCount} thuốc hết hạn, tạm dừng hoặc hết tồn.
+                    </div>
+                  )}
+                  {!isFetching && availableStock.map((d, i) => {
                     const picked = alreadyPicked(d.code);
                     return (
                       <motion.button
@@ -142,6 +180,11 @@ export default function RxPickerModal({ open, onClose, onPickMany }) {
                       </motion.button>
                     );
                   })}
+                  {!isFetching && !availableStock.length && (
+                    <div className="p-3 text-sm text-slate-500">
+                      Không có thuốc nào còn kê được trong kết quả hiện tại.
+                    </div>
+                  )}
                 </div>
                 
                 {/* ✅ Pagination cho modal (nếu có nhiều trang) */}

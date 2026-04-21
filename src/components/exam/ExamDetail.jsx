@@ -272,6 +272,13 @@ const svcMap = useMemo(() => {
     choThuocVe: false,
     taiKham: false,
   };
+  const canPrescribeTakeHome = allowPrescribe && !!dxFlags.choThuocVe;
+
+  useEffect(() => {
+    if (dxFlags.choThuocVe) return;
+    if (pickerOpen) setPickerOpen(false);
+    if (rx.length > 0) setRx([]);
+  }, [dxFlags.choThuocVe, pickerOpen, rx.length]);
 
   function toggleDxFlag(name) {
     setDxFlagError("");
@@ -504,6 +511,11 @@ const svcMap = useMemo(() => {
     const pid = patient?.pid || patient?.id;
     payload.services = payload.orderRows.map((r) => r.id);
 
+    if (!dxFlags.choThuocVe && payload.rxRows.length > 0) {
+      toast.error("Chỉ được kê thuốc khi đã chọn hướng xử lý 'Cho thuốc về'.");
+      return;
+    }
+
     if (onExportDiagnosis) {
       await onExportDiagnosis(patient, {
         dx: payload.dx,
@@ -556,6 +568,11 @@ const svcMap = useMemo(() => {
   }
 
   function onPickMany(list) {
+    if (!dxFlags.choThuocVe) {
+      toast.error("Hãy chọn hướng xử lý 'Cho thuốc về' trước khi kê thuốc.");
+      setPickerOpen(false);
+      return;
+    }
     setRx((s) => [
       ...s,
       ...list.filter((n) => !s.some((x) => x.code === n.code)),
@@ -1151,6 +1168,13 @@ const svcMap = useMemo(() => {
                       type="button"
                       className="btn-primary"
                       onClick={() => setPickerOpen(true)}
+                      disabled={!canPrescribeTakeHome}
+                      aria-disabled={!canPrescribeTakeHome}
+                      title={
+                        canPrescribeTakeHome
+                          ? "Kê thuốc"
+                          : "Chọn 'Cho thuốc về' để kê đơn"
+                      }
                     >
                       Kê thuốc
                     </Button>
@@ -1237,7 +1261,13 @@ const svcMap = useMemo(() => {
                             colSpan="5"
                             className="px-3 py-6 text-slate-500"
                           >
-                            Chưa có thuốc. Nhấn <b>Kê thuốc</b> để thêm.
+                            {canPrescribeTakeHome ? (
+                              <>
+                                Chưa có thuốc. Nhấn <b>Kê thuốc</b> để thêm.
+                              </>
+                            ) : (
+                              <>Chọn <b>Cho thuốc về</b> trong hướng xử lý để kê đơn.</>
+                            )}
                           </td>
                         </tr>
                       )}
@@ -1456,7 +1486,7 @@ const svcMap = useMemo(() => {
 
       {/* Rx modal */}
       <RxPickerModal
-        open={pickerOpen}
+        open={pickerOpen && dxFlags.choThuocVe}
         onClose={() => setPickerOpen(false)}
         onPickMany={onPickMany}
       />

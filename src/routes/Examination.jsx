@@ -225,6 +225,57 @@ export default function Examination() {
       return old;
     });
   };
+
+  const patchQueueDiagnosisCache = (maHangDoi, nextClinicalStatus) => {
+    if (!maHangDoi || !nextClinicalStatus) return;
+
+    const patchItem = (item) => {
+      if (!item || typeof item !== "object") return item;
+      const itemKey = keyOf(item);
+      if (String(itemKey || "") !== String(maHangDoi)) return item;
+
+      return {
+        ...item,
+        PhieuKhamLs: item?.PhieuKhamLs
+          ? { ...item.PhieuKhamLs, TrangThai: nextClinicalStatus, trangThai: nextClinicalStatus }
+          : item?.phieuKhamLs
+            ? { ...item.phieuKhamLs, TrangThai: nextClinicalStatus, trangThai: nextClinicalStatus }
+            : item?.MaPhieuKham || item?.maPhieuKham
+              ? { MaPhieuKham: item?.MaPhieuKham || item?.maPhieuKham, TrangThai: nextClinicalStatus }
+              : item?.PhieuKhamLs,
+        phieuKhamLs: item?.phieuKhamLs
+          ? { ...item.phieuKhamLs, TrangThai: nextClinicalStatus, trangThai: nextClinicalStatus }
+          : item?.PhieuKhamLs
+            ? { ...item.PhieuKhamLs, TrangThai: nextClinicalStatus, trangThai: nextClinicalStatus }
+            : item?.phieuKhamLs,
+        PhieuKhamLsFull: item?.PhieuKhamLsFull
+          ? { ...item.PhieuKhamLsFull, TrangThai: nextClinicalStatus, trangThai: nextClinicalStatus }
+          : item?.PhieuKhamLsFull,
+        phieuKhamLsFull: item?.phieuKhamLsFull
+          ? { ...item.phieuKhamLsFull, TrangThai: nextClinicalStatus, trangThai: nextClinicalStatus }
+          : item?.phieuKhamLsFull,
+      };
+    };
+
+    qc.setQueriesData({ queryKey: ["queue"], exact: false }, (old) => {
+      if (!old) return old;
+      if (Array.isArray(old)) return old.map(patchItem);
+      if (Array.isArray(old?.Items)) {
+        return {
+          ...old,
+          Items: old.Items.map(patchItem),
+        };
+      }
+      if (Array.isArray(old?.items)) {
+        return {
+          ...old,
+          items: old.items.map(patchItem),
+        };
+      }
+      if (typeof old === "object") return patchItem(old);
+      return old;
+    });
+  };
   
   // Chuẩn hóa chữ cái đầu cho nhãn hiển thị (ví dụ: "nam" -> "Nam")
   function titleCase(val) {
@@ -849,13 +900,17 @@ export default function Examination() {
       return;
     }
 
-    // ✅ Flow mới: Chỉ lưu chẩn đoán, không đóng lượt khám ở đây
-    // Lượt khám sẽ được đóng khi hoàn tất (CompleteExamAsync)
+    if (!flags.choThuocVe && donThuoc.length > 0) {
+      toast.error("Chỉ được kê thuốc khi hướng xử trí có 'Cho thuốc về'.");
+      return;
+    }
+
+    // ✅ Flow chuẩn: lưu chẩn đoán, kết thúc ca ở màn khám,
+    // sau đó chuyển bệnh nhân sang bước xử lý/phát thuốc/thanh toán nếu còn.
     const finalPayload = {
       MaPhieuKham: maPhieuKham,
-      // KHÔNG truyền MaLuotKham, MaHangDoi, TrangThaiLuot, ThoiGianKetThuc
-      // Backend sẽ chỉ lưu chẩn đoán, chuyển phiếu khám → "da_lap_chan_doan"
-      // Lượt khám vẫn "dang_kham", hàng đợi vẫn "dang_thuc_hien"
+      // Không truyền MaLuotKham/MaHangDoi ở FE.
+      // Backend tự chốt trạng thái lượt khám + hàng đợi của ca hiện tại.
       MaDonThuoc: null,
       MaBacSiKeDon:
         patient?.MaNguoiLap ||
@@ -873,6 +928,8 @@ export default function Examination() {
     };
 
     await dxMut.mutateAsync(finalPayload);
+    patchQueueStatusCache(key, "da_phuc_vu");
+    patchQueueDiagnosisCache(key, "da_lap_chan_doan");
     // dxMut dùng skipInvalidate — ClinicalExamUpdated trên SignalR chỉ tới BS được gán + nhóm phòng,
     // nên luôn refetch hàng đợi sau khi lưu chẩn đoán để PatientTable có PhieuKhamLs.TrangThai mới (vd. da_lap_chan_doan).
     await qc.invalidateQueries({ queryKey: ["queue"], exact: false });

@@ -96,7 +96,7 @@ function normalizeDrug(dto = {}) {
   // Chuẩn hoá vài biến thể
   if (["expired"].includes(status)) status = "het_han";
   if (["inactive", "tam_dung", "tam_ngung", "paused"].includes(status)) {
-    status = "tam_ngung";
+    status = "tam_dung";
   }
 
   const id =
