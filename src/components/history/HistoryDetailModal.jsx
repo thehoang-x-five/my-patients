@@ -36,6 +36,8 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
   const isServiceVisit =
     isVisit &&
     (data.isServiceVisit ||
+      data.isService ||
+      data.type === "can_lam_sang" ||
       data.type === "service" ||
       isServiceDept(data.dept));
 

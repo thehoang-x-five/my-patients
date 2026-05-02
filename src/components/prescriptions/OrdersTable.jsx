@@ -176,6 +176,16 @@ export default function OrdersTable({
                   canDispense &&
                   onDispense &&
                   /^(da_ke|cho_phat)$/i.test(o.status || o.trangThai || "");
+                const invoiceStatus = String(
+                  o.invoiceStatus ||
+                    o.invoice?.TrangThai ||
+                    o.invoice?.status ||
+                    ""
+                )
+                  .toLowerCase()
+                  .trim();
+                const needsDrugPayment =
+                  total > 0 && invoiceStatus !== "da_thu";
 
                 return (
                   <Row key={o.id || o.code || i} i={i}>
@@ -252,9 +262,13 @@ export default function OrdersTable({
                             type="button"
                             className="!px-2 !text-emerald-700 hover:!bg-emerald-50"
                             onClick={() => onDispense?.(o)}
-                            title="Phát thuốc"
+                            title={
+                              needsDrugPayment
+                                ? "Thu tiền thuốc trước khi phát"
+                                : "Phát thuốc"
+                            }
                           >
-                            Phát
+                            {needsDrugPayment ? "Thu tiền" : "Phát"}
                           </Button>
                         )}
                       </div>

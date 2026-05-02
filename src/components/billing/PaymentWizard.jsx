@@ -6,6 +6,7 @@ import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   searchInvoices,
+  updateInvoiceStatus,
   useConfirmInvoice,
   useCreateInvoice,
   useGenerateVietQR,
@@ -305,6 +306,14 @@ export default function PaymentWizard({
         activeInvoice?.MaHoaDon ?? activeInvoice?.maHoaDon ?? null;
 
       if (method === DEFERRED_METHOD) {
+        if (activeInvoiceId) {
+          const deferredInvoice = await updateInvoiceStatus({
+            id: activeInvoiceId,
+            status: "bao_luu",
+          });
+          setInvoice(deferredInvoice || activeInvoice);
+        }
+
         setCompletionMode("deferred");
         setStep(STEPS.DONE);
         onComplete?.({
@@ -378,10 +387,6 @@ export default function PaymentWizard({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-        onClick={(e) => {
-          if (e.target === e.currentTarget && step !== STEPS.CONFIRM)
-            handleClose();
-        }}
       >
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}

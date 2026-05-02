@@ -86,9 +86,12 @@ export default function PatientProcessMode({
   handleServiceReturnToDoctor,
   /** Trạng thái đơn từ API: da_ke | cho_phat | da_phat | … */
   prescriptionOrderStatus = "",
-  canCollectAndDispenseMedicine = false,
-  onCollectAndDispenseMedicine,
-  collectDispenseBusy = false,
+  showExamFeePayment = false,
+  canCollectExamFee = false,
+  onCollectExamFee,
+  collectExamFeeBusy = false,
+  pendingExamFeeAmount = 0,
+  finishBlockedByPayment = false,
 }) {
   const serviceRows = React.useMemo(() => {
     if (!Array.isArray(svcResults) || !svcResults.length) return [];
@@ -322,11 +325,10 @@ export default function PatientProcessMode({
 
   const rxStatusRaw = String(prescriptionOrderStatus || "").toLowerCase().trim();
   const rxIsDispensed = rxStatusRaw === "da_phat";
-  const showInlineDispense =
-    rx.length > 0 &&
-    prescriptionCode &&
-    canCollectAndDispenseMedicine &&
-    typeof onCollectAndDispenseMedicine === "function";
+  const pendingExamFeeLabel =
+    Number(pendingExamFeeAmount || 0) > 0
+      ? `${Number(pendingExamFeeAmount || 0).toLocaleString("vi-VN")}đ`
+      : "";
 
   const dxPrimary = diagnosisData?.ChanDoanSoBo ?? diagnosisData?.dxPrimary ?? "";
   const dxFinal = diagnosisData?.ChanDoanCuoi ?? diagnosisData?.dxSecondary ?? "";
@@ -357,6 +359,13 @@ export default function PatientProcessMode({
   if (followupFlags.choThuocVe) followupParts.push("Cho thuốc về");
   if (followupFlags.taiKham) followupParts.push("Tái khám");
   const isRevisit = followupFlags.taiKham;
+  const plannedFollowupDate = String(diagnosisData?.followupDate || "").slice(0, 10);
+  const plannedFollowupTime = String(diagnosisData?.followupTime || "").trim();
+  const plannedFollowupLabel = plannedFollowupDate
+    ? `${plannedFollowupDate.split("-").reverse().join("/")}${
+        plannedFollowupTime ? ` ${plannedFollowupTime}` : ""
+      }`
+    : "Chưa chọn ngày tái khám";
 
   const toggleFlag = (flagName) => {
     if (!setDiagnosisData) return;
@@ -466,7 +475,7 @@ export default function PatientProcessMode({
               {isRevisit ? (
                 <div className="mt-3 pt-3 border-t border-orange-200">
                   <div className="text-xs text-emerald-700 font-semibold">
-                    Tái khám dự kiến: Sau 7 ngày
+                    Tái khám dự kiến: {plannedFollowupLabel}
                   </div>
                 </div>
               ) : null}
@@ -554,55 +563,58 @@ export default function PatientProcessMode({
           </div>
 
           {rx.length > 0 && prescriptionCode ? (
-            <div className="mt-3 rounded-xl px-3 py-2.5 ring-1 ring-slate-200/80 bg-white/90 text-[12px] text-slate-600 space-y-2">
-              <div className="flex flex-wrap items-center gap-2 justify-between">
-                <span>
-                  Trạng thái đơn:{" "}
-                  <b className="text-slate-800">
-                    {rxIsDispensed
-                      ? "Đã phát thuốc"
-                      : rxStatusRaw === "cho_phat"
-                        ? "Chờ phát"
-                        : rxStatusRaw === "da_ke" || !rxStatusRaw
-                          ? "Đã kê / chờ xử lý"
-                          : prescriptionOrderStatus || "—"}
-                  </b>
-                </span>
-                {showInlineDispense && !rxIsDispensed ? (
-                  <button
-                    type="button"
-                    disabled={collectDispenseBusy}
-                    onClick={() => onCollectAndDispenseMedicine?.()}
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {collectDispenseBusy
-                      ? "Đang xử lý…"
-                      : "Thu phí thuốc & phát thuốc"}
-                  </button>
-                ) : null}
-                {showInlineDispense && rxIsDispensed ? (
-                  <span className="text-[11px] font-semibold text-emerald-700">
-                    Có thể hoàn tất phiếu khám
-                  </span>
-                ) : null}
+            <div className="mt-3 rounded-xl px-3 py-2.5 ring-1 ring-slate-200/80 bg-white/90 text-[12px] text-slate-600">
+              Trạng thái đơn:{" "}
+              <b className="text-slate-800">
+                {rxIsDispensed
+                  ? "Đã phát thuốc"
+                  : rxStatusRaw === "cho_phat"
+                    ? "Chờ phát"
+                    : rxStatusRaw === "da_ke" || !rxStatusRaw
+                      ? "Đã kê / chờ nhà thuốc xử lý"
+                      : prescriptionOrderStatus || "—"}
+              </b>
+              <div className="mt-1 text-slate-500">
+                Phí thuốc và phát thuốc được xử lý tại trang Đơn thuốc.
               </div>
-              <p className="text-[11px] leading-snug text-slate-500">
-                Hệ thống thu tiền thuốc trước, sau đó mới trừ tồn kho khi phát. Luồng tách ở trang
-                Nhà thuốc / Công nợ vẫn dùng được như cũ.
-              </p>
             </div>
           ) : null}
         </motion.div>
 
         <div className="flex items-center justify-end gap-3 mt-2 pt-2 border-t border-slate-200">
+          {showExamFeePayment ? (
+            <motion.button
+              type="button"
+              whileHover={{ scale: canCollectExamFee && !collectExamFeeBusy ? 1.02 : 1, y: canCollectExamFee && !collectExamFeeBusy ? -1 : 0 }}
+              whileTap={{ scale: canCollectExamFee && !collectExamFeeBusy ? 0.98 : 1 }}
+              onClick={onCollectExamFee}
+              disabled={!canCollectExamFee || collectExamFeeBusy}
+              title={
+                canCollectExamFee
+                  ? "Thu phí phiếu khám trước khi hoàn tất"
+                  : "Bạn không có quyền thu phí"
+              }
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 text-white font-semibold shadow-md hover:shadow-lg transition disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {collectExamFeeBusy
+                ? "Đang mở thanh toán..."
+                : `Thu phí${pendingExamFeeLabel ? ` ${pendingExamFeeLabel}` : ""}`}
+            </motion.button>
+          ) : null}
           <motion.button
             type="button"
-            whileHover={{ scale: 1.02, y: -1 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: finishBlockedByPayment ? 1 : 1.02, y: finishBlockedByPayment ? 0 : -1 }}
+            whileTap={{ scale: finishBlockedByPayment ? 1 : 0.98 }}
             onClick={handleFinishDoctor}
-            className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition"
+            disabled={finishBlockedByPayment}
+            title={
+              finishBlockedByPayment
+                ? "Vui lòng thu phí phiếu khám trước khi hoàn tất."
+                : "Hoàn tất phiếu khám"
+            }
+            className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Hoàn tất và thu phí
+            {finishBlockedByPayment ? "Hoàn tất (chờ thu phí)" : "Hoàn tất"}
           </motion.button>
         </div>
       </motion.section>

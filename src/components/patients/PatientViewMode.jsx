@@ -3,7 +3,12 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Chip from "../ui/Chip.jsx";
 import { ANIMATION_CONFIG, StatusPill } from "./Shared.jsx";
-import { mapTodayStatusLabel, mapGenderLabel, mapVisitTypeLabel } from "../../api/patients";
+import {
+  isCurrentTodayStatus,
+  mapTodayStatusLabel,
+  mapGenderLabel,
+  mapVisitTypeLabel,
+} from "../../api/patients";
 import { useMedicalHistory } from "../../api/history.js";
 import { formatStatus } from "../../utils/textFormatters.js";
 
@@ -15,9 +20,53 @@ import PatientGenealogy from "./PatientGenealogy.jsx";
 const TABS = [
   { key: "info", label: "Thông tin" },
   { key: "history", label: "Lịch sử khám" },
+  { key: "activity", label: "Hoạt động" },
   { key: "transactions", label: "Giao dịch" },
   { key: "genealogy", label: "Pha hệ" },
 ];
+
+function visitStatusCode(visit = {}) {
+  return String(
+    visit.status ||
+      visit.TrangThai ||
+      visit.trangThai ||
+      visit._raw?.TrangThai ||
+      visit._raw?.trangThai ||
+      ""
+  ).trim().toLowerCase();
+}
+
+function isCancelledWorkflowVisit(visit) {
+  const status = visitStatusCode(visit);
+  return status === "da_huy" || status === "huy" || status === "cancelled";
+}
+
+function isMedicalVisit(visit) {
+  if (isCancelledWorkflowVisit(visit)) return false;
+
+  const status = visitStatusCode(visit);
+  const raw = visit?._raw || {};
+  return (
+    status === "hoan_tat" ||
+    status === "da_hoan_tat" ||
+    status === "hoan_thanh" ||
+    Boolean(visit?.note || raw?.Note || raw?.note) ||
+    Boolean(raw?.MaPhieuChanDoanCuoi || raw?.maPhieuChanDoanCuoi) ||
+    Boolean(raw?.MaDonThuoc || raw?.maDonThuoc) ||
+    Boolean(raw?.MaPhieuTongHopCls || raw?.maPhieuTongHopCls)
+  );
+}
+
+function asCancelledActivity(visit) {
+  return {
+    ...visit,
+    type: "workflow",
+    eventType: "workflow",
+    typeLabel: "Bỏ về / quá hạn",
+    status: visitStatusCode(visit) || "da_huy",
+    note: visit?.note || "Workflow đã được hủy do bỏ về hoặc quá hạn.",
+  };
+}
 
 export default function PatientViewMode({
   patient,
@@ -62,7 +111,22 @@ export default function PatientViewMode({
   const phone = patient?.DienThoai || patient?.dienThoai || patient?.phone || "—";
   const email = patient?.Email || patient?.email || "—";
   const address = patient?.DiaChi || patient?.diaChi || patient?.address || "—";
-  const todayStatus = patient?.statusLabel || mapTodayStatusLabel(patient?.TrangThaiHomNay || patient?.trangThaiHomNay || patient?.status) || "";
+  const todayStatusDate =
+    patient?.NgayTrangThai ||
+    patient?.ngayTrangThai ||
+    patient?.ngay_trang_thai ||
+    patient?.statusDate ||
+    "";
+  const rawTodayStatus =
+    patient?.TrangThaiHomNay ||
+    patient?.trangThaiHomNay ||
+    patient?.trang_thai_hom_nay_code ||
+    patient?.statusCode ||
+    "";
+  const todayStatus = isCurrentTodayStatus(todayStatusDate)
+    ? mapTodayStatusLabel(rawTodayStatus) || patient?.statusLabel || patient?.status || ""
+    : "";
+  const todayStatusText = todayStatus || "Chưa bắt đầu hôm nay";
 
   const height = patient?.heightCm || patient?.chieuCaoCm || patient?.ChieuCaoCm;
   const weight = patient?.weightKg || patient?.canNangKg || patient?.CanNangKg;
@@ -85,8 +149,15 @@ export default function PatientViewMode({
   const safePatientExtras = patientExtras || [];
   const safeVisits = visits || [];
   const safeTransactions = transactions || [];
-  const safeTimelineEvents =
-    medicalHistory?.events?.length > 0 ? medicalHistory.events : safeVisits;
+  const medicalVisits = safeVisits.filter(isMedicalVisit);
+  const cancelledWorkflowEvents = safeVisits
+    .filter(isCancelledWorkflowVisit)
+    .map(asCancelledActivity);
+  const mongoActivityEvents = medicalHistory?.events?.length > 0 ? medicalHistory.events : [];
+  const safeActivityEvents =
+    mongoActivityEvents.length > 0
+      ? [...mongoActivityEvents, ...cancelledWorkflowEvents]
+      : cancelledWorkflowEvents;
 
   return (
     <motion.div {...ANIMATION_CONFIG} className="space-y-3">
@@ -119,7 +190,7 @@ export default function PatientViewMode({
         </motion.div>
 
         <div className="flex flex-col items-end gap-2">
-          <StatusPill s={todayStatus} />
+          <StatusPill s={todayStatusText} />
           <button
             type="button"
             onClick={handleCreateAppointmentFromView}
@@ -179,8 +250,8 @@ export default function PatientViewMode({
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-bold text-slate-900">Lịch sử khám</h4>
                   <div className="flex items-center gap-2">
-                    <Chip tone="emerald" dot="emerald" className="text-xs">{safeTimelineEvents.length}</Chip>
-                    {safeTimelineEvents.length > 0 && (
+                    <Chip tone="emerald" dot="emerald" className="text-xs">{medicalVisits.length}</Chip>
+                    {medicalVisits.length > 0 && (
                       <button onClick={() => switchTabWithHighlight("history")} className="text-xs text-emerald-600 hover:text-emerald-800 font-medium transition hover:underline">
                         Xem tất cả →
                       </button>
@@ -188,8 +259,8 @@ export default function PatientViewMode({
                   </div>
                 </div>
                 <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1 scrollbar-none">
-                  {safeTimelineEvents.length ? (
-                    safeTimelineEvents.slice(0, 5).map((v, i) => {
+                  {medicalVisits.length ? (
+                    medicalVisits.slice(0, 5).map((v, i) => {
                       const dateText = v.dateLabel || v.date || v.Date || v.ngay || v.Ngay || "";
                       const deptText = v.dept || v.department || v.Dept || v.khoa || v.Khoa || "";
                       const doctorText = v.doctor || v.Doctor || v.bacSi || v.BacSi || "";
@@ -261,7 +332,17 @@ export default function PatientViewMode({
             className={`rounded-2xl p-4 ring-1 shadow-sm transition-all duration-500 ${
               highlightTab ? "ring-emerald-400 bg-emerald-50/60 shadow-emerald-200/50" : "ring-emerald-200/50 bg-white"
             }`}>
-            <PatientTimeline visits={safeTimelineEvents} highlightItems={highlightTab} patientId={patientId} />
+            <PatientTimeline visits={medicalVisits} highlightItems={highlightTab} patientId={patientId} />
+          </motion.div>
+        )}
+
+        {activeTab === "activity" && (
+          <motion.div key="activity" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.15 }}
+            className={`rounded-2xl p-4 ring-1 shadow-sm transition-all duration-500 ${
+              highlightTab ? "ring-amber-400 bg-amber-50/60 shadow-amber-200/50" : "ring-emerald-200/50 bg-white"
+            }`}>
+            <PatientTimeline visits={safeActivityEvents} highlightItems={highlightTab} patientId={patientId} />
           </motion.div>
         )}
 

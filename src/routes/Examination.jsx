@@ -887,6 +887,8 @@ export default function Examination() {
       }) || [];
 
     const flags = payload?.dx?.flags || {};
+    const followupDate = String(payload?.dx?.followupDate || "").slice(0, 10);
+    const followupTime = String(payload?.dx?.followupTime || "").trim();
     const huongXuTriArr = [];
     if (flags.choVe) huongXuTriArr.push("Cho về");
     if (flags.choThuocVe) huongXuTriArr.push("Cho thuốc về");
@@ -904,6 +906,16 @@ export default function Examination() {
       toast.error("Chỉ được kê thuốc khi hướng xử trí có 'Cho thuốc về'.");
       return;
     }
+
+    if (flags.taiKham && !followupDate) {
+      toast.error("Vui lòng chọn ngày tái khám.");
+      return;
+    }
+
+    const ngayTaiKham =
+      flags.taiKham && followupDate
+        ? `${followupDate}T${/^\d{2}:\d{2}$/.test(followupTime) ? followupTime : "08:00"}:00`
+        : null;
 
     // ✅ Flow chuẩn: lưu chẩn đoán, kết thúc ca ở màn khám,
     // sau đó chuyển bệnh nhân sang bước xử lý/phát thuốc/thanh toán nếu còn.
@@ -924,6 +936,8 @@ export default function Examination() {
       HuongXuTri: huongXuTri,
       LoiKhuyen: payload?.dx?.advice || "",
       PhatDoDieuTri: payload?.dx?.plan || "",
+      NgayTaiKham: ngayTaiKham,
+      GhiChuTaiKham: flags.taiKham ? (payload?.dx?.advice || "") : null,
       DonThuoc: donThuoc.length > 0 ? donThuoc : undefined,  // ✅ Chỉ gửi nếu có thuốc
     };
 

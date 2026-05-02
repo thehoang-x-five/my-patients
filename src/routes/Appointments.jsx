@@ -25,7 +25,11 @@ import { useUIStore, useAuthStore } from "../components/stores/appStore";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 import { toast } from "react-toastify";
-import { getFollowupContext, clearFollowupContext } from "../utils/followupContext.js";
+import {
+  getFollowupContext,
+  clearFollowupContext,
+  markFollowupNotified,
+} from "../utils/followupContext.js";
 import { formatLocalizedMessage } from "../utils/textFormatters.js";
 import {
   canCreateAppointment,
@@ -134,7 +138,6 @@ export default function Appointments() {
       toast.info(`Vui lòng tạo lịch hẹn tái khám cho bệnh nhân: ${context.patientName}`);
       
       // Mark as notified
-      const { markFollowupNotified } = require("../utils/followupContext.js");
       markFollowupNotified();
       
       // Trigger flash animation
@@ -558,7 +561,16 @@ export default function Appointments() {
               );
               return;
             }
-            setCreateDate(panelDate || TODAY);
+            const preferredFollowupDate =
+              hasFollowupContext && followupContextData?.followupDateTime
+                ? String(followupContextData.followupDateTime).slice(0, 10)
+                : "";
+            const preferredFollowupTime =
+              hasFollowupContext && followupContextData?.followupDateTime
+                ? String(followupContextData.followupDateTime).slice(11, 16)
+                : "";
+
+            setCreateDate(preferredFollowupDate || panelDate || TODAY);
             setDrawerOpen(true);
             
             // ✅ Acknowledge flash animation
@@ -575,7 +587,8 @@ export default function Appointments() {
                   code: followupContextData.patientId,
                   type: "follow_up",
                   doctor: followupContextData.doctorName,
-                  date: panelDate || TODAY,
+                  date: preferredFollowupDate || panelDate || TODAY,
+                  time: preferredFollowupTime || "",
                   dept: followupContextData.deptName || "",
                   note: followupContextData.note || "",
                   lastVisit: {

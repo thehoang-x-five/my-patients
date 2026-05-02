@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import ConfirmModal from "../ui/ConfirmModal.jsx";
@@ -7,8 +7,9 @@ import {
   STATUSES,
   getAccountStatusLabel,
   getGenderLabel,
+  getEffectiveTodayStatusCode,
   getTodayStatusLabel,
-  normalizeTodayStatusCode,
+  isCurrentTodayStatus,
   useUpdatePatientStatus,
 } from "../../api/patients.js";
 import { useServicesOverview } from "../../api/examination.js";
@@ -24,13 +25,14 @@ function getAccount(patient) {
 }
 
 function getTodayStatusCode(patient) {
-  return normalizeTodayStatusCode(
+  return getEffectiveTodayStatusCode(
     patient?.trang_thai_hom_nay_code ??
     patient?.trang_thai_hom_nay ??
     patient?.statusCode ??
     patient?.todayStatus ??
     patient?.status ??
-    ""
+    "",
+    getStatusDate(patient)
   );
 }
 
@@ -113,8 +115,8 @@ function AccountBadge({ status, lang }) {
     code === "da_xoa"
       ? "bg-rose-50 text-rose-700 ring-rose-200"
       : code === "khong_hoat_dong"
-      ? "bg-slate-50 text-slate-700 ring-slate-200"
-      : "bg-emerald-50 text-emerald-700 ring-emerald-200";
+        ? "bg-slate-50 text-slate-700 ring-slate-200"
+        : "bg-emerald-50 text-emerald-700 ring-emerald-200";
 
   return (
     <span
@@ -239,59 +241,59 @@ export default function PatientsTable({
   const t =
     lang === "en"
       ? {
-          region: "Patient list",
-          patientCode: "Patient ID",
-          fullName: "Full name",
-          dob: "Date of birth",
-          gender: "Gender",
-          contact: "Contact",
-          status: "Status",
-          actions: "Actions",
-          empty: "No matching records.",
-          vitals: "Vitals",
-          services: "Services",
-          startToday: "Start today",
-          startTodaySuccess: "Today's care flow has started for the patient.",
-          startTodayError: "Unable to start today's care flow. Please try again.",
-          view: "View patient",
-          edit: "Edit patient",
-          createExam: "Create exam sheet",
-          processDiagnosis: "Process",
-          returnHome: "Cancel visit",
-          returnHomeTitle: "Cancel today's visit",
-          returnHomeMessage: (name) =>
-            `Patient "${name}" will be moved to the cancelled status. Unpaid invoices will be cancelled, and paid invoices will be moved to reserve. Do you want to continue?`,
-          returnHomeConfirm: "Confirm cancel",
-          returnHomeSuccess: "Patient has been moved to cancelled status.",
-          returnHomeError: "Unable to update patient status. Please try again.",
-        }
+        region: "Patient list",
+        patientCode: "Patient ID",
+        fullName: "Full name",
+        dob: "Date of birth",
+        gender: "Gender",
+        contact: "Contact",
+        status: "Status",
+        actions: "Actions",
+        empty: "No matching records.",
+        vitals: "Vitals",
+        services: "Services",
+        startToday: "Start today",
+        startTodaySuccess: "Today's care flow has started for the patient.",
+        startTodayError: "Unable to start today's care flow. Please try again.",
+        view: "View patient",
+        edit: "Edit patient",
+        createExam: "Create exam sheet",
+        processDiagnosis: "Process",
+        returnHome: "Cancel visit",
+        returnHomeTitle: "Cancel today's visit",
+        returnHomeMessage: (name) =>
+          `Patient "${name}" will be moved to the cancelled status. Unpaid invoices will be cancelled, and paid invoices will be moved to reserve. Do you want to continue?`,
+        returnHomeConfirm: "Confirm cancel",
+        returnHomeSuccess: "Patient has been moved to cancelled status.",
+        returnHomeError: "Unable to update patient status. Please try again.",
+      }
       : {
-          region: "Danh sách bệnh nhân",
-          patientCode: "Mã BN",
-          fullName: "Họ và tên",
-          dob: "Ngày sinh",
-          gender: "Giới tính",
-          contact: "Liên hệ",
-          status: "Trạng thái",
-          actions: "Thao tác",
-          empty: "Không có bản ghi phù hợp.",
-          vitals: "Sinh hiệu",
-          services: "Dịch vụ",
-          startToday: "Bắt đầu hôm nay",
-          startTodaySuccess: "Đã bắt đầu lượt xử lý hôm nay cho bệnh nhân.",
-          startTodayError: "Không thể bắt đầu lượt xử lý hôm nay. Vui lòng thử lại.",
-          view: "Xem bệnh nhân",
-          edit: "Sửa bệnh nhân",
-          createExam: "Lập phiếu khám",
-          processDiagnosis: "Xử lý",
-          returnHome: "Bỏ về",
-          returnHomeTitle: "Xác nhận bỏ về",
-          returnHomeMessage: (name) =>
-            `Bệnh nhân "${name}" sẽ được chuyển sang trạng thái bỏ về. Hóa đơn chưa thu sẽ bị hủy, còn hóa đơn đã thu sẽ chuyển sang bảo lưu. Bạn có chắc chắn?`,
-          returnHomeConfirm: "Xác nhận bỏ về",
-          returnHomeSuccess: "Đã chuyển bệnh nhân sang trạng thái bỏ về.",
-          returnHomeError: "Không thể cập nhật trạng thái bỏ về. Vui lòng thử lại.",
-        };
+        region: "Danh sách bệnh nhân",
+        patientCode: "Mã BN",
+        fullName: "Họ và tên",
+        dob: "Ngày sinh",
+        gender: "Giới tính",
+        contact: "Liên hệ",
+        status: "Trạng thái",
+        actions: "Thao tác",
+        empty: "Không có bản ghi phù hợp.",
+        vitals: "Sinh hiệu",
+        services: "Dịch vụ",
+        startToday: "Bắt đầu hôm nay",
+        startTodaySuccess: "Đã bắt đầu lượt xử lý hôm nay cho bệnh nhân.",
+        startTodayError: "Không thể bắt đầu lượt xử lý hôm nay. Vui lòng thử lại.",
+        view: "Xem bệnh nhân",
+        edit: "Sửa bệnh nhân",
+        createExam: "Lập phiếu khám",
+        processDiagnosis: "Xử lý",
+        returnHome: "Bỏ về",
+        returnHomeTitle: "Xác nhận bỏ về",
+        returnHomeMessage: (name) =>
+          `Bệnh nhân "${name}" sẽ được chuyển sang trạng thái bỏ về. Hóa đơn chưa thu sẽ bị hủy, còn hóa đơn đã thu sẽ chuyển sang bảo lưu. Bạn có chắc chắn?`,
+        returnHomeConfirm: "Xác nhận bỏ về",
+        returnHomeSuccess: "Đã chuyển bệnh nhân sang trạng thái bỏ về.",
+        returnHomeError: "Không thể cập nhật trạng thái bỏ về. Vui lòng thử lại.",
+      };
 
   const handleStartToday = (patient) => {
     if (!patient) return;
@@ -336,16 +338,14 @@ export default function PatientsTable({
   return (
     <>
       <section
-        className={`overflow-hidden bg-white shadow-soft ${
-          stretch ? "flex h-full min-h-0 flex-col pt-2" : "mt-3 pt-2"
-        }`}
+        className={`overflow-hidden bg-white shadow-soft ${stretch ? "flex h-full min-h-0 flex-col pt-2" : "mt-3 pt-2"
+          }`}
         role="region"
         aria-label={t.region}
       >
         <div
-          className={`scrollbar-none p-4 pt-0 pb-0 ${
-            stretch ? "min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"
-          }`}
+          className={`scrollbar-none p-4 pt-0 pb-0 ${stretch ? "min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-none" : "overflow-x-auto scrollbar-none"
+            }`}
         >
           <table className="min-w-full table-fixed">
             <colgroup>
@@ -378,7 +378,8 @@ export default function PatientsTable({
                   const statusCode = getTodayStatusCode(patient) || "";
                   const accountCode = normalizeEnumKey(getAccount(patient) || "");
                   const statusDate = getStatusDate(patient);
-                  const hasTodayStatus = !!statusCode;
+                  const hasDisplayStatus = !!statusCode;
+                  const hasTodayStatus = hasDisplayStatus && isCurrentTodayStatus(statusDate);
                   const accountActive = accountCode === "hoat_dong" || accountCode === "active" || accountCode === "1";
                   const vitals = getVitals(patient);
                   const service = patient.serviceOrder;
@@ -434,8 +435,8 @@ export default function PatientsTable({
                     ) || "—";
                   const serviceLabel = hasServiceOrder
                     ? service.items
-                        .map((item) => formatDisplayText(item, item, lang))
-                        .join(", ")
+                      .map((item) => formatDisplayText(item, item, lang))
+                      .join(", ")
                     : "";
 
                   return (
@@ -496,7 +497,7 @@ export default function PatientsTable({
                         <div className="flex flex-col gap-1">
                           <AccountBadge status={accountCode} lang={lang} />
 
-                          {hasTodayStatus ? (
+                          {hasDisplayStatus && hasTodayStatus && (
                             <div className="flex items-center gap-2">
                               <StatusBadge status={statusCode} lang={lang} />
                               {statusDate && (
@@ -505,7 +506,9 @@ export default function PatientsTable({
                                 </span>
                               )}
                             </div>
-                          ) : (
+                          )}
+
+                          {!hasTodayStatus &&
                             accountActive &&
                             canEditPatient && (
                               <button
@@ -515,8 +518,7 @@ export default function PatientsTable({
                               >
                                 {t.startToday}
                               </button>
-                            )
-                          )}
+                            )}
                         </div>
                       </Td>
 

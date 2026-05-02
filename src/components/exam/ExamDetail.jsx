@@ -138,6 +138,8 @@ export default function ExamDetail({
     plan: "",
     advice: "",
     note: "",
+    followupDate: "",
+    followupTime: "",
     flags: {
       choVe: false,
       choThuocVe: false,
@@ -273,12 +275,30 @@ const svcMap = useMemo(() => {
     taiKham: false,
   };
   const canPrescribeTakeHome = allowPrescribe && !!dxFlags.choThuocVe;
+  const minFollowupDate = useMemo(
+    () => new Date().toISOString().slice(0, 10),
+    []
+  );
 
   useEffect(() => {
     if (dxFlags.choThuocVe) return;
     if (pickerOpen) setPickerOpen(false);
     if (rx.length > 0) setRx([]);
   }, [dxFlags.choThuocVe, pickerOpen, rx.length]);
+
+  useEffect(() => {
+    if (dxFlags.taiKham) return;
+    if (!dx.followupDate && !dx.followupTime) return;
+
+    setDx((prev) => {
+      if (!prev.followupDate && !prev.followupTime) return prev;
+      return {
+        ...prev,
+        followupDate: "",
+        followupTime: "",
+      };
+    });
+  }, [dx.followupDate, dx.followupTime, dxFlags.taiKham]);
 
   function toggleDxFlag(name) {
     setDxFlagError("");
@@ -344,7 +364,12 @@ const svcMap = useMemo(() => {
       },
       orderRows,
       rxRows,
-      dx: { ...dx, flags: dxFlags },
+      dx: {
+        ...dx,
+        followupDate: dxFlags.taiKham ? dx.followupDate || "" : "",
+        followupTime: dxFlags.taiKham ? dx.followupTime || "" : "",
+        flags: dxFlags,
+      },
     };
   }
 
@@ -492,6 +517,10 @@ const svcMap = useMemo(() => {
     if (!dxFlags.choVe && !dxFlags.choThuocVe && !dxFlags.taiKham) {
       errors.push("Hướng xử trí (phải chọn ít nhất 1 mục)");
     }
+
+    if (dxFlags.taiKham && !(dx.followupDate || "").trim()) {
+      errors.push("Ngày tái khám");
+    }
     
     // Nếu có lỗi, hiển thị thông báo và dừng lại
     if (errors.length > 0) {
@@ -516,54 +545,46 @@ const svcMap = useMemo(() => {
       return;
     }
 
-    if (onExportDiagnosis) {
-      await onExportDiagnosis(patient, {
-        dx: payload.dx,
-        rxRows: payload.rxRows,
-        services: payload.services,
-      });
+    try {
+      if (onExportDiagnosis) {
+        await onExportDiagnosis(patient, {
+          dx: payload.dx,
+          rxRows: payload.rxRows,
+          services: payload.services,
+        });
 
-      // Sau khi lưu chẩn đoán thành công → mở PaymentWizard
-      // BE đã auto-tạo hóa đơn "chua_thu" khi tạo phiếu khám LS
-      // PaymentWizard sẽ tìm hóa đơn đó theo MaPhieuKham rồi confirm
-      const paymentItems = [
-        ...payload.orderRows.map((r) => ({
+        // Sau khi lưu chẩn đoán thành công → mở PaymentWizard
+        // BE đã auto-tạo hóa đơn "chua_thu" khi tạo phiếu khám LS
+        // PaymentWizard sẽ tìm hóa đơn đó theo MaPhieuKham rồi confirm
+        const paymentItems = payload.orderRows.map((r) => ({
           name: r.serviceName || r.id,
           amount: 0, // BE tính giá — Wizard sẽ hiện giá thực từ hóa đơn
-        })),
-        ...(payload.rxRows.length > 0
-          ? [
-              {
-                name: `Đơn thuốc (${payload.rxRows.length} loại)`,
-                amount: payload.rxRows.reduce(
-                  (s, r) => s + (r.price || 0) * (r.qty || 0),
-                  0
-                ),
-              },
-            ]
-          : []),
-      ];
+        }));
 
-      // Luôn mở PaymentWizard — giá thực lấy từ hóa đơn BE tạo sẵn
-      if (allowPayment) {
-        setPendingDxPayload(paymentItems);
-        setPaymentOpen(true);
-      } else {
-        toast.success("Đã lưu chẩn đoán thành công.");
+        // Luôn mở PaymentWizard — giá thực lấy từ hóa đơn BE tạo sẵn
+        if (allowPayment) {
+          setPendingDxPayload(paymentItems);
+          setPaymentOpen(true);
+        } else {
+          toast.success("Đã lưu chẩn đoán thành công.");
+        }
+        return;
       }
-      return;
+
+      await dxMut.mutateAsync({
+        pid,
+        dx: payload?.dx || {},
+        rx: payload?.rxRows || [],
+        services:
+          payload?.services || (payload?.orderRows || []).map((r) => r.id),
+        // CLS: cho phép đính kèm kết quả + file nếu có
+        files: payload?.files,
+        result: payload?.result,
+        note: payload?.note,
+      });
+    } catch (error) {
+      toast.error(error?.message || "Không thể xuất chẩn đoán. Vui lòng thử lại.");
     }
-    await dxMut.mutateAsync({
-            pid,
-            dx: payload?.dx || {},
-            rx: payload?.rxRows || [],
-            services:
-              payload?.services || (payload?.orderRows || []).map((r) => r.id),
-            // CLS: cho phép đính kèm kết quả + file nếu có
-            files: payload?.files,
-            result: payload?.result,
-            note: payload?.note,
-          });
 
   }
 
@@ -1144,6 +1165,26 @@ const svcMap = useMemo(() => {
                         <span>Tái khám</span>
                       </label>
                     </div>
+                    {dxFlags.taiKham && (
+                      <div className="mt-3 grid gap-3 md:max-w-md">
+                        <label className="text-sm">
+                          Ngày tái khám
+                          <input
+                            type="date"
+                            min={minFollowupDate}
+                            value={dx.followupDate || ""}
+                            onChange={(e) =>
+                              setDx((s) => ({
+                                ...s,
+                                followupDate: e.target.value,
+                              }))
+                            }
+                            disabled={!allowExamData}
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          />
+                        </label>
+                      </div>
+                    )}
                     {dxFlagError && (
                       <p className="mt-1 text-xs text-red-500">
                         {dxFlagError}

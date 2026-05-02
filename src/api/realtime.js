@@ -304,6 +304,8 @@ export async function initStaffRealtime({
     //   - role:y_ta
     if (staffRole === "bac_si") {
       await invokeSafe("JoinRoleAsync", "bac_si");
+    } else if (staffRole === "ky_thuat_vien" || staffRole === "ktv") {
+      await invokeSafe("JoinRoleAsync", "ky_thuat_vien");
     } else if (staffRole === "y_ta") {
       await invokeSafe("JoinRoleAsync", "y_ta");
 

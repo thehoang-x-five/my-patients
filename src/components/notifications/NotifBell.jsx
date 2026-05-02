@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useNotificationsStore } from "../stores/appStore";
 import { useNotifications } from "../../api/notifications.js";
 import { useUI } from "../../context/UIContext.jsx";
+import { formatLocalizedMessage } from "../../utils/textFormatters.js";
 
 function BellIcon({ className = "" }) {
   return (
@@ -33,10 +34,31 @@ function BellIcon({ className = "" }) {
 
 function getTypeLabel(type, lang) {
   if (type === "lich_hen") return lang === "en" ? "Appointment" : "Lịch hẹn";
-  if (type === "reminder") return lang === "en" ? "Reminder" : "Nhắc nhở";
-  if (type === "result") return lang === "en" ? "Result" : "Kết quả";
+  if (type === "reminder" || type === "tai_kham") return lang === "en" ? "Reminder" : "Nhắc nhở";
+  if (type === "result" || type === "ket_qua_cls") return lang === "en" ? "Result" : "Kết quả";
   if (type === "thanh_toan") return lang === "en" ? "Payment" : "Thanh toán";
+  if (type === "benh_nhan") return lang === "en" ? "Patient" : "Bệnh nhân";
+  if (type === "phieu_kham") return lang === "en" ? "Clinical exam" : "Phiếu khám";
   return lang === "en" ? "Notification" : "Thông báo";
+}
+
+function getNotificationDetail(item, lang) {
+  const rawDetail =
+    item?.description ||
+    item?.message ||
+    item?._raw?.NoiDung ||
+    item?._raw?.noiDung ||
+    "";
+
+  const detail = formatLocalizedMessage(rawDetail, "", lang);
+  if (detail) return detail;
+
+  const patientParts = [item?.patientName, item?.patientId].filter(Boolean);
+  if (patientParts.length > 0) {
+    return `${getTypeLabel(item?.type, lang)} · ${patientParts.join(" · ")}`;
+  }
+
+  return getTypeLabel(item?.type, lang);
 }
 
 export default function NotifBell() {
@@ -151,7 +173,7 @@ export default function NotifBell() {
                 <ul className="flex flex-col gap-1 px-2 py-2">
                   {items.map((item) => (
                     <motion.li
-                      key={item.id}
+                      key={item.id ?? item.notifId ?? `${item.type}-${item.createdAt}`}
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       whileHover={{
@@ -171,10 +193,14 @@ export default function NotifBell() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="line-clamp-2 text-[13px] font-medium text-slate-800">
-                            {item.title || item.message}
+                            {formatLocalizedMessage(
+                              item.title || item.message || "",
+                              lang === "en" ? "Untitled notification" : "Thông báo",
+                              lang
+                            )}
                           </p>
-                          <p className="mt-0.5 text-[11px] text-slate-500">
-                            {getTypeLabel(item.type, lang)}
+                          <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500">
+                            {getNotificationDetail(item, lang)}
                             {" • "}
                             {item.createdAt
                               ? new Date(item.createdAt).toLocaleTimeString(

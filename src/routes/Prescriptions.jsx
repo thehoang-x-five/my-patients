@@ -16,6 +16,7 @@ import StockTable from "../components/prescriptions/StockTable.jsx";
 import OrderViewModal from "../components/prescriptions/OrderViewModal.jsx";
 import PrescFilterPopover from "../components/prescriptions/PrescFilterPopover.jsx";
 import ConfirmModal from "../components/ui/ConfirmModal.jsx";
+import PaymentWizard from "../components/billing/PaymentWizard.jsx";
 
 import {
   getRxOrders,
@@ -28,6 +29,7 @@ import {
   useCancelPrescription,
   useUpdatePrescriptionStatus,
 } from "../api/pharmacy.js";
+import { searchInvoices } from "../api/billing.js";
 import { on } from "../api/realtime.js";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -150,6 +152,8 @@ export default function Prescriptions() {
   const filterBtnRef = useRef(null);
   const [cancelOrderTarget, setCancelOrderTarget] = useState(null);
   const [dispenseOrderTarget, setDispenseOrderTarget] = useState(null);
+  const [paymentOrderTarget, setPaymentOrderTarget] = useState(null);
+  const [paymentInvoice, setPaymentInvoice] = useState(null);
 
   const qOrdersDef = useDeferredValue(qOrders);
   const qStockDef = useDeferredValue(qStock);
@@ -209,6 +213,30 @@ export default function Prescriptions() {
   const stock = stockResult.Items || [];
   const stockTotalItems = stockResult.TotalItems || 0;
   const stockTotalPages = Math.ceil(stockTotalItems / 50);
+
+  const drugInvoicesQuery = useQuery({
+    queryKey: ["invoices", "prescription-drug", orderPage, qOrdersDef, orderStatus],
+    queryFn: () =>
+      searchInvoices({
+        LoaiDotThu: "thuoc",
+        Page: 1,
+        PageSize: 500,
+      }),
+    enabled: tab === "orders",
+    staleTime: 10_000,
+  });
+
+  const drugInvoiceByPrescription = useMemo(() => {
+    const rows = drugInvoicesQuery.data?.Items ?? drugInvoicesQuery.data?.items ?? [];
+    const map = new Map();
+    rows.forEach((row) => {
+      const code = String(row?.MaDonThuoc ?? row?.maDonThuoc ?? "").trim();
+      if (code && !map.has(code)) {
+        map.set(code, row);
+      }
+    });
+    return map;
+  }, [drugInvoicesQuery.data]);
 
 
   
@@ -279,17 +307,26 @@ export default function Prescriptions() {
   // ✅ Filter orders: FE lọc thêm theo mệnh giá (BE chỉ filter status + keyword + date)
   const filteredOrders = useMemo(() => {
     if (!orders || !orders.length) return [];
-    if (orderPriceRange === "all") return orders;
+    const withInvoices = orders.map((order) => {
+      const code = String(order?.id || order?.code || "").trim();
+      const invoice = drugInvoiceByPrescription.get(code) || null;
+      return {
+        ...order,
+        invoice,
+        invoiceStatus: invoice?.TrangThai ?? invoice?.status ?? null,
+      };
+    });
+    if (orderPriceRange === "all") return withInvoices;
 
     const [minStr, maxStr] = orderPriceRange.split("-");
     const min = Number(minStr) || 0;
     const max = maxStr ? Number(maxStr) : Infinity;
 
-    return orders.filter((o) => {
+    return withInvoices.filter((o) => {
       const total = Number(o.total) || 0;
       return total >= min && total < max;
     });
-  }, [orders, orderPriceRange]);
+  }, [orders, orderPriceRange, drugInvoiceByPrescription]);
 
   // ✅ Filter kho thuốc - thêm lọc theo lô ở FE
   const filteredStock = useMemo(() => {
@@ -360,6 +397,30 @@ const ordersDoneCount = useMemo(
     }).length,
   [filteredOrders]
 );
+
+  const normalizeInvoiceStatus = (value) =>
+    String(value || "").toLowerCase().trim();
+
+  const openDrugPaymentOrDispense = (order) => {
+    if (!order) return;
+    const code = order.id || order.code;
+    const invoice =
+      order.invoice ||
+      drugInvoiceByPrescription.get(String(code || "").trim()) ||
+      null;
+    const invoiceStatus = normalizeInvoiceStatus(
+      invoice?.TrangThai || invoice?.status || order.invoiceStatus
+    );
+    const total = Number(order.total || order.tongTienDon || 0) || 0;
+
+    if (total > 0 && invoiceStatus !== "da_thu") {
+      setPaymentOrderTarget(order);
+      setPaymentInvoice(invoice);
+      return;
+    }
+
+    setDispenseOrderTarget(order);
+  };
 
 // ✅ Stats kho thuốc - tính từ filteredStock (sau khi filter unit)
 // Lưu ý: TotalItems từ BE chỉ đúng khi không có filter unit
@@ -492,7 +553,7 @@ const stockNearOutCount = filteredStock.filter((r) => {
                           setView({ open: true, order })
                         }
                         onCancel={(order) => setCancelOrderTarget(order)}
-                        onDispense={(order) => setDispenseOrderTarget(order)}
+                        onDispense={openDrugPaymentOrDispense}
                         stretch
                       />
                     </div>
@@ -595,6 +656,52 @@ const stockNearOutCount = filteredStock.filter((r) => {
         open={view.open}
         order={view.order}
         onClose={closeView}
+      />
+
+      <PaymentWizard
+        open={!!paymentOrderTarget}
+        patient={{
+          MaBenhNhan:
+            paymentOrderTarget?.ptId ||
+            paymentOrderTarget?.patientId ||
+            paymentInvoice?.MaBenhNhan ||
+            paymentInvoice?.maBenhNhan ||
+            null,
+          HoTen:
+            paymentOrderTarget?.ptName ||
+            paymentOrderTarget?.patientName ||
+            paymentInvoice?.TenBenhNhan ||
+            paymentInvoice?.tenBenhNhan ||
+            "—",
+        }}
+        items={
+          paymentOrderTarget
+            ? [
+                {
+                  name: `Thu phí đơn thuốc ${paymentOrderTarget.id || paymentOrderTarget.code}`,
+                  amount: paymentOrderTarget.total || 0,
+                },
+              ]
+            : []
+        }
+        rxId={paymentOrderTarget?.id || paymentOrderTarget?.code || null}
+        initialInvoice={paymentInvoice}
+        allowDeferred={false}
+        onClose={() => {
+          setPaymentOrderTarget(null);
+          setPaymentInvoice(null);
+        }}
+        onComplete={() => {
+          const paidOrder = paymentOrderTarget;
+          setPaymentOrderTarget(null);
+          setPaymentInvoice(null);
+          qc.invalidateQueries({ queryKey: ["invoices"] });
+          qc.invalidateQueries({ queryKey: ["pharmacy", "rxOrders"] });
+          toast.success("Đã thu phí thuốc. Có thể phát thuốc.");
+          if (paidOrder) {
+            setDispenseOrderTarget(paidOrder);
+          }
+        }}
       />
 
       <ConfirmModal

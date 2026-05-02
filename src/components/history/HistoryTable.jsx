@@ -124,16 +124,60 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
 
   const renderVisitTypeChip = (row) => {
     const t = (row.type || "").toLowerCase();
-    if (t === "service" || t === "dv" || t.includes("service")) {
+    if (
+      t === "can_lam_sang" ||
+      t === "service" ||
+      t === "dv" ||
+      t.includes("cls") ||
+      t.includes("service") ||
+      t.includes("dich_vu")
+    ) {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-          Khám dịch vụ
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200">
+          Cận lâm sàng
         </span>
       );
     }
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
         Khám thường
+      </span>
+    );
+  };
+
+  const renderVisitStatusChip = (row) => {
+    const v = String(row.status || row.trangThai || row.TrangThai || "").toLowerCase();
+    if (v === "da_huy" || v === "huy" || v === "cancelled") {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 ring-1 ring-rose-200">
+          Đã hủy / quá hạn
+        </span>
+      );
+    }
+    if (v === "hoan_tat" || v === "da_hoan_tat" || v === "hoan_thanh") {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+          Hoàn tất
+        </span>
+      );
+    }
+    if (v === "dang_thuc_hien") {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+          Đang thực hiện
+        </span>
+      );
+    }
+    if (v === "dang_cho" || v === "cho_kham" || v === "cho_xu_ly") {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
+          Đang chờ
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-600 ring-1 ring-slate-200">
+        —
       </span>
     );
   };
@@ -185,6 +229,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
               <Th>Họ và tên</Th>
               <Th>Khoa/Phòng</Th>
               <Th>Loại lượt</Th>
+              <Th>Trạng thái</Th>
               <Th>Bác sĩ</Th>
               <Th>Ghi chú</Th>
               <Th last>Chi tiết</Th>
@@ -213,6 +258,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
                 <Td>{r.name || r.ptName || "—"}</Td>
                 <Td>{r.dept || "—"}</Td>
                 <Td>{renderVisitTypeChip(r)}</Td>
+                <Td>{renderVisitStatusChip(r)}</Td>
                 <Td>{r.doctor || "—"}</Td>
                 <Td>
                   <span className="text-slate-600">{r.note || "—"}</span>
@@ -233,7 +279,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
             {!rows.length && (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={11}
                   className="px-3 py-10 text-center text-slate-500"
                 >
                   Không có bản ghi phù hợp.

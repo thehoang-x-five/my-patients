@@ -17,7 +17,7 @@ export const STATUSES = {
   WAIT_PROC: "cho_xu_ly",
   WAIT_PROC_SVC: "cho_xu_ly_dv",
   DONE: "hoan_tat",
-  CANCELLED: "da_huy"??"huy",
+  CANCELLED: "da_huy",
 };
 
 export const ACCOUNT_STATUSES = ["hoat_dong", "khong_hoat_dong", "da_xoa"];
@@ -35,6 +35,7 @@ export const TODAY_STATUS_LABELS = {
   huy: { vi: "Đã hủy", en: "Cancelled" },
   hoan_tat: { vi: "Hoàn thành", en: "Completed" },
   hoan_thanh: { vi: "Hoàn thành", en: "Completed" },
+  da_hoan_tat: { vi: "Hoàn thành", en: "Completed" },
 };
 
 export const TODAY_STATUS_MAP = Object.fromEntries(
@@ -46,13 +47,69 @@ const TODAY_STATUS_ALIASES = {
   cancelled: "da_huy",
   cancel: "da_huy",
   hoan_thanh: "hoan_tat",
+  da_hoan_tat: "hoan_tat",
   completed: "hoan_tat",
 };
+
+const EXPIRING_TODAY_STATUSES = new Set([
+  STATUSES.WAIT_INTAKE,
+  STATUSES.WAIT_INTAKE_SVC,
+  STATUSES.WAIT_EXAM,
+  STATUSES.WAIT_EXAM_SVC,
+  STATUSES.IN_EXAM,
+  STATUSES.IN_EXAM_SVC,
+  STATUSES.WAIT_PROC,
+  STATUSES.WAIT_PROC_SVC,
+]);
 
 export function normalizeTodayStatusCode(codeOrLabel) {
   if (!codeOrLabel) return "";
   const low = String(codeOrLabel).trim().toLowerCase();
   return TODAY_STATUS_ALIASES[low] || low;
+}
+
+function toLocalDateKey(value) {
+  if (!value) return "";
+  const text = String(value).trim();
+  const isoDate = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) return `${isoDate[1]}-${isoDate[2]}-${isoDate[3]}`;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function todayLocalDateKey() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function isCurrentTodayStatus(statusDate) {
+  const key = toLocalDateKey(statusDate);
+  return !!key && key === todayLocalDateKey();
+}
+
+export function getEffectiveTodayStatusCode(codeOrLabel, statusDate) {
+  const status = normalizeTodayStatusCode(codeOrLabel);
+  if (!status) return "";
+
+  const statusDateKey = toLocalDateKey(statusDate);
+  if (
+    statusDateKey &&
+    statusDateKey < todayLocalDateKey() &&
+    EXPIRING_TODAY_STATUSES.has(status)
+  ) {
+    return STATUSES.CANCELLED;
+  }
+
+  return status;
 }
 
 export function getTodayStatusLabel(codeOrLabel, lang = "vi") {
@@ -198,7 +255,7 @@ function buildPatientSearchFilter(params = {}) {
     MaBenhNhan: maBenhNhan,
     DienThoai: dienThoai,
     GioiTinh: gioiTinh,
-    TrangThaiHomNay: status,
+    TrangThaiHomNay: normalizeTodayStatusCode(status),
     TrangThaiTaiKhoan: accountStatus,
     OnlyToday: todayOnly,
     Page: page ?? 1,
@@ -228,8 +285,8 @@ function normalizePatientFields(dto = {}) {
   const address = dto.DiaChi || dto.diaChi || "";
 
   const statusCode = dto.TrangThaiHomNay || dto.trangThaiHomNay || "";
-  const normalizedStatusCode = normalizeTodayStatusCode(statusCode);
   const statusDate = dto.NgayTrangThai || dto.ngayTrangThai || null;
+  const normalizedStatusCode = getEffectiveTodayStatusCode(statusCode, statusDate);
 
   // Detail DTO có TrangThaiTaiKhoan, summary có thể không → default "hoat_dong"
   const accountStatusRaw =
@@ -316,6 +373,7 @@ function normalizePatientDetail(dto) {
     doctor: capitalizeWords(v.Doctor || v.doctor || ""),
     note: v.Note || v.note || "",
     type: v.Type || v.type || "",
+    status: v.TrangThai || v.trangThai || "",
     typeLabel: mapVisitTypeLabel(v.Type || v.type || v.TypeName || v.typeName),
     by: v.By || v.by || "",
     ref: v.Ref || v.ref || "",

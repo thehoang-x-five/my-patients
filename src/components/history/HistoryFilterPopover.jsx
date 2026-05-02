@@ -73,6 +73,7 @@ export default function HistoryFilterPopover({
   const [start, setStart] = useState(() => parseYmd(values?.dateFrom));
   const [end, setEnd] = useState(() => parseYmd(values?.dateTo));
   const [visitType, setVisitType] = useState(values?.visitType || "all"); // all | clinic | service
+  const [visitStatusScope, setVisitStatusScope] = useState(values?.visitStatusScope || "medical");
   const [txnType, setTxnType] = useState(values?.txnType || "all");       // all | exam | cls | drug | other
 
   // months shown
@@ -92,6 +93,7 @@ export default function HistoryFilterPopover({
     setStart(s);
     setEnd(e);
     setVisitType(values?.visitType || "all");
+    setVisitStatusScope(values?.visitStatusScope || "medical");
     setTxnType(values?.txnType || "all");
     const base = s || new Date();
     const L = new Date(base.getFullYear(), base.getMonth(), 1);
@@ -146,6 +148,7 @@ export default function HistoryFilterPopover({
       dateTo: end ? toYmd(end) : "",
       keyword: kw,
       visitType,
+      visitStatusScope,
       txnType,
       ...valuesOverride,
     };
@@ -185,6 +188,12 @@ export default function HistoryFilterPopover({
     { code: "all", label: "Tất cả" },
     { code: "clinic", label: "Khám thường" },
     { code: "service", label: "Khám dịch vụ" },
+  ];
+
+  const visitStatusOptions = [
+    { code: "medical", label: "Hoàn tất / có kết quả" },
+    { code: "cancelled", label: "Đã hủy / quá hạn" },
+    { code: "all", label: "Tất cả lượt khám" },
   ];
 
   const incomeTypeOptions = [
@@ -327,8 +336,8 @@ export default function HistoryFilterPopover({
                               ? opt.code === "service"
                                 ? "bg-amber-50 border-amber-300 text-amber-700"
                                 : opt.code === "clinic"
-                                ? "bg-sky-50 border-sky-300 text-sky-700"
-                                : "bg-slate-900 text-white border-slate-900"
+                                  ? "bg-sky-50 border-sky-300 text-sky-700"
+                                  : "bg-slate-900 text-white border-slate-900"
                               : "bg-white border-slate-200 text-slate-600 hover:border-sky-300",
                           ].join(" ")}
                         >
@@ -341,6 +350,41 @@ export default function HistoryFilterPopover({
               )}
 
               {/* Lọc loại thu – chỉ áp dụng khi tab là transactions */}
+              {tab === "visits" && (
+                <div className="mt-1">
+                  <div className="text-xs font-semibold text-slate-500 mb-1">
+                    Trạng thái lượt khám
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {visitStatusOptions.map((opt) => {
+                      const active = visitStatusScope === opt.code;
+                      return (
+                        <button
+                          key={opt.code}
+                          type="button"
+                          onClick={() => {
+                            setVisitStatusScope(opt.code);
+                            sync({ visitStatusScope: opt.code });
+                          }}
+                          className={[
+                            "px-3 py-1 rounded-full text-xs font-semibold border transition",
+                            active
+                              ? opt.code === "cancelled"
+                                ? "bg-rose-50 border-rose-300 text-rose-700"
+                                : opt.code === "medical"
+                                  ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                                  : "bg-slate-900 text-white border-slate-900"
+                              : "bg-white border-slate-200 text-slate-600 hover:border-emerald-300",
+                          ].join(" ")}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {tab === "transactions" && (
                 <div className="mt-1">
                   <div className="text-xs font-semibold text-slate-500 mb-1">
@@ -363,10 +407,10 @@ export default function HistoryFilterPopover({
                               ? opt.code === "exam"
                                 ? "bg-sky-50 border-sky-300 text-sky-700"
                                 : opt.code === "cls"
-                                ? "bg-cyan-50 border-cyan-300 text-cyan-700"
-                                : opt.code === "drug"
-                                ? "bg-teal-50 border-teal-300 text-teal-700"
-                                : "bg-slate-900 text-white border-slate-900"
+                                  ? "bg-cyan-50 border-cyan-300 text-cyan-700"
+                                  : opt.code === "drug"
+                                    ? "bg-teal-50 border-teal-300 text-teal-700"
+                                    : "bg-slate-900 text-white border-slate-900"
                               : "bg-white border-slate-200 text-slate-600 hover:border-sky-300",
                           ].join(" ")}
                         >
@@ -379,7 +423,15 @@ export default function HistoryFilterPopover({
               )}
             </div>
             <FilterPopoverFooter
-              onReset={() => onReset?.()}
+              onReset={() => {
+                setKw("");
+                setStart(null);
+                setEnd(null);
+                setVisitType("all");
+                setVisitStatusScope("medical");
+                setTxnType("all");
+                onReset?.();
+              }}
               onClose={onClose}
               resetLabel="Reset bộ lọc"
               closeLabel="Đóng"
@@ -426,7 +478,7 @@ function Month({ titleDate, grid, start, end, pickDate }) {
                 c.out ? "text-slate-400" : "text-slate-700",
                 inRange && "!bg-sky-50 !ring-1 !ring-sky-200",
                 (selectedStart || selectedEnd) &&
-                  "!bg-sky-600 !text-white !ring-0 shadow",
+                "!bg-sky-600 !text-white !ring-0 shadow",
                 !inRange && !selectedStart && !selectedEnd
                   ? "hover:bg-slate-50"
                   : "",

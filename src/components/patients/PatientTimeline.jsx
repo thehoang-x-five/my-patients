@@ -13,6 +13,7 @@ const EVENT_CONFIG = {
   chan_doan_hinh_anh: { label: "Chẩn đoán hình ảnh", tone: "violet", dot: "violet" },
   don_thuoc: { label: "Đơn thuốc", tone: "teal", dot: "teal" },
   thanh_toan: { label: "Thanh toán", tone: "amber", dot: "amber" },
+  workflow: { label: "Hoạt động", tone: "amber", dot: "amber" },
 };
 
 const STATUS_LABEL = {
@@ -36,21 +37,38 @@ export default function PatientTimeline({ visits = [], highlightItems = false, p
 
   const events = useMemo(() => {
     return visits.map((v, i) => {
-      const typeRaw = v.type || v.Type || v._raw?.LoaiLuot || v._raw?.loaiLuot || "kham_lam_sang";
+      const typeRaw =
+        v.type ||
+        v.Type ||
+        v.eventType ||
+        v.EventType ||
+        v._raw?.LoaiLuot ||
+        v._raw?.loaiLuot ||
+        v._raw?.eventType ||
+        v._raw?.EventType ||
+        "kham_lam_sang";
       const eventType = typeRaw.includes("service") || typeRaw.includes("can_lam_sang") ? "xet_nghiem" : typeRaw;
       const config = EVENT_CONFIG[eventType] || EVENT_CONFIG.kham_lam_sang;
       return {
-        id: v.maLuotKham || v.maPhieuKham || `event-${i}`,
-        date: v.date || v.dateLabel || v._raw?.ThoiGianBatDau || v._raw?.thoiGianBatDau,
+        id: v.id || v.Id || v.maLuotKham || v.maPhieuKham || v.ref || `event-${i}`,
+        date:
+          v.date ||
+          v.dateLabel ||
+          v.time ||
+          v.timestamp ||
+          v.createdAt ||
+          v._raw?.ThoiGianBatDau ||
+          v._raw?.thoiGianBatDau ||
+          v._raw?.createdAt,
         eventType,
         config,
         typeLabel: v.typeLabel || config.label,
-        doctor: v.doctor || v.by || "—",
-        department: v.dept || "—",
+        doctor: v.doctor || v.by || v.actorName || "—",
+        department: v.dept || v.department || "—",
         room: v._raw?.TenPhong || v._raw?.tenPhong || "",
         status: v.status || v._raw?.TrangThai || v._raw?.trangThai || "",
         diagnosis: v._raw?.ChanDoanCuoi || v._raw?.chanDoanCuoi || "",
-        note: v.note || v._raw?.GhiChu || "",
+        note: v.note || v.message || v.description || v._raw?.GhiChu || "",
         ref: v.ref || v.maPhieuKham || "",
         vitalSigns: v._raw?.SinhHieuTruocKham || v._raw?.sinhHieuTruocKham || "",
         _raw: v._raw || v,

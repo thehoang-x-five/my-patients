@@ -128,6 +128,10 @@ function normalizeVisit(dto = {}) {
       dto.GhiChu ??
       dto.ghiChu ??
       "",
+    status:
+      dto.TrangThai ??
+      dto.trangThai ??
+      "",
 
     // liên kết tới phiếu/đơn để mở chi tiết
     examId:
@@ -338,6 +342,7 @@ export async function getHistoryVisits(params = {}) {
     FromTime: params.fromTime || null,
     ToTime: params.toTime || null,
     LoaiLuot: params.loaiLuot || null,
+    StatusScope: params.statusScope || "medical",
     Keyword: params.keyword || null,
     OnlyToday: params.onlyToday || null,
     Page: params.page ?? 1,

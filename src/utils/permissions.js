@@ -135,7 +135,7 @@ export const canViewRevenueReport = (user) =>
 export const canViewVisitReport = (user) => canViewReports(user);
 export const canViewStaffReport = (user) => isAdmin(user);
 
-export const canManageReception = (user) => isReceptionNurse(user);
+export const canManageReception = (user) => isReceptionNurse(user) || isAdmin(user);
 export const canManageNotifications = (user) => isAdmin(user);
 
 export function isReadOnly(user, module) {

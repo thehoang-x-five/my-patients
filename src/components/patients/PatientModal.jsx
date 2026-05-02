@@ -34,15 +34,8 @@ import { getStoredAccessToken } from "../../api/http.js";
 // History (lượt khám)
 import { useCreateHistoryVisit } from "../../api/history";
 import { getClinicalExam, getFinalDiagnosis, useCompleteExam } from "../../api/examination";
-import {
-  getPrescriptionByCode,
-  updatePrescriptionStatus,
-} from "../../api/pharmacy.js";
-import {
-  findDrugInvoiceByPrescription,
-  confirmInvoice,
-} from "../../api/billing.js";
-import { PHUONG_THUC_THANH_TOAN } from "../../constants/enums.js";
+import { getPrescriptionByCode } from "../../api/pharmacy.js";
+import { searchInvoices } from "../../api/billing.js";
 import { useExamStore, useUIStore, useAuthStore } from "../stores/appStore.js";
 import { useNavigate } from "react-router-dom";
 
@@ -65,8 +58,8 @@ import { saveFollowupContext } from "../../utils/followupContext.js";
 // Permission helpers
 import {
   canCreateAppointment,
+  canManageReception,
   isReceptionNurse,
-  canDispenseMedicine,
 } from "../../utils/permissions.js";
 
 // (giả sử các helper addVisit, addTransaction, listAppointmentHolds, getLastVisit,
@@ -83,6 +76,65 @@ export default function PatientModal({
   onSaved,
   onMutatePatient,
 }) {
+  function normalizeInvoiceStatus(value) {
+    return String(value || "").toLowerCase().trim();
+  }
+
+  function isDeferredInvoice(invoice) {
+    if (!invoice) return false;
+    const status = normalizeInvoiceStatus(invoice?.status || invoice?.TrangThai);
+    if (status === "bao_luu") return true;
+
+    const text = [
+      invoice?.NoiDung,
+      invoice?.noiDung,
+      invoice?.GhiChu,
+      invoice?.ghiChu,
+      invoice?.LyDo,
+      invoice?.lyDo,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+    return text.includes("bao luu") || text.includes("cong no") || text.includes("thu sau");
+  }
+
+  function buildScopedProcessInvoices(rows, maPhieuKham, maDonThuoc) {
+    const list = Array.isArray(rows) ? rows : [];
+    const examCode = String(maPhieuKham || "").trim();
+    const prescriptionCode = String(maDonThuoc || "").trim();
+
+    const pickLatest = (predicate) =>
+      list
+        .filter(predicate)
+        .sort((a, b) => {
+          const aTime = new Date(a?.date || a?.dateLabel || 0).getTime();
+          const bTime = new Date(b?.date || b?.dateLabel || 0).getTime();
+          return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+        })[0] || null;
+
+    const examInvoice = examCode
+      ? pickLatest(
+          (row) =>
+            String(row?.maPhieuKham || row?.MaPhieuKham || "").trim() === examCode &&
+            normalizeInvoiceStatus(row?.status || row?.TrangThai) !== "da_huy"
+        )
+      : null;
+
+    const drugInvoice = prescriptionCode
+      ? pickLatest(
+          (row) =>
+            String(row?.maDonThuoc || row?.MaDonThuoc || "").trim() === prescriptionCode &&
+            normalizeInvoiceStatus(row?.status || row?.TrangThai) !== "da_huy"
+        )
+      : null;
+
+    return { examInvoice, drugInvoice };
+  }
+
   const firstRef = useRef(null);
   const scrollTopRef = useRef(null);
 
@@ -90,6 +142,7 @@ export default function PatientModal({
   const user = useAuthStore((s) => s.user);
   const canCreateAppt = canCreateAppointment(user);
   const isReceptionUser = isReceptionNurse(user);
+  const canCollectProcessFee = canManageReception(user);
 
 
 
@@ -551,7 +604,10 @@ export default function PatientModal({
   const [rx, setRx] = useState([]);
   /** Trạng thái đơn thuốc (da_ke, da_phat, …) sau khi tải / phát tại tab xử lý */
   const [prescriptionOrderStatus, setPrescriptionOrderStatus] = useState("");
-  const [processTabDispenseBusy, setProcessTabDispenseBusy] = useState(false);
+  const [processInvoices, setProcessInvoices] = useState({
+    examInvoice: null,
+    drugInvoice: null,
+  });
   const addRx = () =>
     setRx((s) => [
       ...s,
@@ -584,8 +640,6 @@ export default function PatientModal({
       }, 0),
     [rx]
   );
-
-  const allowProcessTabDispense = canDispenseMedicine(user);
 
   const isSvcProcessing = useMemo(() => {
     if (isSvcProcessingStatus) return true;
@@ -865,7 +919,6 @@ export default function PatientModal({
       setDiagnosisData(DIAG_INIT); // Clear diagnosis data
       setRx([]); // Clear prescriptions
       setPrescriptionOrderStatus("");
-      setProcessTabDispenseBusy(false);
       setSvcResults([]); // Clear service results
       setServiceProcessSummary(null);
       setServiceProcessMeta(null);
@@ -1023,7 +1076,6 @@ export default function PatientModal({
 
     setRx([]);
     setPrescriptionOrderStatus("");
-    setProcessTabDispenseBusy(false);
     setServiceProcessSummary(null);
     setServiceProcessMeta(null);
     setProcessingServiceReturn(false);
@@ -1388,6 +1440,32 @@ export default function PatientModal({
     if (Array.isArray(p.lich_su_giao_dich)) return p.lich_su_giao_dich;
     return [];
   }, [patientForView]);
+
+  useEffect(() => {
+    const scoped = buildScopedProcessInvoices(
+      transactions,
+      diagnosisData?.MaPhieuKham || diagnosisData?.maPhieuKham || "",
+      diagnosisData?.MaDonThuoc || diagnosisData?.maDonThuoc || diagnosisData?.prescriptionCode || ""
+    );
+    setProcessInvoices(scoped);
+  }, [
+    transactions,
+    diagnosisData?.MaPhieuKham,
+    diagnosisData?.maPhieuKham,
+    diagnosisData?.MaDonThuoc,
+    diagnosisData?.maDonThuoc,
+    diagnosisData?.prescriptionCode,
+  ]);
+
+  const processExamInvoice = processInvoices.examInvoice;
+  const processDrugInvoice = processInvoices.drugInvoice;
+  const hasPendingExamPayment =
+    normalizeInvoiceStatus(processExamInvoice?.status || processExamInvoice?.TrangThai) === "chua_thu";
+  const hasCollectableExamPayment =
+    hasPendingExamPayment && !isDeferredInvoice(processExamInvoice);
+  const pendingExamFeeAmount =
+    Number(processExamInvoice?.SoTien ?? processExamInvoice?.soTien ?? 0) || 0;
+  const finishBlockedByPayment = hasCollectableExamPayment;
 
   // ---- Prefill cho Hẹn tái khám ----
   useEffect(() => {
@@ -1992,6 +2070,9 @@ export default function PatientModal({
     clsId: null,
     rxId: null,
     items: [],
+    initialInvoice: null,
+    allowDeferred: true,
+    source: "exam",
     printPayload: null,
   });
 
@@ -2034,11 +2115,14 @@ export default function PatientModal({
     clsId = null,
     rxId = null,
     items = [],
+    initialInvoice = null,
+    allowDeferred = true,
+    source = "exam",
     printPayload = null,
   } = {}) => {
     const hasCharge = (items || []).some((it) => Number(it?.amount || 0) > 0);
 
-    if (!hasCharge) {
+    if (!hasCharge && !initialInvoice) {
       openPrint(printPayload || {});
       return;
     }
@@ -2049,6 +2133,9 @@ export default function PatientModal({
       clsId,
       rxId,
       items,
+      initialInvoice,
+      allowDeferred,
+      source,
       printPayload,
     });
   };
@@ -2060,6 +2147,9 @@ export default function PatientModal({
       clsId: null,
       rxId: null,
       items: [],
+      initialInvoice: null,
+      allowDeferred: true,
+      source: "exam",
       printPayload: null,
     });
 
@@ -2069,6 +2159,19 @@ export default function PatientModal({
   };
 
   const handlePaymentComplete = (result) => {
+    if (paymentFlow.source === "process-exam-fee") {
+      setProcessInvoices((prev) => ({
+        ...prev,
+        examInvoice: prev.examInvoice
+          ? { ...prev.examInvoice, TrangThai: "da_thu", status: "da_thu" }
+          : prev.examInvoice,
+      }));
+      closePaymentFlow();
+      toast.success("Đã thu phí phiếu khám.");
+      refetchPatientDetail?.();
+      return;
+    }
+
     const nextPrintPayload = paymentFlow.printPayload
       ? {
         ...paymentFlow.printPayload,
@@ -2382,6 +2485,16 @@ export default function PatientModal({
 
       // Parse HuongXuTri field to populate checkbox flags
       const huongXuTri = dxRes.HuongXuTri || dxRes.followup || "";
+      const rawFollowupAt =
+        dxRes.NgayTaiKham || dxRes.ngayTaiKham || "";
+      const followupDate =
+        typeof rawFollowupAt === "string" && rawFollowupAt
+          ? rawFollowupAt.slice(0, 10)
+          : "";
+      const followupTime =
+        typeof rawFollowupAt === "string" && rawFollowupAt.length >= 16
+          ? rawFollowupAt.slice(11, 16)
+          : "";
       const flags = {
         choVe: huongXuTri.includes("cho_ve") || huongXuTri.includes("Cho về"),
         choThuocVe: huongXuTri.includes("cho_thuoc_ve") || huongXuTri.includes("Cho thuốc về"),
@@ -2402,6 +2515,8 @@ export default function PatientModal({
         orders: dxRes.PhatDoDieuTri || dxRes.orders || "",
         advice: dxRes.LoiKhuyen || dxRes.advice || "",
         followupFlags: flags,
+        followupDate,
+        followupTime,
         prescriptionCode: maDonThuoc || "",
       }));
 
@@ -2862,89 +2977,52 @@ export default function PatientModal({
     });
   }
 
-  /**
-   * Tab xử lý: thu phí hoá đơn thuốc (nếu còn chưa thu) rồi phát thuốc (da_phat).
-   * Đúng thứ tự backend; luồng Nhà thuốc / Công nợ vẫn dùng song song.
-   */
-  async function handleProcessTabCollectAndDispense() {
-    const pid =
-      form?.id ||
-      form?.MaBenhNhan ||
-      form?.maBenhNhan ||
-      patient?.id ||
-      patient?.MaBenhNhan ||
-      patient?.maBenhNhan ||
-      "";
-    const maDonThuoc =
-      diagnosisData?.MaDonThuoc ||
-      diagnosisData?.maDonThuoc ||
-      diagnosisData?.prescriptionCode ||
-      "";
-
-    if (!pid) {
-      toast.error("Thiếu mã bệnh nhân.");
-      return;
-    }
-    if (!maDonThuoc) {
-      toast.error("Không có đơn thuốc để xử lý.");
-      return;
-    }
-    if (String(prescriptionOrderStatus).toLowerCase().trim() === "da_phat") {
-      toast.info("Đơn thuốc đã được phát.");
+  function handleCollectProcessExamFee() {
+    if (!processExamInvoice) {
+      toast.error("Không tìm thấy hóa đơn phí phiếu khám.");
       return;
     }
 
-    setProcessTabDispenseBusy(true);
-    try {
-      const inv = await findDrugInvoiceByPrescription(pid, maDonThuoc);
-      if (!inv) {
-        toast.error(
-          "Không tìm thấy hoá đơn thuốc. Kiểm tra tại Công nợ hoặc Nhà thuốc."
-        );
-        return;
-      }
-
-      const maHoaDon = inv.MaHoaDon || inv.maHoaDon;
-      const invStatus = String(
-        inv.TrangThai || inv.trangThai || ""
-      ).toLowerCase();
-
-      if (invStatus === "chua_thu") {
-        await confirmInvoice(maHoaDon, {
-          PhuongThucThanhToan: PHUONG_THUC_THANH_TOAN.TIEN_MAT,
-          MaNhanSuThu: currentUserInfo.code || undefined,
-        });
-      } else if (invStatus !== "da_thu") {
-        toast.error(
-          `Hoá đơn thuốc đang ở trạng thái "${inv.TrangThai || inv.trangThai || invStatus}" — không thể thu/phát tại đây.`
-        );
-        return;
-      }
-
-      await updatePrescriptionStatus(maDonThuoc, "da_phat");
-
-      const presc = await getPrescriptionByCode(maDonThuoc);
-      setRx(prescriptionItemsToProcessRows(presc?.items));
-      setPrescriptionOrderStatus(
-        String(presc?.status || presc?.rawStatus || "")
-          .toLowerCase()
-          .trim()
-      );
-
-      toast.success(
-        "Đã xử lý thu phí thuốc (nếu cần) và phát thuốc. Bạn có thể bấm Hoàn tất và thu phí phiếu khám."
-      );
-    } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data?.Message ||
-        err?.message ||
-        "Không thể thu phí / phát thuốc.";
-      toast.error(msg);
-      console.error("[handleProcessTabCollectAndDispense]", err);
-    } finally {
-      setProcessTabDispenseBusy(false);
+    if (!canCollectProcessFee) {
+      toast.error("Bạn không có quyền thu phí.");
+      return;
     }
+
+    if (isDeferredInvoice(processExamInvoice)) {
+      toast.info("Hóa đơn đã được bảo lưu/công nợ, không thu tại tab xử lý.");
+      return;
+    }
+
+    const status = normalizeInvoiceStatus(
+      processExamInvoice?.TrangThai || processExamInvoice?.status
+    );
+    if (status !== "chua_thu") {
+      toast.info("Hóa đơn phí phiếu khám không còn ở trạng thái chờ thu.");
+      return;
+    }
+
+    openPaymentFlow({
+      examId:
+        diagnosisData?.MaPhieuKham ||
+        diagnosisData?.maPhieuKham ||
+        form?.MaPhieuKham ||
+        form?.maPhieuKham ||
+        patient?.MaPhieuKham ||
+        patient?.maPhieuKham ||
+        null,
+      items: [
+        {
+          name:
+            processExamInvoice?.NoiDung ||
+            processExamInvoice?.noiDung ||
+            "Phí phiếu khám",
+          amount: processExamInvoice?.SoTien ?? processExamInvoice?.soTien ?? 0,
+        },
+      ],
+      initialInvoice: processExamInvoice,
+      allowDeferred: false,
+      source: "process-exam-fee",
+    });
   }
 
   // ----------------- HOÀN TẤT & THU PHÍ (THƯỜNG) -----------------
@@ -2981,7 +3059,51 @@ export default function PatientModal({
       return;
     }
 
+    const d = diagnosisData || {};
+    const plannedFollowupDate = String(d.followupDate || "").slice(0, 10);
+    const plannedFollowupTime = String(d.followupTime || "").trim();
+    const maDonThuoc =
+      d?.MaDonThuoc ||
+      d?.maDonThuoc ||
+      d?.prescriptionCode ||
+      "";
+    const plannedFollowupAt = plannedFollowupDate
+      ? `${plannedFollowupDate}T${/^\d{2}:\d{2}$/.test(plannedFollowupTime) ? plannedFollowupTime : "08:00"}:00`
+      : "";
+
+    if (flags.taiKham && !plannedFollowupDate) {
+      toast.error("Thiếu ngày tái khám.");
+      return;
+    }
+
     try {
+      const invoiceSearch = await searchInvoices({
+        MaBenhNhan: pid,
+        Page: 1,
+        PageSize: 100,
+      });
+      const invoiceRows = invoiceSearch?.Items ?? invoiceSearch?.items ?? [];
+      const scopedInvoices = buildScopedProcessInvoices(
+        invoiceRows,
+        maPhieuKham,
+        maDonThuoc
+      );
+
+      const latestExamInvoice = scopedInvoices.examInvoice || processExamInvoice;
+      const latestDrugInvoice = scopedInvoices.drugInvoice || processDrugInvoice;
+      setProcessInvoices({
+        examInvoice: latestExamInvoice || null,
+        drugInvoice: latestDrugInvoice || null,
+      });
+
+      const latestExamStatus = normalizeInvoiceStatus(
+        latestExamInvoice?.TrangThai || latestExamInvoice?.status
+      );
+      if (latestExamStatus === "chua_thu" && !isDeferredInvoice(latestExamInvoice)) {
+        toast.warn("Vui lòng thu phí phiếu khám trước khi hoàn tất.");
+        return;
+      }
+
       // ✅ 2. Gọi API hoàn tất phiếu khám
       await completeExamMut.mutateAsync({
         maPhieuKham,
@@ -2992,7 +3114,6 @@ export default function PatientModal({
       toast.success("Đã hoàn tất phiếu khám.");
 
       // ✅ 3. Nếu có tái khám, xử lý flow tái khám
-      const d = diagnosisData || {};
       if (flags.taiKham) {
         // ✅ 3.1 Save context to localStorage
         try {
@@ -3002,6 +3123,7 @@ export default function PatientModal({
             doctorCode: currentUserInfo.code || "",
             doctorName: currentUserInfo.name || currentUser || "",
             examDate: new Date().toISOString(),
+            followupDateTime: plannedFollowupAt,
             deptName: booking.dept || exam.dept || "",
             note: d.advice || exam.note || "",
           });
@@ -3011,23 +3133,10 @@ export default function PatientModal({
           toast.error("Không thể lưu thông tin tái khám");
         }
 
-        // ✅ 3.2 Process medication payment if needed
-        if (rx.length > 0 && totalDrugAmount > 0) {
-          try {
-            // TODO: Implement medication payment API call
-            // await processMedicationPayment();
-            toast.success(`Đã thu phí thuốc: ${totalDrugAmount.toLocaleString("vi-VN")}đ`);
-          } catch (err) {
-            console.error("[Follow-up] Medication payment failed:", err);
-            toast.error("Lỗi thu phí thuốc");
-            // Don't return - continue with flow
-          }
-        }
-
-        // ✅ 3.3 Update patient status
+        // ✅ 3.2 Update patient status
         await onMutatePatient?.(pid, { status: STATUSES.DONE });
 
-        // ✅ 3.4 Mark appointment done
+        // ✅ 3.3 Mark appointment done
         try {
           if (typeof markAppointmentDoneForPid === "function") {
             markAppointmentDoneForPid(pid);
@@ -3036,7 +3145,7 @@ export default function PatientModal({
           console.warn("Could not mark appointment done:", err);
         }
 
-        // ✅ 3.5 Navigate to Appointments page with flash animation
+        // ✅ 3.4 Navigate to Appointments page with flash animation
         // ❌ REMOVED: toast.info() - will be shown in Appointments.jsx to prevent duplicate
         onClose?.();
 
@@ -3425,13 +3534,12 @@ export default function PatientModal({
                     setSvcResults={setSvcResults}
                     handleServiceReturnToDoctor={handleServiceReturnToDoctor}
                     prescriptionOrderStatus={prescriptionOrderStatus}
-                    canCollectAndDispenseMedicine={allowProcessTabDispense}
-                    onCollectAndDispenseMedicine={
-                      allowProcessTabDispense
-                        ? handleProcessTabCollectAndDispense
-                        : undefined
-                    }
-                    collectDispenseBusy={processTabDispenseBusy}
+                    showExamFeePayment={hasCollectableExamPayment}
+                    canCollectExamFee={canCollectProcessFee}
+                    onCollectExamFee={handleCollectProcessExamFee}
+                    collectExamFeeBusy={paymentFlow.open && paymentFlow.source === "process-exam-fee"}
+                    pendingExamFeeAmount={pendingExamFeeAmount}
+                    finishBlockedByPayment={finishBlockedByPayment}
                   />
                 )}
               </div>
@@ -3672,7 +3780,13 @@ export default function PatientModal({
             examId={paymentFlow.examId}
             clsId={paymentFlow.clsId}
             rxId={paymentFlow.rxId}
-            onClose={() => closePaymentFlow({ closeModal: true })}
+            initialInvoice={paymentFlow.initialInvoice}
+            allowDeferred={paymentFlow.allowDeferred}
+            onClose={() =>
+              closePaymentFlow({
+                closeModal: paymentFlow.source !== "process-exam-fee",
+              })
+            }
             onComplete={handlePaymentComplete}
           />
 

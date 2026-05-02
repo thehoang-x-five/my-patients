@@ -28,6 +28,12 @@ function toYmd(d) {
     d.getDate()
   )}`;
 }
+function startOfLocalDayIso(ymd) {
+  return ymd ? `${ymd}T00:00:00` : null;
+}
+function endOfLocalDayIso(ymd) {
+  return ymd ? `${ymd}T23:59:59.999` : null;
+}
 function isToday(date) {
   if (!date) return false;
   const d = new Date(date);
@@ -48,6 +54,8 @@ function getVisitKind(row) {
   ).toLowerCase();
 
   if (
+    raw.includes("can_lam_sang") ||
+    raw.includes("cls") ||
     raw.includes("dv") ||
     raw.includes("service") ||
     raw.includes("dich_vu")
@@ -109,6 +117,7 @@ export default function History() {
   const [to, setTo] = useState("");
   const [kw, setKw] = useState(initPid);
   const [visitType, setVisitType] = useState("all"); // all | clinic | service
+  const [visitStatusScope, setVisitStatusScope] = useState("medical"); // medical | cancelled | all
   const [txnType, setTxnType] = useState("all"); // all | exam | cls | drug | other
   
   // ✅ Use UIStore for highlight (like Patients page)
@@ -194,20 +203,17 @@ export default function History() {
       pageSize: 50,
     };
 
-    // Date range
-    if (from) {
-      params.fromTime = new Date(from).toISOString();
-    }
-    if (to) {
-      // Set to end of day
-      const toDate = new Date(to);
-      toDate.setHours(23, 59, 59, 999);
-      params.toTime = toDate.toISOString();
-    }
-
     // Scope: today
     if (scope === "today") {
       params.onlyToday = true;
+    } else {
+      // Date range: giữ local day, không dùng toISOString để tránh lệch ngày do timezone.
+      if (from) {
+        params.fromTime = startOfLocalDayIso(from);
+      }
+      if (to) {
+        params.toTime = endOfLocalDayIso(to);
+      }
     }
 
     // Keyword
@@ -223,8 +229,10 @@ export default function History() {
     }
     // "all" → không set loaiLuot
 
+    params.statusScope = visitStatusScope;
+
     return params;
-  }, [from, to, scope, kw, visitType, visitPage]);
+  }, [from, to, scope, kw, visitType, visitStatusScope, visitPage]);
 
   const txnFilterParams = useMemo(() => {
     const params = {
@@ -232,13 +240,17 @@ export default function History() {
       pageSize: 50,
     };
 
-    if (from) {
-      params.fromTime = new Date(from).toISOString();
-    }
-    if (to) {
-      const toDate = new Date(to);
-      toDate.setHours(23, 59, 59, 999);
-      params.toTime = toDate.toISOString();
+    if (scope === "today") {
+      const today = toYmd(new Date());
+      params.fromTime = startOfLocalDayIso(today);
+      params.toTime = endOfLocalDayIso(today);
+    } else {
+      if (from) {
+        params.fromTime = startOfLocalDayIso(from);
+      }
+      if (to) {
+        params.toTime = endOfLocalDayIso(to);
+      }
     }
     if (kw && kw.trim()) {
       params.keyword = kw.trim();
@@ -248,7 +260,7 @@ export default function History() {
     }
 
     return params;
-  }, [from, to, kw, txnType, txnPage]);
+  }, [from, to, scope, kw, txnType, txnPage]);
 
   const {
         data: visitResult = { Items: [], TotalItems: 0, Page: 1, PageSize: 50 },
@@ -280,7 +292,7 @@ export default function History() {
   // ✅ Reset page khi filter thay đổi
   useEffect(() => {
     if (visitPage > 1) setVisitPage(1);
-  }, [from, to, scope, kw, visitType]);
+  }, [from, to, scope, kw, visitType, visitStatusScope]);
 
   useEffect(() => {
     if (txnPage > 1) setTxnPage(1);
@@ -356,6 +368,7 @@ export default function History() {
     setTo("");
     setKw("");
     setVisitType("all");
+    setVisitStatusScope("medical");
     setTxnType("all");
     setScope("all");
   };
@@ -446,6 +459,7 @@ export default function History() {
           dateTo: to,
           keyword: kw,
           visitType,
+          visitStatusScope,
           txnType,
         }}
         setValues={({
@@ -453,12 +467,14 @@ export default function History() {
           dateTo,
           keyword,
           visitType,
+          visitStatusScope,
           txnType,
         }) => {
           if (dateFrom !== undefined) setFrom(dateFrom);
           if (dateTo !== undefined) setTo(dateTo);
           if (keyword !== undefined) setKw(keyword);
           if (visitType !== undefined) setVisitType(visitType);
+          if (visitStatusScope !== undefined) setVisitStatusScope(visitStatusScope);
           if (txnType !== undefined) setTxnType(txnType);
         }}
         onReset={resetFilters}
