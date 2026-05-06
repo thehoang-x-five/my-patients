@@ -37,6 +37,25 @@ function ensureArray(payload) {
   return [];
 }
 
+function parseAttachmentList(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== "string") return [raw];
+
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      return parseAttachmentList(JSON.parse(trimmed));
+    } catch {
+      return [trimmed];
+    }
+  }
+
+  return [trimmed];
+}
+
 
 // thống kê hôm nay cho toolbar
 export function todayStats(visits = [], txns = []) {
@@ -95,7 +114,7 @@ function normalizeVisit(dto = {}) {
       dto.tenBenhNhan ??
       "",
 
-    // khoa & bác sĩ
+    // khoa & BS/KTV
     dept:
       dto.TenKhoa ??
       dto.tenKhoa ??
@@ -104,13 +123,25 @@ function normalizeVisit(dto = {}) {
       dto.MaKhoa ??
       dto.maKhoa ??
       null,
+    technician:
+      dto.TenKyThuatVienThucHien ??
+      dto.tenKyThuatVienThucHien ??
+      "",
+    technicianId:
+      dto.MaKyThuatVienThucHien ??
+      dto.maKyThuatVienThucHien ??
+      null,
     doctor:
       dto.TenBacSi ??
       dto.tenBacSi ??
+      dto.TenKyThuatVienThucHien ??
+      dto.tenKyThuatVienThucHien ??
       "",
     doctorId:
       dto.MaBacSi ??
       dto.maBacSi ??
+      dto.MaKyThuatVienThucHien ??
+      dto.maKyThuatVienThucHien ??
       null,
 
     // loại lượt + flag khám dịch vụ
@@ -225,6 +256,18 @@ function normalizeVisitDetail(dto = {}) {
     code: s.maDichVu || s.MaDichVu || "",
     name: s.tenDichVu || s.TenDichVu || "",
     result: s.ketQua || s.KetQua || "",
+    note: s.ghiChu || s.GhiChu || "",
+    status: s.trangThai || s.TrangThai || "",
+    resultStatus: s.trangThaiKetQua || s.TrangThaiKetQua || "",
+    resultTime: s.thoiGianKetQua || s.ThoiGianKetQua || null,
+    attachments: parseAttachmentList(
+      s.tepDinhKem ||
+        s.TepDinhKem ||
+        s.files ||
+        s.Files ||
+        s.attachments ||
+        s.Attachments
+    ),
     price:
       s.donGia ||
       s.DonGia ||

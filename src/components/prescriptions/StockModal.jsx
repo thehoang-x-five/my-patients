@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import React, { useEffect, useState } from "react";
 import PopoverSelect from "../ui/PopoverSelect.jsx";
+import { toLocalYmd } from "../../utils/dateLocal.js";
 
 const EMPTY_FORM = {
   code: "",
@@ -26,7 +27,7 @@ export default function StockModal({ open, item, onClose, onSave }) {
       const rawExp = item.exp ?? item.hanSuDung ?? item.HanSuDung;
       if (rawExp) {
         if (rawExp instanceof Date) {
-          exp = rawExp.toISOString().slice(0, 10);
+          exp = toLocalYmd(rawExp);
         } else {
           const s = String(rawExp);
           exp = s.slice(0, 10);

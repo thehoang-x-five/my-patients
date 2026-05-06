@@ -20,6 +20,7 @@ import {
   useAppointmentsRange,
   subscribeAppointments,
 } from "../api/appointments.js";
+import { listPatients } from "../api/patients.js";
 import { on } from "../api/realtime.js";
 import { useUIStore, useAuthStore } from "../components/stores/appStore";
 import useViewportVH from "../hooks/useViewportVH";
@@ -51,6 +52,119 @@ const toYMD = (d) => {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 };
+
+const pickAppointmentPatientCode = (appt) => {
+  const raw = appt?._raw || appt?.raw || {};
+  return (
+    appt?.MaBenhNhan ||
+    appt?.maBenhNhan ||
+    appt?.patientCode ||
+    appt?.PatientCode ||
+    appt?.patientId ||
+    appt?.PatientId ||
+    appt?.maBN ||
+    appt?.MaBN ||
+    appt?.ma_bn ||
+    appt?.patient_code ||
+    appt?.pid ||
+    raw?.MaBenhNhan ||
+    raw?.maBenhNhan ||
+    raw?.ma_benh_nhan ||
+    raw?.PatientCode ||
+    raw?.patientCode ||
+    raw?.PatientId ||
+    raw?.patientId ||
+    raw?.MaBN ||
+    raw?.maBN ||
+    raw?.ma_bn ||
+    raw?.patient_code ||
+    null
+  );
+};
+
+const pickAppointmentId = (appt) => {
+  const raw = appt?._raw || appt?.raw || {};
+  return (
+    appt?.MaLichHen ||
+    appt?.maLichHen ||
+    appt?.appointmentCode ||
+    appt?.id ||
+    raw?.MaLichHen ||
+    raw?.ma_lich_hen ||
+    raw?.appointmentCode ||
+    raw?.id ||
+    ""
+  );
+};
+
+const pickAppointmentDate = (appt) => {
+  const raw = appt?._raw || appt?.raw || {};
+  const value =
+    appt?.date ||
+    appt?.NgayHen ||
+    appt?.ngayHen ||
+    appt?.appointmentDate ||
+    raw?.NgayHen ||
+    raw?.ngay_hen ||
+    raw?.date ||
+    raw?.appointmentDate ||
+    "";
+  return value ? String(value).slice(0, 10) : "";
+};
+
+const readPatientIdFromSearch = (patient) =>
+  patient?.id ||
+  patient?.maBenhNhan ||
+  patient?.ma_benh_nhan ||
+  patient?.MaBenhNhan ||
+  patient?.pid ||
+  "";
+
+const extractPatientItems = (payload) => {
+  const root = payload?.data || payload?.Data || payload || {};
+  if (Array.isArray(root)) return root;
+  return root.Items || root.items || root.Result || root.result || [];
+};
+
+async function findExistingPatientCodeFromAppointment(appt) {
+  const phone =
+    appt?.phone ||
+    appt?.SoDienThoai ||
+    appt?.soDienThoai ||
+    appt?._raw?.SoDienThoai ||
+    appt?._raw?.so_dien_thoai ||
+    "";
+  const name =
+    appt?.patientName ||
+    appt?.patient ||
+    appt?._raw?.TenBenhNhan ||
+    appt?._raw?.ten_benh_nhan ||
+    "";
+
+  const queries = [];
+  if (phone) queries.push({ dienThoai: phone, page: 1, pageSize: 5 });
+  if (name) queries.push({ keyword: name, page: 1, pageSize: 5 });
+
+  for (const query of queries) {
+    try {
+      const data = await listPatients(query);
+      const items = extractPatientItems(data);
+      const matched = items.find((item) => {
+        const itemPhone = item?.DienThoai || item?.dienThoai || item?.phone || "";
+        const itemName = item?.HoTen || item?.hoTen || item?.name || "";
+        if (phone && itemPhone && itemPhone === phone) return true;
+        if (name && itemName && itemName.trim().toLowerCase() === name.trim().toLowerCase()) return true;
+        return false;
+      });
+      const code = readPatientIdFromSearch(matched);
+      if (code) return code;
+    } catch {
+      // Fallback lookup must not block check-in navigation.
+    }
+  }
+
+  return null;
+}
 
 export default function Appointments() {
   useViewportVH();
@@ -470,9 +584,26 @@ export default function Appointments() {
       return;
     }
 
-    const pid = appt.patientCode || appt.pid || appt.code || null;
+    const apptDate = pickAppointmentDate(appt);
+    if (!apptDate || apptDate !== TODAY) {
+      toast.warn(
+        apptDate
+          ? `Chỉ được check-in đúng ngày hẹn (${apptDate}).`
+          : "Không xác định được ngày hẹn, không thể check-in."
+      );
+      return;
+    }
 
+    let effectiveAppt = appt;
     const name = appt.patientName || appt.patient || "";
+    const phone =
+      appt.phone ||
+      appt.SoDienThoai ||
+      appt.soDienThoai ||
+      appt.DienThoai ||
+      appt.dienThoai ||
+      "";
+    const appointmentId = pickAppointmentId(appt);
 
     // Xác định loại hẹn (khám mới hay tái khám)
     const apptTypeRaw = appt.apptType || appt.loaiHen || appt.LoaiHen || appt.type || "";
@@ -486,7 +617,8 @@ export default function Appointments() {
     try {
       // ❌ KHÔNG enqueue queue ở đây nữa
       // ✅ Chỉ cập nhật trạng thái lịch hẹn -> đã check-in
-      await checkInAppt(appt.id);
+      const checkedInAppt = await checkInAppt(appointmentId || appt.id);
+      effectiveAppt = { ...appt, ...(checkedInAppt || {}) };
     } catch (err) {
       const msg =
         err?.response?.data?.message ||
@@ -496,42 +628,72 @@ export default function Appointments() {
       return;
     }
 
+    let pid = pickAppointmentPatientCode(effectiveAppt);
+    const resolvedName = effectiveAppt.patientName || effectiveAppt.patient || name;
+    const resolvedPhone =
+      effectiveAppt.phone ||
+      effectiveAppt.SoDienThoai ||
+      effectiveAppt.soDienThoai ||
+      effectiveAppt.DienThoai ||
+      effectiveAppt.dienThoai ||
+      phone;
+    const resolvedAppointmentId = pickAppointmentId(effectiveAppt) || appointmentId;
+    if (!pid && (!isKhamMoi || resolvedPhone)) {
+      pid = await findExistingPatientCodeFromAppointment(effectiveAppt);
+      if (pid) {
+        effectiveAppt = {
+          ...effectiveAppt,
+          patientCode: pid,
+          MaBenhNhan: pid,
+          maBenhNhan: pid,
+        };
+      }
+    }
+
     // Nếu là khám mới và không có mã BN: chỉ flash nút add, không mở sẵn tab
-    if (isKhamMoi && !pid) {
+    if (!pid) {
       const store = useUIStore.getState();
-      store.setPatientPrefill({ name });
+      store.clearHighlight?.();
+      store.setPatientPrefill({
+        name: resolvedName,
+        phone: resolvedPhone,
+        latestAppointment: effectiveAppt,
+        checkinAppointmentId: resolvedAppointmentId,
+        source: "checkin-new-patient",
+        createdAt: Date.now(),
+      });
       store.flashAdd();
-      navigate(`/patients`); // Chỉ chuyển trang, không có query params
+      navigate("/patients?view=all");
       // ❌ REMOVED: toast.info() - will be shown in Patients.jsx to prevent duplicate
       closeDetail();
       return;
     }
 
     // Nếu là tái khám và có mã BN: chỉ highlight dòng bệnh nhân, không mở sẵn tab
-    if (!isKhamMoi && pid) {
-      useUIStore.getState().setPatientPrefill({ name });
-      useUIStore.getState().setHighlightPid(pid, { source: "checkin" });
-      navigate(`/patients`); // Chỉ chuyển trang, không có query params
+    const patientUrl = pid
+      ? `/patients?pid=${encodeURIComponent(pid)}&view=all`
+      : "/patients?view=all";
+
+    if (pid) {
+      const store = useUIStore.getState();
+      store.ackFlashAdd?.();
+      store.setPatientPrefill({
+        name: resolvedName,
+        phone: resolvedPhone,
+        code: pid,
+        maBenhNhan: pid,
+        latestAppointment: effectiveAppt,
+        checkinAppointmentId: resolvedAppointmentId,
+        source: "checkin-existing-patient",
+        createdAt: Date.now(),
+      });
+      store.setHighlightPid(pid, { source: "checkin" });
+      navigate(patientUrl);
       // ❌ REMOVED: toast.success() - will be shown in Patients.jsx to prevent duplicate
       closeDetail();
       return;
     }
 
-    // Trường hợp khác: giữ logic cũ (fallback)
-    if (!pid) {
-      const store = useUIStore.getState();
-      store.setPatientPrefill({ name });
-      store.flashAdd();
-      navigate(`/patients`);
-      // ❌ REMOVED: toast.info() - will be shown in Patients.jsx to prevent duplicate
-      closeDetail();
-    } else {
-      useUIStore.getState().setPatientPrefill({ name });
-      useUIStore.getState().setHighlightPid(pid, { source: "checkin" });
-      navigate(`/patients`);
-      // ❌ REMOVED: toast.success() - will be shown in Patients.jsx to prevent duplicate
-      closeDetail();
-    }
   }
 
   const formatTime = (date) =>

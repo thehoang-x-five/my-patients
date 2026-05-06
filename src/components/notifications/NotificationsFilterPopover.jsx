@@ -8,6 +8,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
 import { useUI } from "../../context/UIContext.jsx";
+import {
+  getNotificationTypeDot,
+  getNotificationTypeLabel,
+} from "../../utils/notificationTypes.js";
 
 function Chip({ active, dot, children, ...rest }) {
   const base =
@@ -99,13 +103,19 @@ export default function NotificationsFilterPopover({
 
   const typeSegments = [
     { code: "all", label: t.all },
-    { code: "system", label: t.system },
-    { code: "appointment", label: t.appointment },
-    { code: "patient", label: t.patient },
-    { code: "pharmacy", label: t.pharmacy },
-    { code: "billing", label: t.billing },
-    { code: "reminder", label: t.reminder },
-    { code: "result", label: t.result },
+    { code: "he_thong", label: getNotificationTypeLabel("he_thong", lang) },
+    { code: "lich_hen", label: getNotificationTypeLabel("lich_hen", lang) },
+    { code: "benh_nhan", label: getNotificationTypeLabel("benh_nhan", lang) },
+    { code: "phieu_kham", label: getNotificationTypeLabel("phieu_kham", lang) },
+    { code: "phieu_chan_doan", label: getNotificationTypeLabel("phieu_chan_doan", lang) },
+    { code: "luot_kham", label: getNotificationTypeLabel("luot_kham", lang) },
+    { code: "cls", label: getNotificationTypeLabel("cls", lang) },
+    { code: "cls_tong_hop", label: getNotificationTypeLabel("cls_tong_hop", lang) },
+    { code: "ket_qua_cls", label: getNotificationTypeLabel("ket_qua_cls", lang) },
+    { code: "don_thuoc", label: getNotificationTypeLabel("don_thuoc", lang) },
+    { code: "hoa_don", label: getNotificationTypeLabel("hoa_don", lang) },
+    { code: "thanh_toan", label: getNotificationTypeLabel("thanh_toan", lang) },
+    { code: "tai_kham", label: getNotificationTypeLabel("tai_kham", lang) },
   ];
 
   const prioritySegments = [
@@ -280,23 +290,7 @@ export default function NotificationsFilterPopover({
                       key={item.code}
                       active={type === item.code}
                       onClick={() => sync({ type: item.code })}
-                      dot={
-                        item.code === "system"
-                          ? "violet"
-                          : item.code === "appointment"
-                          ? "sky"
-                          : item.code === "patient"
-                          ? "amber"
-                          : item.code === "pharmacy"
-                          ? "sky"
-                          : item.code === "billing"
-                          ? "rose"
-                          : item.code === "result"
-                          ? "red"
-                          : item.code === "reminder"
-                          ? "indigo"
-                          : undefined
-                      }
+                      dot={item.code === "all" ? undefined : getNotificationTypeDot(item.code)}
                     >
                       {item.label}
                     </Chip>

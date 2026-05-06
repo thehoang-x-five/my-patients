@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { http, getStoredAccessToken } from "./http.js";
 import { on } from "./realtime.js";
+import { endOfLocalDayParam, startOfLocalDayParam } from "../utils/dateLocal.js";
 
 function decodeJwtPayload(token) {
   if (!token || typeof token !== "string") return null;
@@ -53,6 +54,41 @@ function decodeJwtPayload(token) {
     console.warn("[notif] decodeJwtPayload error", err);
     return null;
   }
+}
+
+function normalizeCodeText(value) {
+  return value == null
+    ? ""
+    : String(value)
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/[\s-]+/g, "_");
+}
+
+function normalizeRoleCode(value) {
+  const normalized = normalizeCodeText(value);
+
+  if (["ky_thuat_vien", "kythuatvien", "ktv", "technician"].includes(normalized)) {
+    return "ky_thuat_vien";
+  }
+  if (["bac_si", "bacsi", "doctor"].includes(normalized)) {
+    return "bac_si";
+  }
+  if (["y_ta", "yta", "nurse"].includes(normalized)) {
+    return "y_ta";
+  }
+  if (["admin", "quan_tri_vien", "quantrivien"].includes(normalized)) {
+    return "admin";
+  }
+
+  return normalized;
+}
+
+function isGenericStaffReceiverType(value) {
+  return ["nhan_vien_y_te", "nhan_su", "staff"].includes(normalizeRoleCode(value));
 }
 
 export function inferRecipientFromToken() {
@@ -113,6 +149,7 @@ export function inferRecipientFromToken() {
       "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
     ] ||
     null;
+  const normalizedVaiTro = normalizeRoleCode(vaiTro);
 
   // ====== 4. Loại người nhận notification ======
   // - Ưu tiên claim LoaiNguoiNhan trong token
@@ -129,29 +166,27 @@ export function inferRecipientFromToken() {
     payload.loaiYTa ||
     null;
 
-  if (!loaiNguoiNhan) {
-    if (vaiTro === "bac_si") {
+  if (!loaiNguoiNhan || isGenericStaffReceiverType(loaiNguoiNhan)) {
+    if (normalizedVaiTro === "bac_si") {
       loaiNguoiNhan = "bac_si";
-    } else if (vaiTro === "y_ta") {
+    } else if (normalizedVaiTro === "y_ta") {
       loaiNguoiNhan = "y_ta";
-    } else if (vaiTro === "admin") {
+    } else if (normalizedVaiTro === "admin") {
       loaiNguoiNhan = "admin";
-    } else if (vaiTro === "ky_thuat_vien") {
+    } else if (normalizedVaiTro === "ky_thuat_vien") {
       loaiNguoiNhan = "ky_thuat_vien";
     }
   }
 
   // Fallback cuối cùng
-  if (!loaiNguoiNhan) {
-    loaiNguoiNhan = "nhan_vien_y_te";
-  }
+  loaiNguoiNhan = normalizeRoleCode(loaiNguoiNhan) || "nhan_vien_y_te";
 
   // Nếu không xác định được mã người nhận thì để BE tự suy ra
   if (!maNguoiNhan) {
     return {
       LoaiNguoiNhan: loaiNguoiNhan,
       LoaiYTa: loaiYTa,
-      VaiTro: vaiTro,
+      VaiTro: normalizedVaiTro || vaiTro,
     };
   }
 
@@ -169,6 +204,13 @@ export function inferRecipientFromToken() {
 
 function safeLower(v) {
   return v == null ? "" : String(v).toLowerCase();
+}
+
+function normalizePriorityCode(value) {
+  const normalized = safeLower(value).trim();
+  if (["cao", "high", "hight", "uu_tien"].includes(normalized)) return "high";
+  if (["normal", "thuong", "trung_binh", "thong_thuong", "medium"].includes(normalized)) return "normal";
+  return normalized || "normal";
 }
 
 export function normalizeNotification(dto = {}) {
@@ -194,14 +236,13 @@ export function normalizeNotification(dto = {}) {
 
   const type = safeLower(rawType) || "system";
 
-  const priority =
-    safeLower(
-      dto.mucDoUuTien ??
-        dto.MucDoUuTien ??
-        dto.DoUuTien ??
-        dto.priority ??
-        "normal"
-    ) || "normal";
+  const priority = normalizePriorityCode(
+    dto.mucDoUuTien ??
+      dto.MucDoUuTien ??
+      dto.DoUuTien ??
+      dto.priority ??
+      "normal"
+  );
 
   const status =
     dto.trangThai ??
@@ -332,6 +373,105 @@ export function normalizeNotification(dto = {}) {
   };
 }
 
+function getAllowedNotificationReceiverTypes() {
+  const { LoaiNguoiNhan, LoaiYTa, VaiTro } = inferRecipientFromToken() || {};
+  const role = normalizeRoleCode(VaiTro || LoaiNguoiNhan);
+  const receiverType = normalizeRoleCode(LoaiNguoiNhan);
+  const nurseType = safeLower(LoaiYTa).trim();
+
+  const allowed = new Set(["nhan_vien_y_te", "nhan_su", "staff"]);
+  if (receiverType && !isGenericStaffReceiverType(receiverType)) {
+    allowed.add(receiverType);
+  }
+
+  if (role === "bac_si") {
+    allowed.add("bac_si");
+  } else if (role === "y_ta") {
+    allowed.add("y_ta");
+    if (["hanhchinh", "hanh_chinh"].includes(nurseType)) {
+      allowed.add("y_ta_hanh_chinh");
+    } else if (["cls", "can_lam_sang"].includes(nurseType)) {
+      allowed.add("y_ta_cls");
+      allowed.add("y_ta_can_lam_sang");
+    } else if (["ls", "phong_kham", "lam_sang"].includes(nurseType)) {
+      allowed.add("y_ta_phong_kham");
+      allowed.add("y_ta_lam_sang");
+    } else {
+      allowed.add("y_ta_hanh_chinh");
+      allowed.add("y_ta_phong_kham");
+      allowed.add("y_ta_cls");
+      allowed.add("y_ta_lam_sang");
+      allowed.add("y_ta_can_lam_sang");
+    }
+  } else if (["ky_thuat_vien", "kythuatvien", "ktv"].includes(role)) {
+    allowed.add("ky_thuat_vien");
+    allowed.add("ktv");
+  } else if (["admin", "quan_tri_vien"].includes(role)) {
+    allowed.add("admin");
+    allowed.add("quan_tri_vien");
+  }
+
+  return allowed;
+}
+
+function isNotificationVisibleToCurrentUser(item) {
+  const { MaNguoiNhan } = inferRecipientFromToken() || {};
+  const receiverType = normalizeRoleCode(item?.loaiNguoiNhan);
+  const receiverId = String(item?.maNguoiNhan || "").trim();
+
+  if (receiverId) {
+    return !!MaNguoiNhan && receiverId === String(MaNguoiNhan);
+  }
+
+  if (!receiverType) return true;
+  return getAllowedNotificationReceiverTypes().has(receiverType);
+}
+
+function upsertNotificationCache(queryClient, dto) {
+  if (!queryClient) return;
+
+  const item = normalizeNotification(dto);
+  if (!isNotificationVisibleToCurrentUser(item)) return;
+
+  queryClient.setQueriesData({ queryKey: ["notifications"] }, (old) => {
+    if (!old) return old;
+
+    const same = (a) =>
+      (item.id && a?.id === item.id) ||
+      (item.notifId && a?.notifId === item.notifId);
+
+    const prepend = (items) => {
+      const list = Array.isArray(items) ? items : [];
+      const withoutDuplicate = list.filter((x) => !same(x));
+      return [item, ...withoutDuplicate];
+    };
+
+    if (Array.isArray(old)) {
+      return prepend(old);
+    }
+
+    if (Array.isArray(old.Items)) {
+      const nextItems = prepend(old.Items);
+      return {
+        ...old,
+        Items: nextItems,
+        TotalItems: Math.max(old.TotalItems ?? nextItems.length, nextItems.length),
+      };
+    }
+
+    if (Array.isArray(old.items)) {
+      const nextItems = prepend(old.items);
+      return {
+        ...old,
+        items: nextItems,
+        totalItems: Math.max(old.totalItems ?? nextItems.length, nextItems.length),
+      };
+    }
+
+    return old;
+  });
+}
+
 // ================== Core REST helpers ==================
 
 async function listNotifications(params = {}) {
@@ -360,8 +500,8 @@ async function listNotifications(params = {}) {
     OnlyUnread: tab === "unread" ? true : false,
     ...(tab === "today"
       ? {
-          FromTime: new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
-          ToTime: new Date(new Date().setHours(23, 59, 59, 999)).toISOString(),
+          FromTime: startOfLocalDayParam(),
+          ToTime: endOfLocalDayParam(),
         }
       : {}),
     ...(q || keyword ? { Keyword: q || keyword } : {}),
@@ -497,9 +637,16 @@ export function useCreateNotification() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: apiCreateNotification,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-      qc.invalidateQueries({ queryKey: ["notification-search"] });
+    onSuccess: async (created) => {
+      upsertNotificationCache(qc, created);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["notifications"] }),
+        qc.invalidateQueries({ queryKey: ["notification-search"] }),
+      ]);
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ["notifications"], type: "active" }),
+        qc.refetchQueries({ queryKey: ["notification-search"], type: "active" }),
+      ]);
     },
   });
 }
@@ -590,8 +737,9 @@ export function useMarkRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id) => apiMarkRead(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["notifications"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["notifications"] });
+      await qc.refetchQueries({ queryKey: ["notifications"], type: "active" });
     },
   });
 }
@@ -602,9 +750,18 @@ export function useMarkRead() {
  *  - NotificationUpdated(NotificationDto dto)
  */
 export function subscribeNotifications(queryClient) {
-  const handler = (dto) => {
+  const handler = async (dto) => {
+    console.log("[NOTIF-RT] 🔔 Event received:", JSON.stringify(dto, null, 2));
+    const debugItem = normalizeNotification(dto);
+    const debugVisible = isNotificationVisibleToCurrentUser(debugItem);
+    const debugRecipient = inferRecipientFromToken();
+    console.log("[NOTIF-RT] 📋 Normalized:", { id: debugItem.id, notifId: debugItem.notifId, type: debugItem.type, loaiNguoiNhan: debugItem.loaiNguoiNhan, maNguoiNhan: debugItem.maNguoiNhan });
+    console.log("[NOTIF-RT] 👤 Current user:", { LoaiNguoiNhan: debugRecipient?.LoaiNguoiNhan, MaNguoiNhan: debugRecipient?.MaNguoiNhan, VaiTro: debugRecipient?.VaiTro });
+    console.log("[NOTIF-RT] ✅ Visible:", debugVisible, "| Allowed types:", [...getAllowedNotificationReceiverTypes()]);
     if (queryClient && typeof queryClient.invalidateQueries === "function") {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      upsertNotificationCache(queryClient, dto);
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      await queryClient.refetchQueries?.({ queryKey: ["notifications"], type: "active" });
     }
   };
 

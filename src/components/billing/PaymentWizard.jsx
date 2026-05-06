@@ -80,6 +80,8 @@ export default function PaymentWizard({
   const [qrData, setQrData] = useState(null);
   const [completionMode, setCompletionMode] = useState("paid");
   const [isPreparingStep, setIsPreparingStep] = useState(false);
+  const [hasBlockingDebt, setHasBlockingDebt] = useState(false);
+  const [blockingDebtInvoice, setBlockingDebtInvoice] = useState(null);
 
   // Hóa đơn tìm được từ BE
   const [invoice, setInvoice] = useState(null);
@@ -113,11 +115,40 @@ export default function PaymentWizard({
 
   const methodOptions = useMemo(
     () =>
-      allowDeferred
+      allowDeferred && !hasBlockingDebt
         ? METHOD_OPTIONS
         : METHOD_OPTIONS.filter((option) => option.value !== DEFERRED_METHOD),
-    [allowDeferred]
+    [allowDeferred, hasBlockingDebt]
   );
+
+  const fetchBlockingDebt = useCallback(async (currentInvoice = invoice) => {
+    if (!patientId) return null;
+
+    const result = await searchInvoices({
+      MaBenhNhan: patientId,
+      TrangThai: "cong_no",
+      Page: 1,
+      PageSize: 50,
+    });
+
+    const currentInvoiceId =
+      currentInvoice?.MaHoaDon ?? currentInvoice?.maHoaDon ?? null;
+
+    return (
+      (result?.Items ?? result?.items ?? result?.data ?? [])
+        .filter(
+          (row) =>
+            String(row?.TrangThai ?? row?.trangThai ?? "")
+              .trim()
+              .toLowerCase() === "cong_no"
+        )
+        .find(
+          (row) =>
+            String(row?.MaHoaDon ?? row?.maHoaDon ?? "") !==
+            String(currentInvoiceId || "")
+        ) || null
+    );
+  }, [invoice, patientId]);
 
   // ==================== TÌM HÓA ĐƠN KHI MỞ ====================
   useEffect(() => {
@@ -129,6 +160,8 @@ export default function PaymentWizard({
     setMethod(PHUONG_THUC_THANH_TOAN.TIEN_MAT);
     setQrData(null);
     setCompletionMode("paid");
+    setHasBlockingDebt(false);
+    setBlockingDebtInvoice(null);
 
     let cancelled = false;
 
@@ -190,6 +223,36 @@ export default function PaymentWizard({
   }, [open, patientId, examId, clsId, rxId, billingType, initialInvoice]);
 
   // Tổng tiền — ưu tiên từ invoice BE
+  useEffect(() => {
+    if (!open || !patientId) return;
+
+    let cancelled = false;
+
+    async function checkBlockingDebt() {
+      try {
+        const debt = await fetchBlockingDebt();
+        if (cancelled) return;
+
+        setBlockingDebtInvoice(debt);
+        setHasBlockingDebt(!!debt);
+        if (debt && method === DEFERRED_METHOD) {
+          setMethod(PHUONG_THUC_THANH_TOAN.TIEN_MAT);
+        }
+      } catch (err) {
+        console.warn("[PaymentWizard] Không thể kiểm tra công nợ hiện tại:", err);
+        if (!cancelled) {
+          setBlockingDebtInvoice(null);
+          setHasBlockingDebt(false);
+        }
+      }
+    }
+
+    checkBlockingDebt();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, patientId, method, fetchBlockingDebt]);
+
   const total = useMemo(() => {
     if (invoice) {
       return Number(invoice.SoTien ?? invoice.soTien ?? 0);
@@ -301,15 +364,23 @@ export default function PaymentWizard({
     setError(null);
 
     try {
-      const activeInvoice = invoice ?? (await ensureInvoiceExists());
-      const activeInvoiceId =
-        activeInvoice?.MaHoaDon ?? activeInvoice?.maHoaDon ?? null;
-
       if (method === DEFERRED_METHOD) {
+        const debt = await fetchBlockingDebt();
+        if (debt) {
+          setBlockingDebtInvoice(debt);
+          setHasBlockingDebt(true);
+          setMethod(PHUONG_THUC_THANH_TOAN.TIEN_MAT);
+          throw new Error("Bệnh nhân đang có công nợ chưa thanh toán, không thể tiếp tục ghi nợ lần sau.");
+        }
+
+        const activeInvoice = invoice ?? (await ensureInvoiceExists());
+        const activeInvoiceId =
+          activeInvoice?.MaHoaDon ?? activeInvoice?.maHoaDon ?? null;
+
         if (activeInvoiceId) {
           const deferredInvoice = await updateInvoiceStatus({
             id: activeInvoiceId,
-            status: "bao_luu",
+            status: "cong_no",
           });
           setInvoice(deferredInvoice || activeInvoice);
         }
@@ -322,6 +393,10 @@ export default function PaymentWizard({
         });
         return;
       }
+
+      const activeInvoice = invoice ?? (await ensureInvoiceExists());
+      const activeInvoiceId =
+        activeInvoice?.MaHoaDon ?? activeInvoice?.maHoaDon ?? null;
 
       if (!activeInvoiceId) {
         throw new Error("Không tìm thấy mã hóa đơn để xác nhận thanh toán.");
@@ -353,6 +428,7 @@ export default function PaymentWizard({
     confirmInvoice,
     method,
     ensureInvoiceExists,
+    fetchBlockingDebt,
     onComplete,
   ]);
 
@@ -574,6 +650,15 @@ export default function PaymentWizard({
                         </button>
                       ))}
                   </div>
+                  {hasBlockingDebt && (
+                    <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                      Bệnh nhân đang còn công nợ
+                      {blockingDebtInvoice?.MaHoaDon || blockingDebtInvoice?.maHoaDon
+                        ? ` (${blockingDebtInvoice.MaHoaDon ?? blockingDebtInvoice.maHoaDon})`
+                        : ""}
+                      . Cần thanh toán công nợ trước, không cho ghi nợ tiếp.
+                    </div>
+                  )}
                 </motion.div>
               )}
 

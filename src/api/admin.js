@@ -133,6 +133,104 @@ function normalizeAdminUsersResponse(data = {}) {
   };
 }
 
+function getStaffId(dto = {}) {
+  return dto?.MaNhanVien ?? dto?.maNhanVien ?? dto?.id ?? dto?.maNhanSu ?? "";
+}
+
+function toPresenceStatus(workStatus) {
+  const value = String(workStatus || "").trim().toLowerCase();
+  if (value === "dang_cong_tac") return "online";
+  if (value === "tam_nghi") return "pause";
+  if (value === "nghi_viec") return "offline";
+  return value;
+}
+
+function getWorkStatusLabel(workStatus) {
+  const labels = {
+    dang_cong_tac: "Đang công tác",
+    tam_nghi: "Tạm nghỉ",
+    nghi_viec: "Nghỉ việc",
+  };
+  return labels[String(workStatus || "").trim().toLowerCase()] || workStatus || "";
+}
+
+function buildUpdatedUserPatch(response = {}, vars = {}) {
+  const payload = vars?.data || {};
+  const raw = response && typeof response === "object" ? response : {};
+  const id = getStaffId(raw) || vars?.id || getStaffId(payload);
+  const username = (
+    payload.TenDangNhap ??
+    payload.tenDangNhap ??
+    raw.TenDangNhap ??
+    raw.tenDangNhap ??
+    raw.username ??
+    ""
+  ).toString().trim();
+
+  const patch = { ...raw };
+  if (id) {
+    patch.MaNhanVien = id;
+    patch.maNhanVien = id;
+    patch.id = id;
+  }
+  if (username) {
+    patch.TenDangNhap = username;
+    patch.tenDangNhap = username;
+    patch.username = username;
+  }
+
+  const fieldGroups = [
+    ["HoTen", "hoTen", "name"],
+    ["VaiTro", "vaiTro", "role"],
+    ["ChucVu", "chucVu", "position"],
+    ["LoaiYTa", "loaiYTa", "nurseType"],
+    ["Email", "email"],
+    ["DienThoai", "dienThoai", "phone"],
+    ["ChuyenMon", "chuyenMon", "specialty"],
+    ["HocVi", "hocVi", "degree"],
+    ["SoNamKinhNghiem", "soNamKinhNghiem", "experience"],
+    ["MaKhoa", "maKhoa", "departmentId"],
+  ];
+
+  for (const names of fieldGroups) {
+    const value = names.map((name) => payload[name]).find((v) => v !== undefined);
+    if (value !== undefined) {
+      for (const name of names) patch[name] = value;
+    }
+  }
+
+  return patch;
+}
+
+function patchUserInCache(old, patch) {
+  const id = getStaffId(patch);
+  if (!old || !id) return old;
+
+  const patchItem = (item) =>
+    getStaffId(item) === id ? { ...item, ...patch } : item;
+
+  if (Array.isArray(old)) {
+    return old.map(patchItem);
+  }
+
+  if (getStaffId(old) === id) {
+    return { ...old, ...patch };
+  }
+
+  let changed = false;
+  const next = { ...old };
+  if (Array.isArray(old.Items)) {
+    next.Items = old.Items.map(patchItem);
+    changed = true;
+  }
+  if (Array.isArray(old.items)) {
+    next.items = old.items.map(patchItem);
+    changed = true;
+  }
+
+  return changed ? next : old;
+}
+
 /** ================== HOOKS ================== */
 
 const ADMIN_USERS_KEY = "admin-users";
@@ -159,12 +257,13 @@ export function useAdminUsers(filter = {}, options = {}) {
   return query;
 }
 
-export function useAdminUser(id) {
+export function useAdminUser(id, options = {}) {
   return useQuery({
     queryKey: [ADMIN_USERS_KEY, id],
     queryFn: () => fetchAdminUser(id),
-    enabled: !!id,
+    enabled: options.enabled ?? !!id,
     select: normalizeStaff,
+    ...options,
   });
 }
 
@@ -172,7 +271,18 @@ export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) => createAdminUser(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+        qc.invalidateQueries({ queryKey: ["staff-cards"] }),
+        qc.invalidateQueries({ queryKey: ["staff-stats"] }),
+      ]);
+      await Promise.all([
+        qc.refetchQueries({ queryKey: [ADMIN_USERS_KEY], type: "active" }),
+        qc.refetchQueries({ queryKey: ["staff-cards"], type: "active" }),
+        qc.refetchQueries({ queryKey: ["staff-stats"], type: "active" }),
+      ]);
+    },
   });
 }
 
@@ -180,7 +290,54 @@ export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }) => updateAdminUser(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+    onSuccess: async (_updated, vars) => {
+      const id = vars?.id;
+      const rawPatch = buildUpdatedUserPatch(_updated, vars);
+      const staffPatch = normalizeStaff(rawPatch);
+      delete staffPatch.status;
+      delete staffPatch.statusLabel;
+      delete staffPatch.statusColor;
+
+      qc.setQueriesData({ queryKey: [ADMIN_USERS_KEY] }, (old) =>
+        patchUserInCache(old, rawPatch)
+      );
+      qc.setQueriesData({ queryKey: ["staff-cards"] }, (old) =>
+        patchUserInCache(old, staffPatch)
+      );
+      if (id) {
+        qc.setQueryData([ADMIN_USERS_KEY, id], (old) =>
+          old ? { ...old, ...rawPatch } : old
+        );
+        qc.setQueryData(["staff-detail", id], (old) =>
+          old ? { ...old, ...staffPatch } : old
+        );
+      }
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+        qc.invalidateQueries({ queryKey: ["staff-cards"] }),
+        qc.invalidateQueries({ queryKey: ["staff-stats"] }),
+        ...(id
+          ? [
+              qc.invalidateQueries({ queryKey: ["staff-detail", id] }),
+              qc.invalidateQueries({ queryKey: ["staff-duty-week", id] }),
+              qc.invalidateQueries({ queryKey: ["staff-duty-room", id] }),
+            ]
+          : []),
+      ]);
+      await Promise.all([
+        qc.refetchQueries({ queryKey: [ADMIN_USERS_KEY], type: "active" }),
+        qc.refetchQueries({ queryKey: ["staff-cards"], type: "active" }),
+        qc.refetchQueries({ queryKey: ["staff-stats"], type: "active" }),
+        ...(id
+          ? [
+              qc.refetchQueries({ queryKey: ["staff-detail", id], type: "active" }),
+              qc.refetchQueries({ queryKey: ["staff-duty-week", id], type: "active" }),
+              qc.refetchQueries({ queryKey: ["staff-duty-room", id], type: "active" }),
+            ]
+          : []),
+      ]);
+    },
   });
 }
 
@@ -188,7 +345,58 @@ export function useUpdateUserStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }) => updateAdminUserStatus(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+    onSuccess: async (_updated, vars) => {
+      const id = vars?.id;
+      const nextStatus =
+        vars?.data?.TrangThaiCongTac ??
+        vars?.data?.trangThaiCongTac ??
+        vars?.data?.status;
+      if (id && nextStatus) {
+        const rawPatch = {
+          MaNhanVien: id,
+          maNhanVien: id,
+          id,
+          TrangThaiCongTac: nextStatus,
+          trangThaiCongTac: nextStatus,
+          status: nextStatus,
+          statusLabel: getWorkStatusLabel(nextStatus),
+        };
+        const cardPatch = {
+          MaNhanVien: id,
+          maNhanVien: id,
+          id,
+          TrangThaiCongTac: nextStatus,
+          trangThaiCongTac: nextStatus,
+          status: toPresenceStatus(nextStatus),
+        };
+
+        qc.setQueriesData({ queryKey: [ADMIN_USERS_KEY] }, (old) =>
+          patchUserInCache(old, rawPatch)
+        );
+        qc.setQueriesData({ queryKey: ["staff-cards"] }, (old) =>
+          patchUserInCache(old, cardPatch)
+        );
+        qc.setQueryData([ADMIN_USERS_KEY, id], (old) =>
+          old ? { ...old, ...rawPatch } : old
+        );
+        qc.setQueryData(["staff-detail", id], (old) =>
+          old ? { ...old, ...cardPatch } : old
+        );
+      }
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+        qc.invalidateQueries({ queryKey: ["staff-cards"] }),
+        qc.invalidateQueries({ queryKey: ["staff-stats"] }),
+        ...(id ? [qc.invalidateQueries({ queryKey: ["staff-detail", id] })] : []),
+      ]);
+      await Promise.all([
+        qc.refetchQueries({ queryKey: [ADMIN_USERS_KEY], type: "active" }),
+        qc.refetchQueries({ queryKey: ["staff-cards"], type: "active" }),
+        qc.refetchQueries({ queryKey: ["staff-stats"], type: "active" }),
+        ...(id ? [qc.refetchQueries({ queryKey: ["staff-detail", id], type: "active" })] : []),
+      ]);
+    },
   });
 }
 
@@ -196,7 +404,45 @@ export function useLockUnlockAccount() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }) => lockUnlockAccount(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+    onSuccess: async (_updated, vars) => {
+      const id = vars?.id;
+      const accountStatus = vars?.data?.TrangThai ?? vars?.data?.trangThai;
+      if (id && accountStatus) {
+        const patch = {
+          MaNhanVien: id,
+          maNhanVien: id,
+          id,
+          TrangThaiTaiKhoan: accountStatus,
+          trangThaiTaiKhoan: accountStatus,
+          statusAccount: accountStatus,
+        };
+        qc.setQueriesData({ queryKey: [ADMIN_USERS_KEY] }, (old) =>
+          patchUserInCache(old, patch)
+        );
+        qc.setQueriesData({ queryKey: ["staff-cards"] }, (old) =>
+          patchUserInCache(old, patch)
+        );
+        qc.setQueryData([ADMIN_USERS_KEY, id], (old) =>
+          old ? { ...old, ...patch } : old
+        );
+        qc.setQueryData(["staff-detail", id], (old) =>
+          old ? { ...old, ...patch } : old
+        );
+      }
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+        qc.invalidateQueries({ queryKey: ["staff-cards"] }),
+        qc.invalidateQueries({ queryKey: ["staff-stats"] }),
+        ...(id ? [qc.invalidateQueries({ queryKey: ["staff-detail", id] })] : []),
+      ]);
+      await Promise.all([
+        qc.refetchQueries({ queryKey: [ADMIN_USERS_KEY], type: "active" }),
+        qc.refetchQueries({ queryKey: ["staff-cards"], type: "active" }),
+        qc.refetchQueries({ queryKey: ["staff-stats"], type: "active" }),
+        ...(id ? [qc.refetchQueries({ queryKey: ["staff-detail", id], type: "active" })] : []),
+      ]);
+    },
   });
 }
 
@@ -204,6 +450,9 @@ export function useResetPassword() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }) => resetAdminUserPassword(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: [ADMIN_USERS_KEY] });
+      await qc.refetchQueries({ queryKey: [ADMIN_USERS_KEY], type: "active" });
+    },
   });
 }

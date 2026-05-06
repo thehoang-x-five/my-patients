@@ -58,6 +58,7 @@ function normalizeStaffCard(dto) {
 
   const maNhanVien = dto.MaNhanVien ?? dto.maNhanVien;
   const vaiTro = dto.VaiTro ?? dto.vaiTro;
+  const username = dto.TenDangNhap ?? dto.tenDangNhap ?? "";
   const trangThai =
     dto.TrangThaiCongTac ?? dto.trangThaiCongTac ?? "dang_cong_tac";
 
@@ -84,6 +85,8 @@ function normalizeStaffCard(dto) {
     id: maNhanVien,
     maNhanSu: maNhanVien,
     maNhanVien,
+    username,
+    tenDangNhap: username,
 
     // Thông tin hiển thị
     name: dto.HoTen ?? dto.hoTen,
@@ -113,6 +116,8 @@ function normalizeStaffCard(dto) {
     // Trạng thái
     trangThaiCongTac: trangThai,
     status: uiStatus, // online / pause / offline
+    trangThaiTaiKhoan: dto.TrangThaiTaiKhoan ?? dto.trangThaiTaiKhoan ?? null,
+    statusAccount: dto.TrangThaiTaiKhoan ?? dto.trangThaiTaiKhoan ?? null,
 
     // Y tá (nếu có)
     loaiYTa: dto.LoaiYTa ?? dto.loaiYTa ?? null,
@@ -144,6 +149,7 @@ function normalizeStaffDetail(dto) {
 
   const maNhanVien = dto.MaNhanVien ?? dto.maNhanVien;
   const vaiTro = dto.VaiTro ?? dto.vaiTro;
+  const username = dto.TenDangNhap ?? dto.tenDangNhap ?? "";
   const trangThai =
     dto.TrangThaiCongTac ?? dto.trangThaiCongTac ?? "dang_cong_tac";
 
@@ -176,6 +182,8 @@ function normalizeStaffDetail(dto) {
     id: maNhanVien,
     maNhanVien,
     ma_nhan_vien: maNhanVien,
+    username,
+    tenDangNhap: username,
 
     name: dto.HoTen ?? dto.hoTen,
     hoTen: dto.HoTen ?? dto.hoTen,
@@ -187,6 +195,8 @@ function normalizeStaffDetail(dto) {
 
     trangThaiCongTac: trangThai,
     status: uiStatus,
+    trangThaiTaiKhoan: dto.TrangThaiTaiKhoan ?? dto.trangThaiTaiKhoan ?? null,
+    statusAccount: dto.TrangThaiTaiKhoan ?? dto.trangThaiTaiKhoan ?? null,
 
     hocVi: dto.HocVi ?? dto.hocVi ?? null,
     degree: dto.HocVi ?? dto.hocVi ?? null,
@@ -227,6 +237,32 @@ function normalizeStaffDetail(dto) {
 }
 
 
+function normalizeStaffShift(value) {
+  if (!value) return value;
+  const s = value.toString().toLowerCase().trim();
+  if (s === "sang" || s === "sáng") return "Sáng";
+  if (s === "chieu" || s === "chiều") return "Chiều";
+  if (s === "toi" || s === "tối") return "Tối";
+  return value;
+}
+
+function normalizeStaffShiftSafe(value) {
+  if (!value) return null;
+  const s = value.toString().toLowerCase().trim();
+  if (["sang", "sáng", "sÃ¡ng"].includes(s)) return "Sáng";
+  if (["chieu", "chiều", "chiá»u"].includes(s)) return "Chiều";
+  if (["toi", "tối", "tá»‘i"].includes(s)) return "Tối";
+  return value.toString().trim();
+}
+
+function normalizeStaffShiftList(value) {
+  if (!value) return [];
+  return String(value)
+    .split(/[+·,;/]/)
+    .map((item) => normalizeStaffShiftSafe(item))
+    .filter(Boolean);
+}
+
 function normalizeStaffDutyWeek(dto) {
   if (!dto) return null;
 
@@ -234,6 +270,22 @@ function normalizeStaffDutyWeek(dto) {
 
   const week = items.map((d) => {
     const rawShift = d.CaTruc ?? d.caTruc ?? null;
+    const rawShifts = d.CaTrongNgay ?? d.caTrongNgay ?? [];
+    const shiftRows = Array.isArray(rawShifts)
+      ? rawShifts.flatMap((s) => normalizeStaffShiftList(s.CaTruc ?? s.caTruc).map((shift) => ({
+          shift,
+          gioBatDau: s.GioBatDau ?? s.gioBatDau,
+          gioKetThuc: s.GioKetThuc ?? s.gioKetThuc,
+          maPhong: s.MaPhong ?? s.maPhong,
+          tenPhong: s.TenPhong ?? s.tenPhong,
+        })))
+      : [];
+    const seenShiftKeys = new Set();
+    const shifts = shiftRows.filter((row) => {
+      if (!row.shift || seenShiftKeys.has(row.shift)) return false;
+      seenShiftKeys.add(row.shift);
+      return true;
+    });
     let shift = rawShift;
 
     if (rawShift) {
@@ -241,6 +293,11 @@ function normalizeStaffDutyWeek(dto) {
       if (s === "sang") shift = "Sáng";
       else if (s === "chieu" || s === "chiều") shift = "Chiều";
       else if (s === "toi" || s === "tối") shift = "Tối";
+    }
+
+    const normalizedFallbackShifts = normalizeStaffShiftList(rawShift);
+    if (normalizedFallbackShifts.length > 0) {
+      shift = normalizedFallbackShifts.join(" + ");
     }
 
     return {
@@ -252,6 +309,7 @@ function normalizeStaffDutyWeek(dto) {
       maPhong: d.MaPhong ?? d.maPhong,
       tenPhong: d.TenPhong ?? d.tenPhong,
       trangThaiLamViec: d.TrangThaiLamViec ?? d.trangThaiLamViec,
+      shifts,
     };
   });
 
@@ -287,14 +345,27 @@ function normalizeDutyRoomsFromDutyWeek(dto) {
       : null;
 
   const items = dto.Items ?? dto.items ?? [];
-  const week = items.map((d) => ({
-    day: d.Thu ?? d.thu,
-    maPhong: d.MaPhong ?? d.maPhong,
-    tenPhong: d.TenPhong ?? d.tenPhong,
-    caTruc: d.CaTruc ?? d.caTruc,
-    gioBatDau: d.GioBatDau ?? d.gioBatDau,
-    gioKetThuc: d.GioKetThuc ?? d.gioKetThuc,
-  }));
+  const week = items.map((d) => {
+    const rawShifts = d.CaTrongNgay ?? d.caTrongNgay ?? [];
+    const shifts = Array.isArray(rawShifts)
+      ? rawShifts.map((s) => ({
+          caTruc: s.CaTruc ?? s.caTruc,
+          gioBatDau: s.GioBatDau ?? s.gioBatDau,
+          gioKetThuc: s.GioKetThuc ?? s.gioKetThuc,
+          maPhong: s.MaPhong ?? s.maPhong,
+          tenPhong: s.TenPhong ?? s.tenPhong,
+        }))
+      : [];
+    return {
+      day: d.Thu ?? d.thu,
+      maPhong: d.MaPhong ?? d.maPhong,
+      tenPhong: d.TenPhong ?? d.tenPhong,
+      caTruc: d.CaTruc ?? d.caTruc,
+      gioBatDau: d.GioBatDau ?? d.gioBatDau,
+      gioKetThuc: d.GioKetThuc ?? d.gioKetThuc,
+      shifts,
+    };
+  });
 
   return { today, week };
 }
@@ -533,6 +604,25 @@ export async function subscribeStaff(qc) {
 
   const offs = [];
   offs.push(
+    on("StaffChanged", (staff = {}) => {
+      const id =
+        staff.MaNhanVien ||
+        staff.maNhanVien ||
+        staff.id ||
+        staff.maNhanSu ||
+        null;
+
+      qc.invalidateQueries({ queryKey: ["staff-cards"] });
+      qc.invalidateQueries({ queryKey: ["staff-stats"] });
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+      if (id) {
+        qc.invalidateQueries({ queryKey: ["staff-detail", id] });
+        qc.invalidateQueries({ queryKey: ["staff-duty-week", id] });
+        qc.invalidateQueries({ queryKey: ["staff-duty-room", id] });
+      }
+    })
+  );
+  offs.push(
     on("staff.updated", ({ id }) => {
       qc.invalidateQueries({ queryKey: ["staff-cards"] });
       if (id) {
@@ -560,6 +650,33 @@ export async function subscribeStaff(qc) {
       qc.invalidateQueries({ queryKey: ["department-rooms"] });
       qc.invalidateQueries({ queryKey: ["duty"] });
       qc.invalidateQueries({ queryKey: ["room-duty-week"] });
+    })
+  );
+  offs.push(
+    on("NotificationCreated", (notification = {}) => {
+      const source =
+        notification.NguonLienQuan ??
+        notification.nguonLienQuan ??
+        notification.source ??
+        null;
+      if (source !== "lich_lam_viec") return;
+
+      const id =
+        notification.MaDoiTuongLienQuan ??
+        notification.maDoiTuongLienQuan ??
+        notification.objectId ??
+        null;
+
+      qc.invalidateQueries({ queryKey: ["staff-cards"] });
+      qc.invalidateQueries({ queryKey: ["staff-stats"] });
+      qc.invalidateQueries({ queryKey: ["department-rooms"] });
+      qc.invalidateQueries({ queryKey: ["duty"] });
+      qc.invalidateQueries({ queryKey: ["room-duty-week"] });
+      if (id) {
+        qc.invalidateQueries({ queryKey: ["staff-detail", id] });
+        qc.invalidateQueries({ queryKey: ["staff-duty-week", id] });
+        qc.invalidateQueries({ queryKey: ["staff-duty-room", id] });
+      }
     })
   );
   return () => offs.forEach((off) => off && off());

@@ -6,12 +6,13 @@ import Chip from "../ui/Chip.jsx";
 import PopoverSelect from "../ui/PopoverSelect.jsx";
 import { toast } from "react-toastify";
 import { formatStatus } from "../../utils/textFormatters.js";
+import { toLocalYmd } from "../../utils/dateLocal.js";
 // ✅ Dùng API layer (TanStack Query) — KHÔNG còn data/*
 import {
   useDepartments,            // GET /master-data/departments
   useDoctorQueueByDept,      // (custom) GET /master-data/staff?maKhoa=...&vaiTro=bac_si
 } from "../../api/departments.js";
-import { useFindLastAppointment } from "../../api/appointments.js";
+import { useHistoryVisits } from "../../api/history.js";
 
 const normalizeDateValue = (value) => {
   if (!value) return "";
@@ -20,7 +21,7 @@ const normalizeDateValue = (value) => {
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
   const parsed = new Date(str);
   if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toISOString().slice(0, 10);
+  return toLocalYmd(parsed);
 };
 
 const normalizeTimeValue = (value) => {
@@ -43,6 +44,8 @@ const buildLastVisitSnapshot = (src = {}, fallback = {}) => {
         merged.date ??
         merged.Date ??
         merged.NgayKham ??
+        merged.ThoiGian ??
+        merged.thoiGian ??
         merged.ngay_kham
     ),
     time: normalizeTimeValue(
@@ -50,32 +53,52 @@ const buildLastVisitSnapshot = (src = {}, fallback = {}) => {
         merged.time ??
         merged.Time ??
         merged.GioKham ??
+        merged.ThoiGian ??
+        merged.thoiGian ??
         merged.gio_kham
     ),
     patientName:
       merged.patientName ??
       merged.patient ??
       merged.TenBenhNhan ??
+      merged.name ??
       fallback.patientName ??
       "",
     patientCode:
       merged.patientCode ??
       merged.code ??
       merged.MaBenhNhan ??
+      merged.id ??
       fallback.patientCode ??
+      "",
+    doctorId:
+      merged.doctorId ??
+      merged.MaBacSi ??
+      merged.maBacSi ??
+      fallback.doctorId ??
       "",
     doctorName:
       merged.doctorName ??
       merged.doctor ??
       merged.Doctor ??
       merged.TenBacSiKham ??
+      merged.TenBacSi ??
+      merged.tenBacSi ??
       fallback.doctorName ??
+      "",
+    deptCode:
+      merged.deptCode ??
+      merged.deptId ??
+      merged.MaKhoa ??
+      merged.maKhoa ??
+      fallback.deptCode ??
       "",
     deptName:
       merged.deptName ??
       merged.dept ??
       merged.Dept ??
       merged.TenKhoa ??
+      merged.tenKhoa ??
       merged.KhoaKham ??
       merged.khoa_kham ??
       fallback.deptName ??
@@ -91,6 +114,29 @@ const buildLastVisitSnapshot = (src = {}, fallback = {}) => {
   const hasAnyField = Object.values(snapshot).some(Boolean);
   return hasAnyField ? snapshot : null;
 };
+
+const pickLatestMedicalVisit = (payload) => {
+  const items = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.Items)
+    ? payload.Items
+    : Array.isArray(payload?.items)
+    ? payload.items
+    : [];
+
+  if (!items.length) return null;
+
+  return [...items]
+    .filter((item) => item?.date || item?.Date || item?.ThoiGian || item?.thoiGian)
+    .sort((a, b) => {
+      const ad = new Date(a.date || a.Date || a.ThoiGian || a.thoiGian || 0);
+      const bd = new Date(b.date || b.Date || b.ThoiGian || b.thoiGian || 0);
+      return bd.getTime() - ad.getTime();
+    })[0] || null;
+};
+
+const sameText = (a, b) =>
+  String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 
 
 
@@ -135,7 +181,7 @@ export default function CreateDrawer({
     // API yêu cầu:
     // - ngay: "YYYY-MM-DD"
     // - gio:  "HH:MM:SS"
-    const ngay = d || new Date().toISOString().slice(0, 10);
+    const ngay = d || toLocalYmd(new Date());
 
     let gio = "08:00:00";
     if (t) {
@@ -191,12 +237,26 @@ export default function CreateDrawer({
         src.doctor ||
         src.Doctor ||
         src.TenBacSiKham ||
+        src.TenBacSi ||
+        src.tenBacSi ||
+        "",
+      doctorId:
+        src.doctorId ||
+        src.MaBacSi ||
+        src.maBacSi ||
+        "",
+      deptCode:
+        src.deptCode ||
+        src.deptId ||
+        src.MaKhoa ||
+        src.maKhoa ||
         "",
       deptName:
         src.deptName ||
         src.dept ||
         src.Dept ||
         src.TenKhoa ||
+        src.tenKhoa ||
         src.khoa_kham ||
         src.KhoaKham ||
         "",
@@ -221,24 +281,31 @@ export default function CreateDrawer({
     defaultValues?.TenBenhNhan ||
     "";
 
-  const { data: lastAppointmentFallback, isFetching: isFetchingLastVisit } =
-    useFindLastAppointment(
-      {
-        code: fallbackLookupCode,
-        name: fallbackLookupName,
-      },
-      {
-        enabled:
-          open &&
-          apType === "follow_up" &&
-          !!(fallbackLookupCode || fallbackLookupName) &&
-          !(providedLastVisit?.date || providedLastVisit?.time),
-      }
-    );
+  const lastVisitSearchParams = useMemo(() => ({
+    maBenhNhan: fallbackLookupCode || null,
+    keyword: fallbackLookupCode ? null : fallbackLookupName || null,
+    statusScope: "medical",
+    page: 1,
+    pageSize: 20,
+  }), [fallbackLookupCode, fallbackLookupName]);
+
+  const { data: lastVisitHistoryResult, isFetching: isFetchingLastVisit } =
+    useHistoryVisits(lastVisitSearchParams, {
+      enabled:
+        open &&
+        apType === "follow_up" &&
+        !!(fallbackLookupCode || fallbackLookupName) &&
+        !(providedLastVisit?.date || providedLastVisit?.time),
+    });
+
+  const historyLastVisitFallback = useMemo(
+    () => pickLatestMedicalVisit(lastVisitHistoryResult),
+    [lastVisitHistoryResult]
+  );
 
   const lastVisit = useMemo(() => {
     if (apType !== "follow_up") return null;
-    const snapshot = buildLastVisitSnapshot(lastAppointmentFallback, providedLastVisit || {
+    const snapshot = buildLastVisitSnapshot(historyLastVisitFallback, providedLastVisit || {
       patientName,
       patientCode,
     });
@@ -246,7 +313,7 @@ export default function CreateDrawer({
     return snapshot;
   }, [
     apType,
-    lastAppointmentFallback,
+    historyLastVisitFallback,
     providedLastVisit,
     patientName,
     patientCode,
@@ -299,18 +366,39 @@ export default function CreateDrawer({
     }
   
     // Điền thông tin vào form
+    const prefillLastVisit = dv.lastVisit || {};
+
     setSelectedDeptCode(
-      dv.deptCode || dv.maKhoa || dv.MaKhoa || ""
+      dv.deptCode ||
+      dv.maKhoa ||
+      dv.MaKhoa ||
+      prefillLastVisit.deptCode ||
+      prefillLastVisit.deptId ||
+      prefillLastVisit.MaKhoa ||
+      prefillLastVisit.maKhoa ||
+      ""
     );
     setSelectedDeptName(
       dv.dept ||
       dv.department ||
       dv.deptName ||
       dv.TenKhoa ||
+      prefillLastVisit.deptName ||
+      prefillLastVisit.dept ||
+      prefillLastVisit.TenKhoa ||
+      prefillLastVisit.tenKhoa ||
       ""
     );
     setSelectedDoctor(
-      dv.doctor || dv.doctorName || dv.TenBacSiKham || ""
+      dv.doctor ||
+      dv.doctorName ||
+      dv.TenBacSiKham ||
+      prefillLastVisit.doctorName ||
+      prefillLastVisit.doctor ||
+      prefillLastVisit.TenBacSiKham ||
+      prefillLastVisit.TenBacSi ||
+      prefillLastVisit.tenBacSi ||
+      ""
     );
     
     // Ưu tiên set type từ defaultValues (nếu có), mặc định là "follow_up" nếu có thông tin bệnh nhân
@@ -334,6 +422,44 @@ export default function CreateDrawer({
       clearTimeout(t);
     };
   }, [open, defaultDate]);
+
+  useEffect(() => {
+    if (!open || selectedDeptCode || !selectedDeptName || !(departments || []).length) return;
+
+    const matched = departments.find((dept) =>
+      sameText(dept.name || dept.TenKhoa || dept.tenKhoa, selectedDeptName)
+    );
+
+    if (matched) {
+      setSelectedDeptCode(matched.code || matched.MaKhoa || matched.maKhoa || matched.id || "");
+    }
+  }, [open, selectedDeptCode, selectedDeptName, departments]);
+
+  useEffect(() => {
+    if (!open || deptLoading || !selectedDeptCode || !(departments || []).length) return;
+
+    const stillAvailable = departments.some((dept) =>
+      sameText(dept.code || dept.MaKhoa || dept.maKhoa || dept.id, selectedDeptCode)
+    );
+
+    if (!stillAvailable) {
+      setSelectedDeptCode("");
+      setSelectedDeptName("");
+      setSelectedDoctor("");
+    }
+  }, [open, deptLoading, departments, selectedDeptCode]);
+
+  useEffect(() => {
+    if (!open || docLoading || !selectedDeptCode || !selectedDoctor) return;
+
+    const stillAvailable = availableDoctors.some((doc) =>
+      sameText(doc.name || doc.TenBS || doc.tenBS || doc.tenBs, selectedDoctor)
+    );
+
+    if (!stillAvailable) {
+      setSelectedDoctor("");
+    }
+  }, [open, docLoading, selectedDeptCode, selectedDoctor, availableDoctors]);
 
  
   function handleSubmit(e) {

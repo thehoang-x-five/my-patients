@@ -27,6 +27,7 @@ import {
   useCreateClinicalExam,
   getClsSummary,
   searchClsOrders,
+  searchClinicalRaw,
   updateClsSummaryStatus,
   updateClsOrderStatus,
 } from "../../api/examination";
@@ -35,7 +36,7 @@ import { getStoredAccessToken } from "../../api/http.js";
 import { useCreateHistoryVisit } from "../../api/history";
 import { getClinicalExam, getFinalDiagnosis, useCompleteExam } from "../../api/examination";
 import { getPrescriptionByCode } from "../../api/pharmacy.js";
-import { searchInvoices } from "../../api/billing.js";
+import { searchInvoices, confirmInvoice, cancelInvoice, createInvoice, updateInvoiceStatus } from "../../api/billing.js";
 import { useExamStore, useUIStore, useAuthStore } from "../stores/appStore.js";
 import { useNavigate } from "react-router-dom";
 
@@ -61,11 +62,16 @@ import {
   canManageReception,
   isReceptionNurse,
 } from "../../utils/permissions.js";
+import { toLocalYmd } from "../../utils/dateLocal.js";
 
 // (giả sử các helper addVisit, addTransaction, listAppointmentHolds, getLastVisit,
 //  createFollowupHold, markAppointmentDoneForPid, markServiceDispatched,
 //  markServiceDone, markWaitDoctorReview, QUEUE_RULES, Chip ... vẫn được import
 //  hoặc defined ở file khác như trước – em giữ nguyên các đoạn gọi chúng)
+
+const QUEUE_RULES = { GRACE_MIN: 15 };
+const listAppointmentHolds = () => [];
+const getLastVisit = () => null;
 
 export default function PatientModal({
   open,
@@ -80,12 +86,9 @@ export default function PatientModal({
     return String(value || "").toLowerCase().trim();
   }
 
-  function isDeferredInvoice(invoice) {
+  function getInvoiceSearchText(invoice) {
     if (!invoice) return false;
-    const status = normalizeInvoiceStatus(invoice?.status || invoice?.TrangThai);
-    if (status === "bao_luu") return true;
-
-    const text = [
+    return [
       invoice?.NoiDung,
       invoice?.noiDung,
       invoice?.GhiChu,
@@ -98,8 +101,25 @@ export default function PatientModal({
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
+  }
 
-    return text.includes("bao luu") || text.includes("cong no") || text.includes("thu sau");
+  function isReservedInvoice(invoice) {
+    if (!invoice) return false;
+    const status = normalizeInvoiceStatus(invoice?.status || invoice?.TrangThai);
+    if (status === "bao_luu") return true;
+    return getInvoiceSearchText(invoice).includes("bao luu");
+  }
+
+  function isDebtInvoice(invoice) {
+    if (!invoice) return false;
+    const status = normalizeInvoiceStatus(invoice?.status || invoice?.TrangThai);
+    if (status === "cong_no") return true;
+    const text = getInvoiceSearchText(invoice);
+    return text.includes("cong no") || text.includes("thu sau");
+  }
+
+  function isDeferredInvoice(invoice) {
+    return isReservedInvoice(invoice);
   }
 
   function buildScopedProcessInvoices(rows, maPhieuKham, maDonThuoc) {
@@ -118,18 +138,18 @@ export default function PatientModal({
 
     const examInvoice = examCode
       ? pickLatest(
-          (row) =>
-            String(row?.maPhieuKham || row?.MaPhieuKham || "").trim() === examCode &&
-            normalizeInvoiceStatus(row?.status || row?.TrangThai) !== "da_huy"
-        )
+        (row) =>
+          String(row?.maPhieuKham || row?.MaPhieuKham || "").trim() === examCode &&
+          normalizeInvoiceStatus(row?.status || row?.TrangThai) !== "da_huy"
+      )
       : null;
 
     const drugInvoice = prescriptionCode
       ? pickLatest(
-          (row) =>
-            String(row?.maDonThuoc || row?.MaDonThuoc || "").trim() === prescriptionCode &&
-            normalizeInvoiceStatus(row?.status || row?.TrangThai) !== "da_huy"
-        )
+        (row) =>
+          String(row?.maDonThuoc || row?.MaDonThuoc || "").trim() === prescriptionCode &&
+          normalizeInvoiceStatus(row?.status || row?.TrangThai) !== "da_huy"
+      )
       : null;
 
     return { examInvoice, drugInvoice };
@@ -408,11 +428,7 @@ export default function PatientModal({
   }, [mode, tplId, tplList, isServiceIntake]);
 
   const today = useMemo(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+    return toLocalYmd(new Date());
   }, []);
 
   const [exam, setExam] = useState({
@@ -467,19 +483,63 @@ export default function PatientModal({
 
   const normalizeDigits = (value) => String(value || "").replace(/\D/g, "");
 
+  const normalizeYmd = (value) => {
+    if (!value) return "";
+    const str = String(value).trim();
+    if (!str) return "";
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+    const parsed = new Date(str);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return toLocalYmd(parsed);
+  };
+
   const readAppointmentPatientCode = (appt) =>
     appt?.MaBenhNhan ||
     appt?.maBenhNhan ||
     appt?.patientCode ||
-    appt?.code ||
+    appt?.PatientCode ||
+    appt?.patientId ||
+    appt?.PatientId ||
+    appt?.maBN ||
+    appt?.MaBN ||
+    appt?.ma_bn ||
     appt?.patient_code ||
+    appt?._raw?.MaBenhNhan ||
+    appt?._raw?.maBenhNhan ||
+    appt?._raw?.ma_benh_nhan ||
+    appt?._raw?.PatientCode ||
+    appt?._raw?.patientCode ||
+    appt?._raw?.PatientId ||
+    appt?._raw?.patientId ||
+    appt?._raw?.MaBN ||
+    appt?._raw?.maBN ||
+    appt?._raw?.ma_bn ||
+    appt?._raw?.patient_code ||
+    appt?.code ||
     "";
 
   const readAppointmentId = (appt) =>
-    appt?.MaLichHen || appt?.maLichHen || appt?.appointmentCode || appt?.id || "";
+    appt?.MaLichHen ||
+    appt?.maLichHen ||
+    appt?.appointmentCode ||
+    appt?.id ||
+    appt?._raw?.MaLichHen ||
+    appt?._raw?.ma_lich_hen ||
+    appt?._raw?.appointmentCode ||
+    appt?._raw?.id ||
+    "";
 
   const readAppointmentType = (appt) =>
-    appt?.LoaiHen || appt?.loaiHen || appt?.apptType || appt?.appointmentType || "";
+    appt?.LoaiHen ||
+    appt?.loaiHen ||
+    appt?.apptType ||
+    appt?.appointmentType ||
+    appt?.type ||
+    appt?._raw?.LoaiHen ||
+    appt?._raw?.loai_hen ||
+    appt?._raw?.apptType ||
+    appt?._raw?.type ||
+    "";
 
   const isFollowupAppointmentType = (value) => {
     const normalized = normalizeText(value).replace(/_/g, " ");
@@ -497,6 +557,10 @@ export default function PatientModal({
     appt?.hoTen ||
     appt?.patientName ||
     appt?.patient ||
+    appt?._raw?.TenBenhNhan ||
+    appt?._raw?.ten_benh_nhan ||
+    appt?._raw?.patientName ||
+    appt?._raw?.patient ||
     "";
 
   const readAppointmentPhone = (appt) =>
@@ -505,6 +569,12 @@ export default function PatientModal({
     appt?.DienThoai ||
     appt?.dienThoai ||
     appt?.phone ||
+    appt?._raw?.SoDienThoai ||
+    appt?._raw?.so_dien_thoai ||
+    appt?._raw?.soDienThoai ||
+    appt?._raw?.DienThoai ||
+    appt?._raw?.dienThoai ||
+    appt?._raw?.phone ||
     "";
 
   const mapAppointmentToBooking = (appt) => ({
@@ -515,6 +585,8 @@ export default function PatientModal({
     loaiHen: readAppointmentType(appt),
     appointmentType: readAppointmentType(appt),
     apptType: readAppointmentType(appt),
+    TrangThai: appt?.TrangThai || appt?.trangThai || appt?.status || appt?._raw?.TrangThai || appt?._raw?.trang_thai || "",
+    status: appt?.TrangThai || appt?.trangThai || appt?.status || appt?._raw?.TrangThai || appt?._raw?.trang_thai || "",
     date:
       appt?.NgayHen ||
       appt?.ngayHen ||
@@ -911,6 +983,49 @@ export default function PatientModal({
     }
   };
 
+  const resolveServiceProcessExamId = async (currentPid) => {
+    if (!currentPid) return null;
+
+    const clinicalList = await searchClinicalRaw({ MaBenhNhan: currentPid });
+    if (!Array.isArray(clinicalList) || clinicalList.length === 0) return null;
+
+    const normalizeStatus = (value) => String(value || "").trim().toLowerCase();
+    const getExamId = (item) => item?.MaPhieuKham || item?.maPhieuKham || null;
+    const getSummaryId = (item) =>
+      item?.MaPhieuKqKhamCls ||
+      item?.maPhieuKqKhamCls ||
+      item?.MaPhieuTongHopCls ||
+      item?.maPhieuTongHopCls ||
+      null;
+    const getUpdatedAt = (item) => {
+      const raw =
+        item?.NgayCapNhat ||
+        item?.ngayCapNhat ||
+        item?.NgayLap ||
+        item?.ngayLap ||
+        item?.createdAt ||
+        "";
+      const time = raw ? new Date(raw).getTime() : 0;
+      return Number.isFinite(time) ? time : 0;
+    };
+
+    const candidates = clinicalList
+      .filter((item) => {
+        const clinicalPid = item?.MaBenhNhan || item?.maBenhNhan || "";
+        if (clinicalPid && clinicalPid !== currentPid) return false;
+        const status = normalizeStatus(item?.TrangThai || item?.trangThai);
+        return status !== "da_hoan_tat" && status !== "da_huy" && !!getExamId(item);
+      })
+      .sort((a, b) => {
+        const aHasSummary = getSummaryId(a) ? 1 : 0;
+        const bHasSummary = getSummaryId(b) ? 1 : 0;
+        if (aHasSummary !== bHasSummary) return bHasSummary - aHasSummary;
+        return getUpdatedAt(b) - getUpdatedAt(a);
+      });
+
+    return getExamId(candidates[0]) || null;
+  };
+
 
   useEffect(() => {
     if (!open) {
@@ -1040,7 +1155,7 @@ export default function PatientModal({
         try {
           const d = new Date(rawDob);
           if (!Number.isNaN(d.getTime())) {
-            const iso = d.toISOString().slice(0, 10);
+            const iso = toLocalYmd(d);
             setForm((s) => ({ ...(s || {}), dob: iso }));
           }
         } catch {
@@ -1328,9 +1443,71 @@ export default function PatientModal({
 
 
   // ---- Helpers nhận diện trạng thái ----
-  const isFollowupStatus =
-    (patientForView?.status || "") === STATUSES.SCHEDULED_FUP;
-  const isFollowupBooking = isFollowupAppointmentType(
+  useEffect(() => {
+    if (!open || mode !== "process") return;
+
+    const currentPid =
+      patient?.id ||
+      patient?.pid ||
+      patient?.MaBenhNhan ||
+      patient?.maBenhNhan ||
+      patientId;
+
+    const maPhieuKham =
+      patient?.MaPhieuKham ||
+      patient?.maPhieuKham ||
+      patient?.MaPhieuKhamLs ||
+      patient?.maPhieuKhamLs ||
+      form?.MaPhieuKham ||
+      form?.maPhieuKham ||
+      cachedMaPhieuKhamRef.current ||
+      null;
+
+    let cancelled = false;
+
+    (async () => {
+      await refetchPatientDetail?.();
+
+      if (!isSvcProcessing || !currentPid) return;
+
+      const resolvedExamId = maPhieuKham || (await resolveServiceProcessExamId(currentPid));
+      if (cancelled || !resolvedExamId) return;
+
+      cachedMaPhieuKhamRef.current = resolvedExamId;
+      setForm((prev) => ({
+        ...(prev || {}),
+        MaPhieuKham: resolvedExamId,
+        maPhieuKham: resolvedExamId,
+      }));
+      await loadServiceProcessData(resolvedExamId, currentPid);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    mode,
+    patientId,
+    isSvcProcessing,
+    patient?.MaPhieuKham,
+    patient?.maPhieuKham,
+    patient?.MaPhieuKhamLs,
+    patient?.maPhieuKhamLs,
+    form?.MaPhieuKham,
+    form?.maPhieuKham,
+  ]);
+
+  const isFollowupStatus = false;
+  const bookingDate = normalizeYmd(booking?.date);
+  const bookingStatus = String(
+    booking?.TrangThai || booking?.trangThai || booking?.status || ""
+  ).toLowerCase();
+  const hasCheckedInAppointmentToday =
+    !!(booking?.MaLichHen || booking?.maLichHen || booking?.appointmentCode) &&
+    bookingDate === today &&
+    bookingStatus === APPT_STATUS.DA_CHECKIN;
+  const isFollowupBooking = hasCheckedInAppointmentToday && isFollowupAppointmentType(
     booking?.LoaiHen ||
     booking?.loaiHen ||
     booking?.appointmentType ||
@@ -1376,7 +1553,7 @@ export default function PatientModal({
     if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
     const parsed = new Date(str);
     if (Number.isNaN(parsed.getTime())) return "";
-    return parsed.toISOString().slice(0, 10);
+    return toLocalYmd(parsed);
   };
 
   const normalizeVisitTime = (value) => {
@@ -1391,16 +1568,38 @@ export default function PatientModal({
     return `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`;
   };
 
+  const readVisitDateTime = (visit) =>
+    visit?.date ||
+    visit?.Date ||
+    visit?.ThoiGian ||
+    visit?.thoiGian ||
+    visit?._raw?.Date ||
+    visit?._raw?.date ||
+    visit?._raw?.ThoiGian ||
+    visit?._raw?.thoiGian ||
+    null;
+
   const latestVisitForAppointmentPrefill = useMemo(() => {
     if (!Array.isArray(visits) || !visits.length) return null;
 
-    const latestVisit = [...visits].sort((a, b) => {
-      const aTime = new Date(a?.date || a?.Date || 0).getTime();
-      const bTime = new Date(b?.date || b?.Date || 0).getTime();
+    const latestVisit = [...visits].filter((visit) => {
+      const status = String(
+        visit?.status ||
+          visit?.TrangThai ||
+          visit?.trangThai ||
+          visit?._raw?.TrangThai ||
+          visit?._raw?.trangThai ||
+          ""
+      ).toLowerCase();
+      return !status.includes("huy");
+    }).sort((a, b) => {
+      const aTime = new Date(readVisitDateTime(a) || 0).getTime();
+      const bTime = new Date(readVisitDateTime(b) || 0).getTime();
       return bTime - aTime;
     })[0];
 
     if (!latestVisit) return null;
+    const latestVisitDateTime = readVisitDateTime(latestVisit);
 
     const pid =
       patientForView?.MaBenhNhan ||
@@ -1421,12 +1620,41 @@ export default function PatientModal({
       "";
 
     return {
-      date: normalizeVisitDate(latestVisit.date || latestVisit.Date),
-      time: normalizeVisitTime(latestVisit.date || latestVisit.Date),
+      date: normalizeVisitDate(latestVisitDateTime),
+      time: normalizeVisitTime(latestVisitDateTime),
       patientName: name,
       patientCode: pid,
-      doctorName: latestVisit.doctor || latestVisit.Doctor || "",
-      deptName: latestVisit.dept || latestVisit.Dept || "",
+      doctorId:
+        latestVisit.doctorId ||
+        latestVisit.MaBacSi ||
+        latestVisit.maBacSi ||
+        latestVisit._raw?.MaBacSi ||
+        latestVisit._raw?.maBacSi ||
+        "",
+      doctorName:
+        latestVisit.doctor ||
+        latestVisit.Doctor ||
+        latestVisit.TenBacSi ||
+        latestVisit.tenBacSi ||
+        latestVisit._raw?.TenBacSi ||
+        latestVisit._raw?.tenBacSi ||
+        "",
+      deptCode:
+        latestVisit.deptId ||
+        latestVisit.deptCode ||
+        latestVisit.MaKhoa ||
+        latestVisit.maKhoa ||
+        latestVisit._raw?.MaKhoa ||
+        latestVisit._raw?.maKhoa ||
+        "",
+      deptName:
+        latestVisit.dept ||
+        latestVisit.Dept ||
+        latestVisit.TenKhoa ||
+        latestVisit.tenKhoa ||
+        latestVisit._raw?.TenKhoa ||
+        latestVisit._raw?.tenKhoa ||
+        "",
       note: latestVisit.note || latestVisit.Note || "",
     };
   }, [visits, patientForView, patient, form]);
@@ -1457,12 +1685,89 @@ export default function PatientModal({
     diagnosisData?.prescriptionCode,
   ]);
 
+  useEffect(() => {
+    if (!open || mode !== "process") return;
+
+    const pid =
+      form?.id ||
+      form?.pid ||
+      form?.MaBenhNhan ||
+      form?.maBenhNhan ||
+      patient?.id ||
+      patient?.pid ||
+      patient?.MaBenhNhan ||
+      patient?.maBenhNhan ||
+      "";
+    const maPhieuKham =
+      diagnosisData?.MaPhieuKham ||
+      diagnosisData?.maPhieuKham ||
+      form?.MaPhieuKham ||
+      form?.maPhieuKham ||
+      patient?.MaPhieuKham ||
+      patient?.maPhieuKham ||
+      "";
+    const maDonThuoc =
+      diagnosisData?.MaDonThuoc ||
+      diagnosisData?.maDonThuoc ||
+      diagnosisData?.prescriptionCode ||
+      "";
+
+    if (!pid || !maPhieuKham) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const invoiceSearch = await searchInvoices({
+          MaBenhNhan: pid,
+          Page: 1,
+          PageSize: 100,
+        });
+        if (cancelled) return;
+        const invoiceRows = invoiceSearch?.Items ?? invoiceSearch?.items ?? [];
+        setProcessInvoices(
+          buildScopedProcessInvoices(invoiceRows, maPhieuKham, maDonThuoc)
+        );
+      } catch (err) {
+        console.warn("[PatientModal] refresh process invoices failed:", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    mode,
+    form?.id,
+    form?.pid,
+    form?.MaBenhNhan,
+    form?.maBenhNhan,
+    form?.MaPhieuKham,
+    form?.maPhieuKham,
+    patient?.id,
+    patient?.pid,
+    patient?.MaBenhNhan,
+    patient?.maBenhNhan,
+    patient?.MaPhieuKham,
+    patient?.maPhieuKham,
+    diagnosisData?.MaPhieuKham,
+    diagnosisData?.maPhieuKham,
+    diagnosisData?.MaDonThuoc,
+    diagnosisData?.maDonThuoc,
+    diagnosisData?.prescriptionCode,
+  ]);
+
   const processExamInvoice = processInvoices.examInvoice;
   const processDrugInvoice = processInvoices.drugInvoice;
+  const processExamInvoiceStatus = normalizeInvoiceStatus(
+    processExamInvoice?.status || processExamInvoice?.TrangThai
+  );
   const hasPendingExamPayment =
-    normalizeInvoiceStatus(processExamInvoice?.status || processExamInvoice?.TrangThai) === "chua_thu";
+    processExamInvoiceStatus === "chua_thu" ||
+    processExamInvoiceStatus === "cong_no" ||
+    isDebtInvoice(processExamInvoice);
   const hasCollectableExamPayment =
-    hasPendingExamPayment && !isDeferredInvoice(processExamInvoice);
+    hasPendingExamPayment && !isReservedInvoice(processExamInvoice);
   const pendingExamFeeAmount =
     Number(processExamInvoice?.SoTien ?? processExamInvoice?.soTien ?? 0) || 0;
   const finishBlockedByPayment = hasCollectableExamPayment;
@@ -1487,11 +1792,34 @@ export default function PatientModal({
         try {
           const res = await searchClsOrders({
             MaBenhNhan: pid,
-            TrangThai: "da_lap",
             PageSize: 500,
           });
-          const first = Array.isArray(res?.Items) ? res.Items[0] : null;
-          const list = Array.isArray(first?.ListItemDV) ? first.ListItemDV : [];
+          const orders = Array.isArray(res?.Items)
+            ? res.Items
+            : Array.isArray(res?.items)
+              ? res.items
+              : [];
+          const hasItems = (order) => {
+            const items = order?.ListItemDV || order?.listItemDV || [];
+            return Array.isArray(items) && items.length > 0;
+          };
+          const activeStatuses = new Set([
+            "da_lap",
+            "da_tao",
+            "cho_tiep_nhan",
+            "cho_thuc_hien",
+          ]);
+          const first =
+            orders.find((order) => {
+              const status = String(order?.TrangThai || order?.trangThai || "")
+                .trim()
+                .toLowerCase();
+              return activeStatuses.has(status) && hasItems(order);
+            }) ||
+            orders.find(hasItems) ||
+            null;
+          const listRaw = first?.ListItemDV || first?.listItemDV || [];
+          const list = Array.isArray(listRaw) ? listRaw : [];
           if (list.length) {
             const services = list.map(
               (it) =>
@@ -1636,7 +1964,20 @@ export default function PatientModal({
       }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mode]);
+  }, [
+    open,
+    mode,
+    isServiceIntake,
+    isFollowupExamFlow,
+    patient?.id,
+    patient?.pid,
+    patient?.MaBenhNhan,
+    patient?.maBenhNhan,
+    form?.id,
+    form?.pid,
+    form?.MaBenhNhan,
+    form?.maBenhNhan,
+  ]);
 
   useEffect(() => {
     if (!open || mode !== "exam") return;
@@ -1665,6 +2006,12 @@ export default function PatientModal({
 
     const nextBooking = mapAppointmentToBooking(appointmentCandidate);
     if (!nextBooking.MaLichHen) return;
+    const nextBookingStatus = String(
+      nextBooking.TrangThai || nextBooking.status || ""
+    ).toLowerCase();
+    if (normalizeYmd(nextBooking.date) !== today || nextBookingStatus !== APPT_STATUS.DA_CHECKIN) {
+      return;
+    }
 
     setBooking((prev) => ({
       ...prev,
@@ -2075,6 +2422,233 @@ export default function PatientModal({
     source: "exam",
     printPayload: null,
   });
+
+  // ==================== BẢO LƯU (DEFERRED INVOICE) CHECK ====================
+  const [deferredInvoices, setDeferredInvoices] = useState([]);
+  const [showDeferredDialog, setShowDeferredDialog] = useState(false);
+  const [loadingDeferred, setLoadingDeferred] = useState(false);
+  const skipDeferredCheckRef = useRef(false);
+  const deferredFeeOverrideRef = useRef(null); // number | null — if set, overrides fee in handleDirectExam
+
+  const totalDeferredAmount = useMemo(
+    () => deferredInvoices.reduce((sum, inv) => {
+      const amt = Number(inv?.soTien ?? inv?.SoTien ?? inv?.amount ?? 0);
+      return sum + (isFinite(amt) ? amt : 0);
+    }, 0),
+    [deferredInvoices]
+  );
+
+  async function checkDeferredInvoices(patientCode) {
+    if (!patientCode) return [];
+    setLoadingDeferred(true);
+    try {
+      const data = await searchInvoices({
+        MaBenhNhan: patientCode,
+        TrangThai: "bao_luu",
+        Page: 1,
+        PageSize: 50,
+      });
+      const items = (data?.Items ?? data?.items ?? []).filter(isDeferredInvoice);
+      setDeferredInvoices(items);
+      return items;
+    } catch (err) {
+      console.warn("[checkDeferredInvoices] Error:", err);
+      return [];
+    } finally {
+      setLoadingDeferred(false);
+    }
+  }
+
+  function getDirectExamMissingInfoMessage() {
+    if (isServiceFlow) return "";
+
+    const dept = exam.dept || booking.dept || "";
+    const doctor = booking.doctor || "";
+    const room = exam.room || "";
+
+    if (!dept || !room || !doctor) {
+      return "Vui lòng chọn đầy đủ mẫu khám, khoa, phòng và bác sĩ trước khi lập phiếu.";
+    }
+
+    return "";
+  }
+
+  // Khi mode chuyển sang exam → check bảo lưu sẵn để hiện banner
+  useEffect(() => {
+    if (mode !== "exam" || !currentPatientCode) return;
+    checkDeferredInvoices(currentPatientCode);
+  }, [mode, currentPatientCode]);
+
+  const getCurrentChargeAmount = () => {
+    if (isServiceFlow) return Number(totalServiceFee || 0) || 0;
+    if (isFollowupExamFlow) return 0;
+    return Number(booking?.price ?? tpl?.price ?? 0) || 0;
+  };
+
+  const getCurrentChargeLabel = () =>
+    isServiceFlow ? "phiếu cận lâm sàng" : "phiếu khám mới";
+
+  const getInvoiceTypeForCurrentFlow = () =>
+    isServiceFlow ? "can_lam_sang" : "kham_lam_sang";
+
+  /** Sử dụng tiền bảo lưu: confirm hóa đơn cũ → tạo phiếu mới miễn phí hoặc thu chênh lệch */
+  async function handleUseDeferredInvoice() {
+    setShowDeferredDialog(false);
+
+    const examFee = getCurrentChargeAmount();
+    const chargeLabel = getCurrentChargeLabel();
+    const targetInvoiceType = getInvoiceTypeForCurrentFlow();
+
+    const missingInfoMessage = getDirectExamMissingInfoMessage();
+    if (missingInfoMessage) {
+      toast.error(missingInfoMessage);
+      return;
+    }
+
+    // Chọn hóa đơn bảo lưu phù hợp nhất (cùng loại, hoặc đầu tiên)
+    const bestMatch =
+      deferredInvoices.find((inv) => {
+        const loai = String(inv?.loaiDotThu ?? inv?.LoaiDotThu ?? "").toLowerCase();
+        if (targetInvoiceType === "can_lam_sang") {
+          return loai.includes("can_lam_sang") || loai.includes("cls") || loai.includes("canlamsang");
+        }
+        return loai.includes("kham") || loai.includes("exam");
+      }) || deferredInvoices[0];
+
+    if (!bestMatch) {
+      toast.error("Không tìm thấy hóa đơn bảo lưu.");
+      return;
+    }
+
+    const deferredAmt = Number(bestMatch?.soTien ?? bestMatch?.SoTien ?? 0);
+    const maHoaDon = bestMatch?.maHoaDon ?? bestMatch?.MaHoaDon;
+    const excessPreview = Math.max(0, deferredAmt - examFee);
+    const usedAmount = Math.min(deferredAmt, examFee || deferredAmt);
+
+    // ===== CONCURRENCY GUARD: re-check trạng thái trước khi xác nhận =====
+    try {
+      const freshData = await searchInvoices({
+        MaBenhNhan: currentPatientCode,
+        TrangThai: "bao_luu",
+        Page: 1,
+        PageSize: 50,
+      });
+      const freshItems = (freshData?.Items ?? freshData?.items ?? []);
+      const stillExists = freshItems.find(
+        (inv) => (inv?.maHoaDon ?? inv?.MaHoaDon) === maHoaDon
+      );
+      if (!stillExists) {
+        toast.error(
+          "Hóa đơn bảo lưu đã được xử lý bởi nhân viên khác. Vui lòng thử lại."
+        );
+        // Refresh danh sách
+        const remaining = freshItems.filter(isDeferredInvoice);
+        setDeferredInvoices(remaining);
+        if (remaining.length > 0) setShowDeferredDialog(true);
+        return;
+      }
+    } catch (err) {
+      console.warn("[concurrency check] Error:", err);
+      // Fallback: vẫn tiếp tục, backend sẽ reject nếu đã chuyển trạng thái
+    }
+
+    try {
+      // Xác nhận hóa đơn bảo lưu → da_thu (đã sử dụng)
+      await confirmInvoice(maHoaDon, {
+        PhuongThucThanhToan: "bao_luu",
+        MaNhanSuThu: currentUserInfo.code || "NV_YT_HC_01",
+        GhiChu: [
+          `Sử dụng ${usedAmount.toLocaleString("vi-VN")}đ tiền bảo lưu cho ${chargeLabel}`,
+          excessPreview > 0
+            ? `Số dư ${excessPreview.toLocaleString("vi-VN")}đ được chuyển thành hóa đơn bảo lưu mới`
+            : null,
+        ].filter(Boolean).join(" — "),
+      });
+
+      // Xóa hóa đơn đã dùng khỏi danh sách
+      setDeferredInvoices((prev) =>
+        prev.filter((inv) => (inv?.maHoaDon ?? inv?.MaHoaDon) !== maHoaDon)
+      );
+    } catch (err) {
+      console.error("[handleUseDeferredInvoice] confirm failed:", err);
+      const errMsg =
+        err?.response?.data?.Message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "";
+      if (errMsg.includes("da_thu") || errMsg.includes("da_huy")) {
+        toast.error(
+          "Hóa đơn bảo lưu đã được xử lý bởi nhân viên khác."
+        );
+        await checkDeferredInvoices(currentPatientCode);
+      } else {
+        toast.error("Không thể xác nhận hóa đơn bảo lưu. Vui lòng thử lại.");
+      }
+      return;
+    }
+
+    if (deferredAmt >= examFee) {
+      // Tiền bảo lưu >= phí khám → miễn phí
+      const excess = deferredAmt - examFee;
+
+      if (excess > 0) {
+        // ===== BẢO LƯU DƯ: tạo hóa đơn bảo lưu mới cho phần thừa =====
+        try {
+          const excessInvoice = await createInvoice({
+            MaBenhNhan: currentPatientCode,
+            MaNhanSuThu: currentUserInfo.code || "NV_YT_HC_01",
+            LoaiDotThu: "bao_luu_du",
+            SoTien: excess,
+            NoiDung: `Tiền bảo lưu dư từ hóa đơn ${maHoaDon} sau khi sử dụng cho ${chargeLabel} (gốc: ${deferredAmt.toLocaleString("vi-VN")}đ, đã dùng: ${examFee.toLocaleString("vi-VN")}đ, dư: ${excess.toLocaleString("vi-VN")}đ)`,
+          });
+          // Chuyển hóa đơn mới sang trạng thái bảo lưu
+          const excessId = excessInvoice?.MaHoaDon ?? excessInvoice?.maHoaDon;
+          if (excessId) {
+            await updateInvoiceStatus({ id: excessId, status: "bao_luu" });
+          }
+          toast.info(
+            `Tiền dư ${excess.toLocaleString("vi-VN")}đ đã được bảo lưu cho lần sau`
+          );
+        } catch (err) {
+          console.error("[handleUseDeferredInvoice] create excess invoice failed:", err);
+          toast.warn(
+            `Không thể tạo hóa đơn bảo lưu dư ${excess.toLocaleString("vi-VN")}đ. Vui lòng ghi nhận thủ công.`
+          );
+        }
+      }
+
+      toast.success(
+        `✅ Đã sử dụng ${examFee > 0 ? examFee.toLocaleString("vi-VN") : deferredAmt.toLocaleString("vi-VN")}đ bảo lưu`
+      );
+      deferredFeeOverrideRef.current = 0;
+      skipDeferredCheckRef.current = true;
+      handleDirectExam();
+    } else {
+      // Tiền bảo lưu < phí khám → thu chênh lệch
+      const diff = examFee - deferredAmt;
+      toast.success(
+        `✅ Đã dùng ${deferredAmt.toLocaleString("vi-VN")}đ bảo lưu`
+      );
+      toast.info(
+        `Cần thu thêm ${diff.toLocaleString("vi-VN")}đ`
+      );
+      deferredFeeOverrideRef.current = diff;
+      skipDeferredCheckRef.current = true;
+      handleDirectExam();
+    }
+  }
+
+  /** Không sử dụng bảo lưu → thu tiền mới bình thường */
+  function handleSkipDeferred() {
+    setShowDeferredDialog(false);
+    const missingInfoMessage = getDirectExamMissingInfoMessage();
+    if (missingInfoMessage) {
+      toast.error(missingInfoMessage);
+      return;
+    }
+    skipDeferredCheckRef.current = true;
+    handleDirectExam();
+  }
 
   const openPrint = (payload = {}) => {
     if (payload.booking) {
@@ -2578,22 +3152,57 @@ export default function PatientModal({
   async function handleDirectExam() {
     const { id: pid, name } = form || {};
     if (creatingExam || createClinicalExamMut.isLoading) return;
+    const skipDeferredCheck = skipDeferredCheckRef.current;
 
     if (!pid) {
       toast.error("Thiếu mã BN.");
       return;
     }
 
+    const missingInfoMessage = getDirectExamMissingInfoMessage();
+    if (missingInfoMessage) {
+      toast.error(missingInfoMessage);
+      return;
+    }
+
+    // ===== CHECK BẢO LƯU trước khi tạo phiếu =====
+    if (!skipDeferredCheck && !isServiceFlow) {
+      const deferred = await checkDeferredInvoices(pid);
+      if (deferred.length > 0) {
+        setShowDeferredDialog(true);
+        return; // Dừng, chờ user chọn
+      }
+    }
+
     if (isServiceFlow) {
       if (!clsOrderId) {
+        skipDeferredCheckRef.current = false;
+        deferredFeeOverrideRef.current = null;
         toast.error("Không tìm thấy mã phiếu CLS.");
         return;
       }
       const services = serviceItems;
       if (!services.length) {
+        skipDeferredCheckRef.current = false;
+        deferredFeeOverrideRef.current = null;
         toast.error("Chưa có danh sách dịch vụ chỉ định.");
         return;
       }
+
+      if (!skipDeferredCheck) {
+        const deferred = await checkDeferredInvoices(pid);
+        if (deferred.length > 0) {
+          setShowDeferredDialog(true);
+          return;
+        }
+      }
+      skipDeferredCheckRef.current = false;
+
+      const fee = deferredFeeOverrideRef.current != null
+        ? Number(deferredFeeOverrideRef.current) || 0
+        : Number(totalServiceFee || 0) || 0;
+      const usedDeferredCredit = deferredFeeOverrideRef.current != null;
+      deferredFeeOverrideRef.current = null;
 
       try {
         await updateClsOrderStatus(clsOrderId, "dang_thuc_hien");
@@ -2606,14 +3215,57 @@ export default function PatientModal({
 
         setClsSummaryPrint(null);
 
-        const paymentItems = (serviceItems || []).map((sv, i) => ({
-          name: sv,
-          amount: priceOfService(sv),
-        }));
+        let deferredInvoiceForWizard = null;
+        if (usedDeferredCredit) {
+          try {
+            const searchResult = await searchInvoices({
+              MaBenhNhan: pid,
+              LoaiDotThu: "can_lam_sang",
+              TrangThai: "chua_thu",
+              Page: 1,
+              PageSize: 20,
+            });
+            const autoInvoices = searchResult?.Items ?? searchResult?.items ?? [];
+            const autoInvoice = autoInvoices.find(
+              (inv) => (inv.MaPhieuKhamCls ?? inv.maPhieuKhamCls) === clsOrderId
+            );
+
+            if (autoInvoice) {
+              const autoMaHD = autoInvoice.MaHoaDon ?? autoInvoice.maHoaDon;
+
+              if (fee <= 0) {
+                await cancelInvoice(autoMaHD, {
+                  LyDo: "Đã thanh toán bằng tiền bảo lưu",
+                });
+              } else {
+                deferredInvoiceForWizard = await updateInvoiceStatus({
+                  id: autoMaHD,
+                  status: "chua_thu",
+                  soTien: fee,
+                  noiDung: `Thu phí cận lâm sàng - Phiếu ${clsOrderId} - Sau khi trừ bảo lưu`,
+                });
+              }
+            }
+          } catch (err) {
+            console.error("[handleDirectExam] deferred CLS invoice adjustment failed:", err);
+            toast.error("Đã dùng tiền bảo lưu nhưng không thể cập nhật hóa đơn CLS. Vui lòng kiểm tra lại hóa đơn trước khi thu thêm.");
+            return;
+          }
+        }
+
+        const paymentItems = usedDeferredCredit
+          ? fee > 0
+            ? [{ name: "Cận lâm sàng - Sau khi trừ bảo lưu", amount: fee }]
+            : []
+          : (serviceItems || []).map((sv, i) => ({
+              name: sv,
+              amount: priceOfService(sv),
+            }));
 
         openPaymentFlow({
           clsId: clsOrderId || null,
           items: paymentItems,
+          initialInvoice: deferredInvoiceForWizard || null,
           printPayload: {
             type: "service",
             creatorName: currentUser,
@@ -2635,7 +3287,7 @@ export default function PatientModal({
             booking: {
               date: booking.date,
               time: booking.time,
-              price: totalServiceFee,
+              price: usedDeferredCredit ? fee : totalServiceFee,
               doctor: booking.doctor || "",
               dept: exam.dept || booking.dept || "",
             },
@@ -2659,14 +3311,20 @@ export default function PatientModal({
       return;
     }
 
+    skipDeferredCheckRef.current = false;
+
     const dept = exam.dept || booking.dept || "";
     const doctor = booking.doctor || "";
     const room = exam.room || "";
-    const fee = isFollowupExamFlow
-      ? 0
-      : Number(booking?.price ?? tpl?.price ?? 0) || 0;
+    const fee = deferredFeeOverrideRef.current != null
+      ? deferredFeeOverrideRef.current
+      : isFollowupExamFlow
+        ? 0
+        : Number(booking?.price ?? tpl?.price ?? 0) || 0;
+    const usedDeferredCredit = deferredFeeOverrideRef.current != null;
+    deferredFeeOverrideRef.current = null; // reset sau khi dùng
     if (!dept || !room || !doctor) {
-      toast.error("Vui lòng chọn đầy đủ khoa, phòng và bác sĩ.");
+      toast.error("Vui lòng chọn đầy đủ mẫu khám, khoa, phòng và bác sĩ trước khi lập phiếu.");
       return;
     }
 
@@ -2839,6 +3497,49 @@ export default function PatientModal({
       })
     );
 
+    // ===== Xử lý hóa đơn khi đã dùng tiền bảo lưu =====
+    // Backend tự tạo hóa đơn với GIÁ GỐC khi createClinicalExam.
+    // Nếu đã dùng tiền bảo lưu, ta cập nhật SoTien của hóa đơn gốc (KHÔNG hủy+tạo mới vì UNIQUE constraint).
+    let deferredInvoiceForWizard = null;
+    if (usedDeferredCredit && maPhieuKham) {
+      try {
+        // Tìm hóa đơn tự tạo bởi BE
+        const searchResult = await searchInvoices({
+          MaBenhNhan: pid,
+          TrangThai: "chua_thu",
+          Page: 1,
+          PageSize: 10,
+        });
+        const autoInvoices = searchResult?.Items ?? searchResult?.items ?? [];
+        const autoInvoice = autoInvoices.find(
+          (inv) => (inv.MaPhieuKham ?? inv.maPhieuKham) === maPhieuKham
+        );
+
+        if (autoInvoice) {
+          const autoMaHD = autoInvoice.MaHoaDon ?? autoInvoice.maHoaDon;
+
+          if (fee <= 0) {
+            // Tiền bảo lưu >= phí khám → hủy hóa đơn gốc (BN không cần trả thêm)
+            await cancelInvoice(autoMaHD, {
+              LyDo: "Đã thanh toán bằng tiền bảo lưu",
+            });
+          } else {
+            // Tiền bảo lưu < phí khám → cập nhật số tiền hóa đơn gốc = chênh lệch
+            const updatedInvoice = await updateInvoiceStatus({
+              id: autoMaHD,
+              status: "chua_thu",  // giữ nguyên trạng thái
+              soTien: fee,
+              noiDung: `Thu tiền khám lâm sàng (${exam.type || tpl?.title || "Khám"}) - Sau khi trừ bảo lưu`,
+            });
+            deferredInvoiceForWizard = updatedInvoice;
+          }
+        }
+      } catch (err) {
+        console.error("[handleDirectExam] deferred invoice adjustment failed:", err);
+        // Fallback: vẫn mở PaymentWizard với fee đã set
+      }
+    }
+
     openPaymentFlow({
       examId: maPhieuKham,
       items: [
@@ -2847,6 +3548,7 @@ export default function PatientModal({
           amount: Number(fee) || 0,
         },
       ],
+      initialInvoice: deferredInvoiceForWizard || null,
       printPayload: {
         type: "walkin",
         patient: {
@@ -2996,7 +3698,7 @@ export default function PatientModal({
     const status = normalizeInvoiceStatus(
       processExamInvoice?.TrangThai || processExamInvoice?.status
     );
-    if (status !== "chua_thu") {
+    if (status !== "chua_thu" && status !== "cong_no") {
       toast.info("Hóa đơn phí phiếu khám không còn ở trạng thái chờ thu.");
       return;
     }
@@ -3099,7 +3801,12 @@ export default function PatientModal({
       const latestExamStatus = normalizeInvoiceStatus(
         latestExamInvoice?.TrangThai || latestExamInvoice?.status
       );
-      if (latestExamStatus === "chua_thu" && !isDeferredInvoice(latestExamInvoice)) {
+      if (
+        (latestExamStatus === "chua_thu" ||
+          latestExamStatus === "cong_no" ||
+          isDebtInvoice(latestExamInvoice)) &&
+        !isReservedInvoice(latestExamInvoice)
+      ) {
         toast.warn("Vui lòng thu phí phiếu khám trước khi hoàn tất.");
         return;
       }
@@ -3272,6 +3979,15 @@ export default function PatientModal({
           clinicalDetail?.trieuChung ||
           exam?.symptoms ||
           "",
+      });
+
+      await enqueueReturnToDoctor({
+        MaBenhNhan: pid,
+        MaPhong: maPhong,
+        LoaiHangDoi: "kham_lam_sang",
+        Nguon: "service_return",
+        Nhan: clinicalDetail?.LoaiHen || clinicalDetail?.loaiHen || "service_return",
+        MaPhieuKham: maPhieuKham,
       });
 
       const maPhieuTongHop =
@@ -3513,6 +4229,9 @@ export default function PatientModal({
                     handleFollowupExam={handleFollowupExam}
                     currentUser={currentUserInfo}
                     serviceNoteReadOnly={isServiceIntake && isReceptionUser}
+                    deferredInvoices={deferredInvoices}
+                    loadingDeferred={loadingDeferred}
+                    totalDeferredAmount={totalDeferredAmount}
                   />
                 )}
 
@@ -3768,6 +4487,128 @@ export default function PatientModal({
             )}
           </motion.div>
 
+          {/* ===== DIALOG BẢO LƯU ===== */}
+          <AnimatePresence>
+            {showDeferredDialog && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                onClick={() => setShowDeferredDialog(false)}
+              >
+                <motion.div
+                  initial={{ scale: 0.95, y: 20 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.95, y: 20 }}
+                  className="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-2xl ring-1 ring-emerald-200 overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-b border-emerald-200 px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">💰</span>
+                      <div>
+                        <h3 className="text-base font-bold text-emerald-900">
+                          Bệnh nhân có tiền bảo lưu
+                        </h3>
+                        <p className="text-xs text-emerald-700 mt-0.5">
+                          {currentPatientName || currentPatientCode} — Tiền đã đóng từ lần trước
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  <div className="px-5 py-4 max-h-[50vh] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs font-semibold text-slate-600 border-b border-slate-200">
+                          <th className="text-left py-2">Mã HĐ</th>
+                          <th className="text-left py-2">Loại</th>
+                          <th className="text-right py-2">Số tiền</th>
+                          <th className="text-right py-2">Ngày</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {deferredInvoices.map((inv, idx) => {
+                          const ma = inv?.maHoaDon ?? inv?.MaHoaDon ?? "";
+                          const loai = inv?.loaiDotThu ?? inv?.LoaiDotThu ?? "";
+                          const soTien = Number(inv?.soTien ?? inv?.SoTien ?? 0);
+                          const ngay = inv?.thoiGian ?? inv?.ThoiGian ?? inv?.dateLabel ?? "";
+                          const dateStr = ngay ? new Date(ngay).toLocaleDateString("vi-VN") : "";
+                          return (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-emerald-50/60">
+                              <td className="py-2 font-mono text-xs text-slate-700">{ma}</td>
+                              <td className="py-2 text-slate-600">{loai}</td>
+                              <td className="py-2 text-right font-bold text-emerald-700 tabular-nums">
+                                {soTien.toLocaleString("vi-VN")}đ
+                              </td>
+                              <td className="py-2 text-right text-xs text-slate-500">{dateStr}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+
+                    <div className="mt-3 flex items-center justify-between px-2 py-2 rounded-xl bg-emerald-50 ring-1 ring-emerald-200">
+                      <span className="text-sm font-semibold text-emerald-800">Tổng bảo lưu</span>
+                      <span className="text-lg font-extrabold text-emerald-700">
+                        {totalDeferredAmount.toLocaleString("vi-VN")}đ
+                      </span>
+                    </div>
+
+                    {(() => {
+                      const examFee = getCurrentChargeAmount();
+                      if (totalDeferredAmount >= examFee && examFee > 0) {
+                        return (
+                          <p className="mt-2 text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+                            ✅ Tiền bảo lưu đủ để thanh toán phiếu khám ({examFee.toLocaleString("vi-VN")}đ).
+                            BN không cần trả thêm.
+                          </p>
+                        );
+                      } else if (examFee > 0 && totalDeferredAmount > 0) {
+                        const diff = examFee - totalDeferredAmount;
+                        return (
+                          <p className="mt-2 text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 ring-1 ring-emerald-100">
+                            ⚠️ Phí khám: {examFee.toLocaleString("vi-VN")}đ — Sau khi dùng bảo lưu, cần thu thêm{" "}
+                            <b>{diff.toLocaleString("vi-VN")}đ</b>
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="border-t border-slate-200 bg-slate-50 px-5 py-3 flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeferredDialog(false)}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold text-red-700 bg-white ring-1 ring-red-300 hover:bg-red-50 transition"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSkipDeferred}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold text-emerald-700 bg-white ring-1 ring-emerald-300 hover:bg-emerald-50 transition"
+                    >
+                      Thu tiền mới (giữ bảo lưu)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleUseDeferredInvoice}
+                      className="px-5 py-2 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-500 shadow-md hover:shadow-lg hover:-translate-y-px transition"
+                    >
+                      💰 Sử dụng tiền bảo lưu
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <PaymentWizard
             open={paymentFlow.open}
             patient={{
@@ -3823,11 +4664,11 @@ export default function PatientModal({
             services={
               print.payload?.services ||
               (serviceItems || []).map((sv, i) => ({
-              name: sv,
-              room: serviceRooms[i] || `Phòng ${sv}`,
-              price: priceOfService(sv),
-              note: serviceNotes[i] || "",
-              technician: serviceStaffs[i] || "",
+                name: sv,
+                room: serviceRooms[i] || `Phòng ${sv}`,
+                price: priceOfService(sv),
+                note: serviceNotes[i] || "",
+                technician: serviceStaffs[i] || "",
               }))
             }
             feePaid={

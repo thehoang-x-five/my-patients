@@ -47,6 +47,30 @@ const DEFAULT_PATIENT_FILTER = {
   todayOnly: false,
 };
 
+const CHECKIN_PREFILL_TTL_MS = 5 * 60 * 1000;
+
+function isFreshCheckinPrefill(prefill) {
+  if (!prefill?.latestAppointment) return false;
+  const createdAt = Number(prefill.createdAt || prefill.linkedAt || 0);
+  if (!createdAt) return false;
+  if (Date.now() - createdAt > CHECKIN_PREFILL_TTL_MS) return false;
+
+  const appt = prefill.latestAppointment;
+  const raw = appt?._raw || {};
+  const dateValue =
+    appt?.date ||
+    appt?.NgayHen ||
+    appt?.ngayHen ||
+    raw?.NgayHen ||
+    raw?.ngay_hen ||
+    "";
+  const status = String(
+    appt?.status || appt?.TrangThai || appt?.trangThai || raw?.TrangThai || raw?.trang_thai || ""
+  ).toLowerCase();
+
+  return String(dateValue || "").slice(0, 10) === todayStr() && status === APPT_STATUS.DA_CHECKIN;
+}
+
 // Lấy chuỗi yyyy-MM-dd của hôm nay
 const todayStr = () => {
   try {
@@ -265,8 +289,25 @@ const readAppointmentPatientCode = (appt) =>
   appt?.MaBenhNhan ||
   appt?.maBenhNhan ||
   appt?.patientCode ||
-  appt?.code ||
+  appt?.PatientCode ||
+  appt?.patientId ||
+  appt?.PatientId ||
+  appt?.maBN ||
+  appt?.MaBN ||
+  appt?.ma_bn ||
   appt?.patient_code ||
+  appt?._raw?.MaBenhNhan ||
+  appt?._raw?.maBenhNhan ||
+  appt?._raw?.ma_benh_nhan ||
+  appt?._raw?.PatientCode ||
+  appt?._raw?.patientCode ||
+  appt?._raw?.PatientId ||
+  appt?._raw?.patientId ||
+  appt?._raw?.MaBN ||
+  appt?._raw?.maBN ||
+  appt?._raw?.ma_bn ||
+  appt?._raw?.patient_code ||
+  appt?.code ||
   "";
 
 const readAppointmentPatientName = (appt) =>
@@ -276,6 +317,10 @@ const readAppointmentPatientName = (appt) =>
   appt?.hoTen ||
   appt?.patientName ||
   appt?.patient ||
+  appt?._raw?.TenBenhNhan ||
+  appt?._raw?.ten_benh_nhan ||
+  appt?._raw?.patientName ||
+  appt?._raw?.patient ||
   "";
 
 const readAppointmentPhone = (appt) =>
@@ -284,6 +329,12 @@ const readAppointmentPhone = (appt) =>
   appt?.DienThoai ||
   appt?.dienThoai ||
   appt?.phone ||
+  appt?._raw?.SoDienThoai ||
+  appt?._raw?.so_dien_thoai ||
+  appt?._raw?.soDienThoai ||
+  appt?._raw?.DienThoai ||
+  appt?._raw?.dienThoai ||
+  appt?._raw?.phone ||
   "";
 
 
@@ -405,7 +456,9 @@ export default function Patients() {
     const patientPhone = toDigits(readPatientPhone(patient));
     const today = todayStr();
 
-    const prefilledAppointment = patientPrefill?.latestAppointment;
+    const prefilledAppointment = isFreshCheckinPrefill(patientPrefill)
+      ? patientPrefill?.latestAppointment
+      : null;
     if (prefilledAppointment) {
       const prefillCode = String(
         patientPrefill?.code || patientPrefill?.maBenhNhan || ""
@@ -817,6 +870,16 @@ export default function Patients() {
             maBenhNhan: highlightPid,
             latestAppointment: latest || null,
           });
+
+          try {
+            await updatePatientStatus({
+              id: highlightPid,
+              status: STATUSES.WAIT_INTAKE,
+            });
+            await qc.refetchQueries({ queryKey: ["patients"], exact: false });
+          } catch (statusErr) {
+            console.warn("[Patients] Không thể cập nhật trạng thái sau check-in:", statusErr);
+          }
         }
         
         // ✅ Show toast only if not already notified
@@ -891,6 +954,12 @@ export default function Patients() {
     if (!flashAddAt) {
       // ✅ Reset ref when flashAddAt is cleared
       hasProcessedFlashAddApiRef.current = false;
+      return;
+    }
+
+    const currentPrefill = useUIStore.getState().patientPrefill;
+    if (isFreshCheckinPrefill(currentPrefill)) {
+      hasProcessedFlashAddApiRef.current = true;
       return;
     }
 
@@ -1180,7 +1249,7 @@ export default function Patients() {
           onAdd={canCreatePatientAction ? () => {
             // Nếu có patientPrefill (từ flashAddAt) -> fill sẵn tên + sdt
             // Nếu không có patientPrefill -> mở bình thường không fill
-            const hasPrefill = !!patientPrefill;
+            const hasPrefill = isFreshCheckinPrefill(patientPrefill);
             const latest = patientPrefill?.latestAppointment;
         
             setModal({
@@ -1208,7 +1277,7 @@ export default function Patients() {
                   : "",
         
                 // giữ luôn bản ghi lịch hẹn để tab tạo sau này muốn lấy thêm
-                latestAppointment: latest || null,
+                latestAppointment: hasPrefill ? latest || null : null,
               },
             });
             
@@ -1303,7 +1372,7 @@ export default function Patients() {
               // so user can re-open Add modal without losing data.
               setModal({ open: false, mode: "view", patient: null });
             }}
-            onSaved={(p) => {
+            onSaved={async (p) => {
               // đóng modal
               const wasAddMode = modal.mode === "add";
               const createdFromAppointment = modal.patient?.latestAppointment || null;
@@ -1315,7 +1384,7 @@ export default function Patients() {
               if (pid) {
                 // Highlight the newly created/updated patient row
                 try {
-                  setHighlightPid(pid, { source: "view" });
+                  setHighlightPid(pid, { source: wasAddMode && createdFromAppointment ? "checkin" : "view" });
                 } catch {}
 
                 nav(`/patients?pid=${encodeURIComponent(pid)}`);
@@ -1350,6 +1419,16 @@ export default function Patients() {
                     latestAppointment: createdFromAppointment,
                     linkedAt: Date.now(),
                   });
+                  setExamPrefillAppointment(createdFromAppointment);
+                  try {
+                    await updatePatientStatus({
+                      id: pid,
+                      status: STATUSES.WAIT_INTAKE,
+                    });
+                    await qc.refetchQueries({ queryKey: ["patients"], exact: false });
+                  } catch (statusErr) {
+                    console.warn("[Patients] Không thể cập nhật trạng thái bệnh nhân mới sau check-in:", statusErr);
+                  }
                 } else {
                   clearPatientPrefill();
                 }

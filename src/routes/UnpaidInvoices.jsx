@@ -12,10 +12,14 @@ import Pagination from "../components/ui/Pagination.jsx";
 import {
   useCancelInvoice,
   useSearchInvoices,
+  subscribeBillingRealtime,
 } from "../api/billing.js";
+import { on } from "../api/realtime.js";
+import { queryClient } from "../components/lib/queryClient.js";
 import { TRANG_THAI_HOA_DON } from "../constants/enums.js";
 import { useAuthStore } from "../components/stores/appStore.js";
-import { isAdmin } from "../utils/permissions.js";
+import { isReceptionNurse } from "../utils/permissions.js";
+import { toLocalDateTimeParam } from "../utils/dateLocal.js";
 
 import useViewportVH from "../hooks/useViewportVH.js";
 import useMediaQuery from "../hooks/useMediaQuery.js";
@@ -82,9 +86,20 @@ function getInvoiceStatusByTab(tab) {
     : TRANG_THAI_HOA_DON.CHUA_THU;
 }
 
+function formatInvoiceStatus(status) {
+  switch ((status || "").toLowerCase()) {
+    case "da_thu": return "đã thu";
+    case "da_huy": return "đã hủy";
+    case "bao_luu": return "bảo lưu";
+    case "chua_thu": return "chưa thu";
+    default: return status || "không xác định";
+  }
+}
+
 export default function UnpaidInvoices() {
   useViewportVH();
   const user = useAuthStore((s) => s.user);
+  const canProcessInvoices = isReceptionNurse(user);
   const isMobile = useMediaQuery("(max-width: 640px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const topbar = isMobile ? 64 : isTablet ? 72 : 80;
@@ -111,8 +126,8 @@ export default function UnpaidInvoices() {
     () => ({
       TrangThai: activeStatus,
       Keyword: deferredKeyword || undefined,
-      FromTime: ageFilter.fromTime?.toISOString(),
-      ToTime: ageFilter.toTime?.toISOString(),
+      FromTime: ageFilter.fromTime ? toLocalDateTimeParam(ageFilter.fromTime) : undefined,
+      ToTime: ageFilter.toTime ? toLocalDateTimeParam(ageFilter.toTime) : undefined,
       MinAmount: amountFilter.minAmount,
       MaxAmount: amountFilter.maxAmount,
       LoaiDotThu: invoiceType !== "all" ? invoiceType : undefined,
@@ -153,6 +168,41 @@ export default function UnpaidInvoices() {
       toast.error(`Lỗi tải dữ liệu: ${error.message || "Unknown error"}`);
     }
   }, [error]);
+
+  // ===== REALTIME: Subscribe to InvoiceChanged SignalR events =====
+  // Auto-refresh invoice list when backend broadcasts changes
+  useEffect(() => {
+    const unsubscribe = subscribeBillingRealtime(queryClient);
+    return () => {
+      unsubscribe?.();
+    };
+  }, []);
+
+  // ===== REALTIME: Toast notifications for invoice changes =====
+  useEffect(() => {
+    const offInvoiceChanged = on("InvoiceChanged", (dto) => {
+      const maHoaDon = dto?.MaHoaDon ?? dto?.maHoaDon;
+      const trangThai = (dto?.TrangThai ?? dto?.trangThai ?? "").toLowerCase();
+      const tenBn = dto?.TenBenhNhan ?? dto?.tenBenhNhan ?? "";
+      const label = tenBn ? `${tenBn}` : `#${maHoaDon}`;
+
+      if (trangThai === "da_huy") {
+        toast.warning(`🚫 Hóa đơn ${label} đã bị hủy`, { autoClose: 5000 });
+      } else if (trangThai === "da_thu") {
+        toast.success(`✅ Hóa đơn ${label} đã được thanh toán`, { autoClose: 4000 });
+      } else if (trangThai === "bao_luu") {
+        toast.info(`🧾 Hóa đơn ${label} đã chuyển sang bảo lưu`, { autoClose: 4000 });
+      } else if (trangThai === "chua_thu") {
+        toast.info(`📋 Hóa đơn mới cho ${label}`, { autoClose: 4000 });
+      } else {
+        toast.info(`📋 Hóa đơn ${label} — ${formatInvoiceStatus(trangThai)}`, { autoClose: 4000 });
+      }
+    });
+
+    return () => {
+      offInvoiceChanged?.();
+    };
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -208,11 +258,21 @@ export default function UnpaidInvoices() {
   });
 
   const handleOpenPayment = (invoice) => {
+    if (!canProcessInvoices) {
+      toast.error("Vai trò hiện tại chỉ được xem công nợ, không có quyền xử lý thanh toán.");
+      return;
+    }
+
     setPaymentInvoice(invoice);
     setSelectedInvoice(null);
   };
 
   const handleCancel = (invoice, reason) => {
+    if (!canProcessInvoices) {
+      toast.error("Vai trò hiện tại chỉ được xem công nợ, không có quyền hủy hóa đơn.");
+      return;
+    }
+
     cancelInvoice.mutate({
       maHoaDon: invoice.MaHoaDon || invoice.maHoaDon,
       lyDoHuy: reason,
@@ -273,6 +333,7 @@ export default function UnpaidInvoices() {
                   loading={isLoading}
                   mode={activeTab}
                   onView={(invoice) => setSelectedInvoice(invoice)}
+                  canProcess={canProcessInvoices}
                   stretch
                 />
               </div>
@@ -316,14 +377,19 @@ export default function UnpaidInvoices() {
         invoice={selectedInvoice}
         mode={activeTab}
         onClose={() => setSelectedInvoice(null)}
-        onConfirm={activeTab === INVOICE_TABS.UNPAID ? handleOpenPayment : undefined}
+        onConfirm={
+          activeTab === INVOICE_TABS.UNPAID && canProcessInvoices
+            ? handleOpenPayment
+            : undefined
+        }
         onCancel={handleCancel}
-        canCancel={activeTab === INVOICE_TABS.UNPAID && isAdmin(user)}
+        canProcess={canProcessInvoices}
+        canCancel={activeTab === INVOICE_TABS.UNPAID && canProcessInvoices}
         isPending={cancelInvoice.isPending}
       />
 
       <PaymentWizard
-        open={!!paymentInvoice}
+        open={!!paymentInvoice && canProcessInvoices}
         patient={{
           MaBenhNhan:
             paymentInvoice?.MaBenhNhan ?? paymentInvoice?.maBenhNhan ?? null,

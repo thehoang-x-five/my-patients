@@ -55,6 +55,31 @@ const EMPTY_FORM = {
   maKhoa: "",
 };
 
+function normalizeFormState(initial = EMPTY_FORM) {
+  const source = initial || EMPTY_FORM;
+  return {
+    ...EMPTY_FORM,
+    ...source,
+    tenDangNhap:
+      source.tenDangNhap ??
+      source.username ??
+      source.TenDangNhap ??
+      source._raw?.TenDangNhap ??
+      "",
+    hoTen: source.hoTen ?? source.name ?? source.HoTen ?? "",
+    vaiTro: source.vaiTro ?? source.role ?? source.VaiTro ?? "y_ta",
+    chucVu: source.chucVu ?? source.position ?? source.ChucVu ?? "",
+    loaiYTa: source.loaiYTa ?? source.nurseType ?? source.LoaiYTa ?? "",
+    email: source.email ?? source.Email ?? "",
+    dienThoai: source.dienThoai ?? source.phone ?? source.DienThoai ?? "",
+    chuyenMon: source.chuyenMon ?? source.specialty ?? source.ChuyenMon ?? "",
+    hocVi: source.hocVi ?? source.degree ?? source.HocVi ?? "",
+    soNamKinhNghiem:
+      Number(source.soNamKinhNghiem ?? source.experience ?? source.SoNamKinhNghiem ?? 0) || 0,
+    maKhoa: source.maKhoa ?? source.departmentId ?? source.MaKhoa ?? "",
+  };
+}
+
 /* ======================= StatusBadge ======================= */
 function StatusBadge({ status, label }) {
   const map = {
@@ -112,10 +137,10 @@ const Th = ({ children, first, last, right }) => (
 
 /* ======================= MODAL (Create / Edit) ======================= */
 function StaffFormModal({ open, onClose, initial, isEdit, onSubmit, isPending }) {
-  const [form, setForm] = useState(initial || EMPTY_FORM);
+  const [form, setForm] = useState(() => normalizeFormState(initial));
 
   React.useEffect(() => {
-    if (open) setForm(initial || EMPTY_FORM);
+    if (open) setForm(normalizeFormState(initial));
   }, [open, initial]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -146,17 +171,15 @@ function StaffFormModal({ open, onClose, initial, isEdit, onSubmit, isPending })
 
           {/* Body */}
           <div className="px-6 py-5 space-y-4">
-            {!isEdit && (
-              <Field label="Tên đăng nhập *">
-                <input
-                  required
-                  className="input"
-                  value={form.tenDangNhap}
-                  onChange={(e) => set("tenDangNhap", e.target.value)}
-                  placeholder="vd: nguyenvana"
-                />
-              </Field>
-            )}
+            <Field label="Tên đăng nhập *">
+              <input
+                required
+                className="input"
+                value={form.tenDangNhap}
+                onChange={(e) => set("tenDangNhap", e.target.value)}
+                placeholder="vd: nguyenvana"
+              />
+            </Field>
             {!isEdit && (
               <Field label="Mật khẩu *">
                 <input
@@ -377,13 +400,12 @@ export default function AdminUsers() {
     [updateMut, editUser]
   );
 
-  const handleToggleStatus = useCallback(
-    (user) => {
-      const next = user.status === "dang_cong_tac" ? "tam_nghi" : "dang_cong_tac";
+  const handleSetWorkStatus = useCallback(
+    (user, next) => {
       statusMut.mutate(
-        { id: user.id, data: { trangThaiCongTac: next } },
+        { id: user.id, data: { TrangThaiCongTac: next } },
         {
-          onSuccess: () => toast.success(next === "tam_nghi" ? "Đã khóa tài khoản" : "Đã mở khóa"),
+          onSuccess: () => toast.success("Đã cập nhật trạng thái làm việc"),
           onError: (err) => toast.error(err.message),
         }
       );
@@ -558,10 +580,10 @@ export default function AdminUsers() {
                               <path d="M15.232 5.232l3.536 3.536M6.5 21H3v-3.5L16.732 3.732a2.5 2.5 0 013.536 3.536L6.5 21z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           </button>
-                          {/* Khóa / Mở */}
+                          {/* Trạng thái làm việc */}
                           <button
-                            title={u.status === "dang_cong_tac" ? "Khóa" : "Mở khóa"}
-                            onClick={() => handleToggleStatus(u)}
+                            title={u.status === "dang_cong_tac" ? "Chuyển tạm nghỉ" : "Chuyển đang công tác"}
+                            onClick={() => handleSetWorkStatus(u, u.status === "dang_cong_tac" ? "tam_nghi" : "dang_cong_tac")}
                             className={`p-1.5 rounded-lg transition ${
                               u.status === "dang_cong_tac"
                                 ? "text-slate-400 hover:text-amber-600 hover:bg-amber-50"
@@ -580,6 +602,17 @@ export default function AdminUsers() {
                               </svg>
                             )}
                           </button>
+                          {u.status !== "nghi_viec" && (
+                            <button
+                              title="Cho nghỉ việc"
+                              onClick={() => handleSetWorkStatus(u, "nghi_viec")}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                              </svg>
+                            </button>
+                          )}
                           {/* Reset password */}
                           <button
                             title="Đặt lại mật khẩu"

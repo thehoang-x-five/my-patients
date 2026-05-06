@@ -1,17 +1,58 @@
 // src/components/notifications/NotificationItem.jsx
 import React from "react";
 import { motion } from "framer-motion";
+import {
+  Activity,
+  AlarmClock,
+  Bell,
+  BellRing,
+  CalendarDays,
+  ClipboardCheck,
+  CreditCard,
+  FileCheck2,
+  FileText,
+  FlaskConical,
+  Pill,
+  ReceiptText,
+  Settings,
+  Stethoscope,
+  UserRound,
+} from "lucide-react";
 import { useMarkRead } from "../../api/notifications.js";
+import {
+  getNotificationTypeDot,
+  getNotificationTypeIcon,
+  getNotificationTypeLabel,
+} from "../../utils/notificationTypes.js";
 
-function typeEmoji(type) {
-  const t = (type || "").toLowerCase();
-  if (t === "appointment") return "📅";
-  if (t === "patient") return "👤";
-  if (t === "pharmacy") return "💊";
-  if (t === "billing") return "💳";
-  if (t === "system") return "⚙️";
-  return "🔔";
-}
+const ICONS = {
+  Activity,
+  AlarmClock,
+  Bell,
+  BellRing,
+  CalendarDays,
+  ClipboardCheck,
+  CreditCard,
+  FileCheck2,
+  FileText,
+  FlaskConical,
+  Pill,
+  ReceiptText,
+  Settings,
+  Stethoscope,
+  UserRound,
+};
+
+const DOT_CLASS = {
+  amber: "bg-amber-400",
+  cyan: "bg-cyan-400",
+  emerald: "bg-emerald-400",
+  indigo: "bg-indigo-400",
+  red: "bg-red-400",
+  rose: "bg-rose-400",
+  sky: "bg-sky-400",
+  violet: "bg-violet-400",
+};
 
 function PriorityChip({ priority }) {
   const p = (priority || "").toLowerCase();
@@ -26,6 +67,9 @@ function PriorityChip({ priority }) {
 
 export default function NotificationItem({ item, index = 0, onOpenDetail }) {
   const mark = useMarkRead();
+  const TypeIcon = ICONS[getNotificationTypeIcon(item.type)] || Bell;
+  const typeLabel = getNotificationTypeLabel(item.type);
+  const dotClass = DOT_CLASS[getNotificationTypeDot(item.type)] || "bg-violet-400";
 
   const handleClick = () => {
     onOpenDetail?.(item);
@@ -82,7 +126,7 @@ export default function NotificationItem({ item, index = 0, onOpenDetail }) {
               : "bg-gradient-to-br from-violet-500 via-fuchsia-500 to-rose-500 text-white shadow-md",
           ].join(" ")}
         >
-          <span aria-hidden="true">{typeEmoji(item.type)}</span>
+          <TypeIcon className="h-4 w-4" aria-hidden="true" />
         </div>
         {!item.read && (
           <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-violet-500 shadow-[0_0_0_4px_rgba(129,140,248,.4)]" />
@@ -123,8 +167,8 @@ export default function NotificationItem({ item, index = 0, onOpenDetail }) {
           <span className="text-[11px] text-slate-500">{createdStr}</span>
         )}
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-white/80 text-violet-700 ring-1 ring-violet-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-          {item.type==="lich_hen"?"Lịch hẹn": item.type==="reminder"?"Nhắc nhở":item.type==="result"?"Kết quả":"Khác"}
+          <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+          {typeLabel}
         </span>
       </div>
     </motion.article>

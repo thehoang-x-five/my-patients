@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { http } from "./http";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ensureStarted, on } from "./realtime";
+import { endOfLocalDayParam, startOfLocalDayParam, toLocalDateTimeParam } from "../utils/dateLocal";
 
 // Lưu mã hàng đợi đã chuyển đi CLS, chỉ hiển thị lại khi nguồn = service_return
 const RETURN_QUEUE_STORAGE_KEY = "queue-awaiting-service-return";
@@ -409,8 +410,8 @@ export function useQueueSearch(params = {}, options = {}) {
     // Chuyển đổi Date objects thành ISO strings để so sánh ổn định
     const fromTime = params.FromTime ?? params.fromTime;
     const toTime = params.ToTime ?? params.toTime;
-    const fromTimeStr = fromTime ? (typeof fromTime === 'string' ? fromTime : fromTime.toISOString()) : null;
-    const toTimeStr = toTime ? (typeof toTime === 'string' ? toTime : toTime.toISOString()) : null;
+    const fromTimeStr = fromTime ? (typeof fromTime === 'string' ? fromTime : toLocalDateTimeParam(fromTime)) : null;
+    const toTimeStr = toTime ? (typeof toTime === 'string' ? toTime : toLocalDateTimeParam(toTime)) : null;
     
     return {
       MaPhong: params.MaPhong ?? params.maPhong ?? null,
@@ -486,11 +487,11 @@ export function useQueueSearch(params = {}, options = {}) {
       };
     },
     keepPreviousData: true, 
-    staleTime: 60000, // Tăng staleTime lên 60s
+    staleTime: 0,
     gcTime: 300000, // Cache 5 phút
     refetchOnWindowFocus: false, // Tắt refetch khi focus window
-    refetchOnMount: false, // Tắt refetch khi mount lại
-    refetchOnReconnect: false, // Tắt refetch khi reconnect
+    refetchOnMount: true,
+    refetchOnReconnect: true,
     refetchInterval: false, // Tắt auto refetch để tránh gọi lặp
     retry: 1, // Chỉ retry 1 lần nếu lỗi
     ...options 
@@ -527,8 +528,8 @@ export function useQueueToday(options = {}) {
     to.setHours(23, 59, 59, 999);
     
     return { 
-      FromTime: from.toISOString(), 
-      ToTime: to.toISOString(), 
+      FromTime: startOfLocalDayParam(), 
+      ToTime: endOfLocalDayParam(), 
       Page: 1, 
       PageSize: 50 // ✅ Chuẩn hóa: 50 items mặc định 
     };
@@ -536,11 +537,11 @@ export function useQueueToday(options = {}) {
   
   // Merge options với các settings mặc định để đảm bảo chỉ gọi một lần
   const mergedOptions = {
-    staleTime: 60000,
+    staleTime: 0,
     gcTime: 300000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
     refetchInterval: false,
     retry: 1,
     ...options,
@@ -590,9 +591,46 @@ export function useFinishRemove(options = {}) {
   return useMutation({ mutationFn: (maHangDoi) => updateStatus(maHangDoi, "da_phuc_vu"), onSuccess: () => qc.invalidateQueries({ queryKey: ["queue"], exact: false }), ...options });
 }
 
-// subscribeQueue: simple compatibility shim that returns a no-op unsub
+const QUEUE_REALTIME_EVENTS = [
+  "QueueItemChanged",
+  "QueueByRoomUpdated",
+  "ClinicalExamCreated",
+  "ClinicalExamUpdated",
+  "FinalDiagnosisChanged",
+  "ClsOrderCreated",
+  "ClsOrderUpdated",
+  "ClsOrderStatusUpdated",
+  "ClsResultCreated",
+  "ClsSummaryCreated",
+  "ClsSummaryUpdated",
+  "ClsItemUpdated",
+  "VisitCreated",
+  "VisitStatusUpdated",
+  "PatientCreated",
+  "PatientUpdated",
+  "PatientStatusUpdated",
+];
+
+function refreshQueueQueries(qc) {
+  if (!qc) return;
+  qc.invalidateQueries({ queryKey: ["queue"], exact: false, refetchType: "active" });
+  qc.refetchQueries({ queryKey: ["queue"], exact: false, type: "active" });
+  qc.invalidateQueries({ queryKey: ["patients"], exact: false, refetchType: "active" });
+  qc.invalidateQueries({ queryKey: ["patient"], exact: false, refetchType: "active" });
+}
+
+// subscribeQueue: realtime bridge for queue/search screens.
 export async function subscribeQueue(qc) {
-  // If the project has a realtime implementation, it can override this.
-  // For now return a noop unsubscribe function.
-  return () => {};
+  try {
+    await ensureStarted();
+  } catch (err) {
+    console.warn("Không thể khởi động realtime hàng đợi:", err);
+  }
+
+  const handler = () => refreshQueueQueries(qc);
+  const unsubscribers = QUEUE_REALTIME_EVENTS.map((eventName) => on(eventName, handler));
+
+  return () => {
+    unsubscribers.forEach((unsubscribe) => unsubscribe?.());
+  };
 }

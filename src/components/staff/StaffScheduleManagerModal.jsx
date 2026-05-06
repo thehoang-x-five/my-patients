@@ -3,6 +3,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import ConfirmModal from "../ui/ConfirmModal.jsx";
 import PopoverSelect from "../ui/PopoverSelect.jsx";
 import { formatDisplayText } from "../../utils/textFormatters.js";
+import {
+  ADMIN_NURSE_POSITION,
+  isAdministrativeNurseStaff,
+} from "../../utils/staffRoleUtils.js";
 
 const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_LABELS = {
@@ -15,6 +19,32 @@ const DAY_LABELS = {
   Sun: "Chủ nhật",
 };
 const SHIFT_OPTIONS = ["Sáng", "Chiều", "Tối"];
+
+function normalizeShiftLabel(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  const lower = raw.toLowerCase();
+  if (["sang", "sáng", "sÃ¡ng"].includes(lower)) return SHIFT_OPTIONS[0];
+  if (["chieu", "chiều", "chiá»u"].includes(lower)) return SHIFT_OPTIONS[1];
+  if (["toi", "tối", "tá»‘i"].includes(lower)) return SHIFT_OPTIONS[2];
+  return raw;
+}
+
+function extractShiftLabels(value) {
+  if (!value) return [];
+  return String(value)
+    .split(/[+·,;/]/)
+    .map((item) => normalizeShiftLabel(item))
+    .filter((item) => SHIFT_OPTIONS.includes(item));
+}
+
+function uniqueShifts(values) {
+  const result = [];
+  values.forEach((value) => {
+    if (value && !result.includes(value)) result.push(value);
+  });
+  return result;
+}
 
 function toDateInput(value) {
   if (!value) return "";
@@ -171,7 +201,8 @@ export default function StaffScheduleManagerModal({
   const [validationMessage, setValidationMessage] = useState("");
 
   const rawRole = item?.role || item?.vaiTro || item?.VaiTro || "";
-  const canEditSchedule = roleSupportsSchedule(rawRole);
+  const isAdminNurse = isAdministrativeNurseStaff(item, rawRole);
+  const canEditSchedule = roleSupportsSchedule(rawRole) || isAdminNurse;
   const isDoctor = ["bac_si", "doctor"].includes(
     String(rawRole || "").trim().toLowerCase()
   );
@@ -219,15 +250,18 @@ export default function StaffScheduleManagerModal({
   );
 
   const modalTitle =
-    isDoctor
-      ? "Quản lý lịch làm bác sĩ"
-      :
-    editableRoomType === "phong_cls"
-      ? "Quản lý lịch làm KTV / CLS"
-      : "Quản lý lịch làm nhân sự";
+    isAdminNurse
+      ? "Quản lý ca tiếp nhận"
+      : isDoctor
+        ? "Quản lý lịch làm bác sĩ"
+        : editableRoomType === "phong_cls"
+          ? "Quản lý lịch làm KTV / CLS"
+          : "Quản lý lịch làm nhân sự";
 
   const helperText =
-    isDoctor
+    isAdminNurse
+      ? `Thiết lập ca làm tại ${ADMIN_NURSE_POSITION}. Vị trí cố định, chỉ cần chọn ca.`
+      : isDoctor
       ? "Thiết lập ca khám theo tuần. Bác sĩ chỉ chọn ca; hệ thống luôn dùng phòng khám phụ trách cố định."
       : isTechnician
       ? "Thiết lập ca làm CLS theo tuần. KTV chỉ chọn ca; hệ thống luôn dùng phòng CLS phụ trách cố định."
@@ -242,20 +276,34 @@ export default function StaffScheduleManagerModal({
 
     const nextDraft = WEEK.map((day, index) => {
       const source = weekItems.find((entry) => entry?.day === day) || null;
+      const sourceShifts = Array.isArray(source?.shifts) && source.shifts.length
+        ? source.shifts
+        : source?.shift || source?.caTruc
+          ? [{
+              shift: source.shift || source.caTruc,
+              maPhong: source.maPhong,
+              tenPhong: source.tenPhong,
+            }]
+          : [];
       const date = new Date(weekStartDate);
       date.setDate(weekStartDate.getDate() + index);
 
+      const normalizedSelectedShifts = uniqueShifts(
+        sourceShifts.flatMap((s) => extractShiftLabels(s?.shift || s?.caTruc))
+      );
+
+      const firstRoomMatch = sourceShifts.find((s) => s?.maPhong);
+
       return {
+        key: day,
         day,
         label: DAY_LABELS[day],
         date: toDateInput(date),
-        shift:
-          source?.trangThaiLamViec === "nghi"
-            ? ""
-            : source?.shift || source?.caTruc || "",
+        shifts: normalizedSelectedShifts,
+        enabled: normalizedSelectedShifts.length > 0,
         maPhong:
-          source?.maPhong ||
-          ((isDoctor || isTechnician) && (source?.shift || source?.caTruc)
+          firstRoomMatch?.maPhong ||
+          ((isDoctor || isTechnician) && normalizedSelectedShifts.length > 0
             ? fixedAssignedRoom?.value || ""
             : ""),
       };
@@ -266,17 +314,31 @@ export default function StaffScheduleManagerModal({
 
   if (!open || !item) return null;
 
-  const updateRow = (day, patch) => {
+  const updateRow = (key, patch) => {
     setDraft((prev) =>
-      prev.map((row) => (row.day === day ? { ...row, ...patch } : row))
+      prev.map((row) => (row.key === key ? { ...row, ...patch } : row))
     );
   };
 
   const handleSave = () => {
-    const invalidRow = draft.find(
+    const normalizedDraft = draft.map((row) => ({
+      ...row,
+      shifts: uniqueShifts(row.shifts.flatMap((item) => extractShiftLabels(item))),
+    }));
+    const invalidShiftRow = normalizedDraft.find((row) => row.enabled && row.shifts.length === 0);
+    if (invalidShiftRow) {
+      setValidationMessage(`Vui lòng chọn ca làm cho ${invalidShiftRow.label}.`);
+      return;
+    }
+
+    const invalidRow = normalizedDraft.find(
       (row) =>
-        row.shift &&
-        !((isDoctor || isTechnician) ? fixedAssignedRoom?.value : row.maPhong)
+        row.enabled &&
+        !((isDoctor || isTechnician)
+          ? fixedAssignedRoom?.value
+          : isAdminNurse
+            ? true
+            : row.maPhong)
     );
     if (invalidRow) {
       setValidationMessage(
@@ -291,16 +353,18 @@ export default function StaffScheduleManagerModal({
 
     onSave?.({
       WeekStartDate: toDateInput(weekStartDate),
-      Items: draft.map((row) => ({
-        Ngay: row.date,
-        CaTruc: row.shift || null,
-        MaPhong: row.shift
-          ? (isDoctor || isTechnician)
-            ? fixedAssignedRoom?.value || null
-            : row.maPhong
-          : null,
-        NghiTruc: !row.shift,
-      })),
+      Items: normalizedDraft
+        .filter((row) => row.enabled)
+        .flatMap((row) => row.shifts.map((shift) => ({
+          Ngay: row.date,
+          CaTruc: shift,
+          MaPhong: isAdminNurse
+            ? row.maPhong || null
+            : (isDoctor || isTechnician)
+              ? fixedAssignedRoom?.value || null
+              : row.maPhong,
+          NghiTruc: false,
+        }))),
     });
   };
 
@@ -359,7 +423,9 @@ export default function StaffScheduleManagerModal({
                           <th className="px-4 py-3 text-left font-semibold">Ngày</th>
                           <th className="px-4 py-3 text-left font-semibold">Ca trực</th>
                           <th className="px-4 py-3 text-left font-semibold">
-                            {editableRoomType === "phong_cls"
+                            {isAdminNurse
+                              ? "Vị trí"
+                              : editableRoomType === "phong_cls"
                               ? "Phòng CLS"
                               : "Phòng làm"}
                           </th>
@@ -367,7 +433,7 @@ export default function StaffScheduleManagerModal({
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {draft.map((row) => (
-                          <tr key={row.day} className="bg-white">
+                          <tr key={row.key} className="bg-white">
                             <td className="px-4 py-3">
                               <div className="font-medium text-slate-900">
                                 {row.label}
@@ -377,40 +443,63 @@ export default function StaffScheduleManagerModal({
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <PopoverSelect
-                                name={`shift-${row.day}`}
-                                value={row.shift}
-                                onChange={(value) =>
-                                  updateRow(row.day, {
-                                    shift: value,
-                                    maPhong: value
-                                      ? (isDoctor || isTechnician)
-                                        ? fixedAssignedRoom?.value || ""
-                                        : row.maPhong
-                                      : "",
-                                  })
-                                }
-                                options={[
-                                  { value: "", label: "Nghỉ" },
-                                  ...SHIFT_OPTIONS.map((option) => ({
-                                    value: option,
-                                    label: option,
-                                  })),
-                                ]}
-                                placeholder="Chọn ca trực"
-                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                {SHIFT_OPTIONS.map((shift) => {
+                                  const normalizedRowShifts = uniqueShifts(
+                                    row.shifts.flatMap((item) => extractShiftLabels(item))
+                                  );
+                                  const isSelected = normalizedRowShifts.includes(shift);
+                                  return (
+                                    <button
+                                      key={shift}
+                                      type="button"
+                                      onClick={() => {
+                                        const newShifts = isSelected
+                                          ? normalizedRowShifts.filter((s) => s !== shift)
+                                          : uniqueShifts([...normalizedRowShifts, shift]);
+                                        updateRow(row.key, {
+                                          shifts: newShifts,
+                                          enabled: newShifts.length > 0,
+                                          maPhong: newShifts.length > 0
+                                            ? (isDoctor || isTechnician)
+                                              ? fixedAssignedRoom?.value || ""
+                                              : row.maPhong
+                                            : "",
+                                        });
+                                      }}
+                                      className={[
+                                        "px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors border outline-none",
+                                        isSelected
+                                          ? "bg-teal-50 border-teal-200 text-teal-800"
+                                          : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                                      ].join(" ")}
+                                    >
+                                      {shift}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </td>
                             <td className="px-4 py-3">
-                              {isDoctor || isTechnician ? (
+                              {isAdminNurse ? (
                                 <div
                                   className={[
                                     "rounded-xl border px-3 py-2 text-[13px] shadow-sm",
-                                    row.shift
+                                    "border-teal-200 bg-teal-50 text-teal-800",
+                                  ].join(" ")}
+                                >
+                                  {ADMIN_NURSE_POSITION}
+                                </div>
+                              ) : isDoctor || isTechnician ? (
+                                <div
+                                  className={[
+                                    "rounded-xl border px-3 py-2 text-[13px] shadow-sm",
+                                    row.enabled
                                       ? "border-teal-200 bg-teal-50 text-teal-800"
                                       : "border-slate-200 bg-slate-50 text-slate-400",
                                   ].join(" ")}
                                 >
-                                  {row.shift
+                                  {row.enabled
                                     ? fixedAssignedRoom?.label ||
                                       (isDoctor
                                         ? "Chưa gán phòng khám cố định"
@@ -419,11 +508,11 @@ export default function StaffScheduleManagerModal({
                                 </div>
                               ) : (
                                 <PopoverSelect
-                                  name={`room-${row.day}`}
+                                  name={`room-${row.key}`}
                                   value={row.maPhong}
-                                  disabled={!row.shift}
+                                  disabled={!row.enabled}
                                   onChange={(value) =>
-                                    updateRow(row.day, { maPhong: value })
+                                    updateRow(row.key, { maPhong: value })
                                   }
                                   options={[
                                     { value: "", label: "-- Chọn phòng --" },

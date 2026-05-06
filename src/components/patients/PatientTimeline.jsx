@@ -30,6 +30,20 @@ const DOT_CLASS = {
   amber: "bg-amber-500",
 };
 
+function firstText(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function isCancelledStatus(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "da_huy" || raw === "huy" || raw === "cancelled";
+}
+
 export default function PatientTimeline({ visits = [], highlightItems = false, patientId }) {
   const [expandedId, setExpandedId] = useState(null);
   const [filterType, setFilterType] = useState("all");
@@ -37,6 +51,8 @@ export default function PatientTimeline({ visits = [], highlightItems = false, p
 
   const events = useMemo(() => {
     return visits.map((v, i) => {
+      const raw = v._raw || v;
+      const data = raw.data || raw.Data || {};
       const typeRaw =
         v.type ||
         v.Type ||
@@ -49,6 +65,42 @@ export default function PatientTimeline({ visits = [], highlightItems = false, p
         "kham_lam_sang";
       const eventType = typeRaw.includes("service") || typeRaw.includes("can_lam_sang") ? "xet_nghiem" : typeRaw;
       const config = EVENT_CONFIG[eventType] || EVENT_CONFIG.kham_lam_sang;
+      const targetTab = eventType === "thanh_toan" ? "transactions" : "visits";
+      const status = v.status || v._raw?.TrangThai || v._raw?.trangThai || "";
+      const targetStatusScope =
+        targetTab === "visits" && (eventType === "workflow" || isCancelledStatus(status))
+          ? "cancelled"
+          : "";
+      const targetHighlightId =
+        targetTab === "transactions"
+          ? firstText(
+              v.invoiceId,
+              v.maHoaDon,
+              v.MaHoaDon,
+              data.ma_hoa_don,
+              data.MaHoaDon,
+              v.ref
+            )
+          : firstText(
+              v.visitCode,
+              v.maLuotKham,
+              v.MaLuotKham,
+              data.ma_luot_kham,
+              data.MaLuotKham,
+              v.maPhieuKham,
+              v.MaPhieuKham,
+              data.ma_phieu_kham,
+              data.MaPhieuKham,
+              v.maPhieuKhamCls,
+              v.MaPhieuKhamCls,
+              data.ma_phieu_kham_cls,
+              data.MaPhieuKhamCls,
+              v.maDonThuoc,
+              v.MaDonThuoc,
+              data.ma_don_thuoc,
+              data.MaDonThuoc,
+              v.ref
+            );
       return {
         id: v.id || v.Id || v.maLuotKham || v.maPhieuKham || v.ref || `event-${i}`,
         date:
@@ -61,17 +113,27 @@ export default function PatientTimeline({ visits = [], highlightItems = false, p
           v._raw?.thoiGianBatDau ||
           v._raw?.createdAt,
         eventType,
+        targetTab,
+        targetHighlightId,
+        targetStatusScope,
         config,
         typeLabel: v.typeLabel || config.label,
-        doctor: v.doctor || v.by || v.actorName || "—",
+        doctor:
+          v.doctor ||
+          v.technician ||
+          v.TenKyThuatVienThucHien ||
+          v.tenKyThuatVienThucHien ||
+          v.by ||
+          v.actorName ||
+          "—",
         department: v.dept || v.department || "—",
         room: v._raw?.TenPhong || v._raw?.tenPhong || "",
-        status: v.status || v._raw?.TrangThai || v._raw?.trangThai || "",
+        status,
         diagnosis: v._raw?.ChanDoanCuoi || v._raw?.chanDoanCuoi || "",
         note: v.note || v.message || v.description || v._raw?.GhiChu || "",
         ref: v.ref || v.maPhieuKham || "",
         vitalSigns: v._raw?.SinhHieuTruocKham || v._raw?.sinhHieuTruocKham || "",
-        _raw: v._raw || v,
+        _raw: raw,
       };
     }).sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [visits]);
@@ -153,9 +215,13 @@ export default function PatientTimeline({ visits = [], highlightItems = false, p
                   whileHover={{ y: -1 }}
                   onClick={() =>
                     nav(
-                      `/history?tab=${
-                        event.eventType === "thanh_toan" ? "transactions" : "visits"
-                      }&pid=${patientId || ""}&highlight=${event.id}`
+                      `/history?tab=${event.targetTab}&pid=${encodeURIComponent(
+                        patientId || ""
+                      )}&highlight=${encodeURIComponent(event.targetHighlightId || event.id)}${
+                        event.targetStatusScope
+                          ? `&statusScope=${encodeURIComponent(event.targetStatusScope)}`
+                          : ""
+                      }`
                     )
                   }
                   className={`rounded-2xl p-4 ring-1 shadow-sm cursor-pointer transition-all duration-300 ${

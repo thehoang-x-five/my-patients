@@ -27,17 +27,36 @@ const EMPTY = {
 function toNumber(...values) {
   for (const v of values) {
     if (v === null || v === undefined) continue;
+    if (typeof v === "string" && !v.trim()) continue;
     const n = Number(v);
-    if (!Number.isNaN(n)) return n;
+    if (Number.isFinite(n)) return n;
   }
   return null;
 }
 
+function getGrowthPercent(src = {}) {
+  return toNumber(
+    src.TangTruongPhanTram,
+    src.tangTruongPhanTram,
+    src.ThayDoiPhanTramSoVoiHomQua,
+    src.thayDoiPhanTramSoVoiHomQua,
+    src.ChangePercent,
+    src.changePercent,
+    src.GrowthPercent,
+    src.growthPercent,
+    src.deltaPercent,
+    src.delta
+  );
+}
+
 function formatDelta(v) {
-  if (v === null || v === undefined || Number.isNaN(v)) return null;
   const n = Number(v);
+  if (!Number.isFinite(n)) return "0,0%";
   const sign = n > 0 ? "+" : "";
-  return `${sign}${n.toFixed(1)}%`;
+  return `${sign}${n.toLocaleString("vi-VN", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  })}%`;
 }
 
 function mapSpark(raw) {
@@ -122,13 +141,7 @@ function mapPatientsKpi(src = {}) {
     src.daHuy,
     src.cancelled
   );
-  const delta = toNumber(
-    src.TangTruongPhanTram,
-    src.tangTruongPhanTram,
-    src.thayDoiPhanTramSoVoiHomQua,
-    src.deltaPercent,
-    src.delta
-  );
+  const delta = getGrowthPercent(src);
 
   const parts = [];
   if (processed !== null) parts.push(`Đã xử lý: ${processed}`);
@@ -171,13 +184,7 @@ function mapAppointmentsKpi(src = {}) {
     src.daHuy,
     src.cancelled
   );
-  const delta = toNumber(
-    src.TangTruongPhanTram,
-    src.tangTruongPhanTram,
-    src.thayDoiPhanTramSoVoiHomQua,
-    src.deltaPercent,
-    src.delta
-  );
+  const delta = getGrowthPercent(src);
 
   const parts = [];
   if (confirmed !== null) parts.push(`Đã xác nhận: ${confirmed}`);
@@ -216,13 +223,7 @@ function mapRevenueKpi(src = {}) {
     src.DoanhThuThuoc,
     src.doanhThuThuoc
   );
-  const delta = toNumber(
-    src.TangTruongPhanTram,
-    src.tangTruongPhanTram,
-    src.thayDoiPhanTramSoVoiHomQua,
-    src.deltaPercent,
-    src.delta
-  );
+  const delta = getGrowthPercent(src);
 
   const parts = [];
   if (clinic !== null) parts.push(`LS: ${formatMoney(clinic)}`);
@@ -269,23 +270,20 @@ function mapExamsKpi(src = {}) {
     src.daHuy,
     src.cancelled
   );
-  const delta = toNumber(
-    src.TangTruongPhanTram,
-    src.tangTruongPhanTram,
-    src.thayDoiPhanTramSoVoiHomQua,
-    src.deltaPercent,
-    src.delta
-  );
+  const delta = getGrowthPercent(src);
 
   const parts = [];
-  if (pending !== null) parts.push(`Chờ thực hiện: ${pending}`);
-  if (pending !== null) parts.push(`Chờ khám: ${pending}`);
-  if (inProgress !== null) parts.push(`Đang khám: ${inProgress}`);
-  if (done !== null) parts.push(`Hoàn tất: ${done}`);
-  if (cancelled !== null) parts.push(`Đã hủy: ${cancelled}`);
+  if (pending !== null) parts.push(`Chờ: ${pending}`);
+  if (inProgress !== null) parts.push(`Đang: ${inProgress}`);
+  if (done !== null) parts.push(`Xong: ${done}`);
+  if (cancelled !== null) parts.push(`Hủy: ${cancelled}`);
+
+  const groupedTotal =
+    (pending ?? 0) + (inProgress ?? 0) + (done ?? 0) + (cancelled ?? 0);
+  const displayTotal = groupedTotal > 0 || total === null ? groupedTotal : total;
 
   return {
-    value: total !== null ? String(total) : "0",
+    value: String(displayTotal ?? 0),
     delta: formatDelta(delta),
     meta: parts.join(" · ") || null,
     counts: {
@@ -312,14 +310,13 @@ function mapServicesKpi(src = {}) {
     total !== null
       ? Math.max(total - (done ?? 0) - (inProg ?? 0) - (cancelled ?? 0), 0)
       : 0;
-  const delta = toNumber(
-    src.TangTruongPhanTram, src.tangTruongPhanTram, src.deltaPercent, src.delta
-  );
+  const delta = getGrowthPercent(src);
 
   const parts = [];
-  if (done !== null) parts.push(`Hoàn tất: ${done}`);
-  if (inProg !== null) parts.push(`Đang làm: ${inProg}`);
-  if (cancelled !== null) parts.push(`Đã hủy: ${cancelled}`);
+  if (pending !== null) parts.push(`Chờ: ${pending}`);
+  if (inProg !== null) parts.push(`Đang: ${inProg}`);
+  if (done !== null) parts.push(`Xong: ${done}`);
+  if (cancelled !== null) parts.push(`Hủy: ${cancelled}`);
 
   return {
     value: total !== null ? String(total) : "0",
@@ -438,12 +435,7 @@ function mapDiagnosisKpi(src = {}) {
   const choVe = toNumber(src.ChoVe, src.choVe);
   const taiKham = toNumber(src.TaiKham, src.taiKham);
   const choThuoc = toNumber(src.ChoThuoc, src.choThuoc);
-  const delta = toNumber(
-    src.TangTruongPhanTram,
-    src.tangTruongPhanTram,
-    src.deltaPercent,
-    src.delta
-  );
+  const delta = getGrowthPercent(src);
 
   const parts = [];
   if (choVe !== null) parts.push(`Cho về: ${choVe}`);
@@ -468,12 +460,7 @@ function mapResultsKpi(src = {}) {
   const early = toNumber(src.Som, src.som, src.early);
   const onTime = toNumber(src.DungGio, src.dungGio, src.onTime);
   const late = toNumber(src.Tre, src.tre, src.late);
-  const delta = toNumber(
-    src.TangTruongPhanTram,
-    src.tangTruongPhanTram,
-    src.deltaPercent,
-    src.delta
-  );
+  const delta = getGrowthPercent(src);
 
   const parts = [];
   if (early !== null) parts.push(`Sớm: ${early}`);

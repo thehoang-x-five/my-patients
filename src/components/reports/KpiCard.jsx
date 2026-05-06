@@ -1,21 +1,29 @@
+import React from "react";
 import { motion } from "framer-motion";
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
-import React from "react";
 
 export default function KpiCard({
   title,
   value,
   trend = 0,
   data = [],
-  color = "#22d3ee", // cyan mặc định
+  color = "#22d3ee",
   formatter,
 }) {
+  const trendNumber = Number(trend);
+  const displayTrend = Number.isFinite(trendNumber) ? trendNumber : 0;
+  const absTrend = Math.abs(displayTrend);
+  const trendText = `${displayTrend > 0 ? "+" : displayTrend < 0 ? "-" : ""}${absTrend.toLocaleString("vi-VN", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  })}%`;
+
   const trendCls =
-    trend > 0
+    displayTrend > 0
       ? "text-cyan-600"
-      : trend < 0
-      ? "text-rose-500"
-      : "text-slate-500";
+      : displayTrend < 0
+        ? "text-rose-500"
+        : "text-slate-500";
 
   const display = typeof formatter === "function" ? formatter(value) : value;
   const gid = `g-${String(title).replace(/\W+/g, "").toLowerCase()}`;
@@ -60,7 +68,7 @@ export default function KpiCard({
       <div className="flex items-center justify-between">
         <span className="text-slate-500">{title}</span>
         <span className={`text-xs font-bold ${trendCls}`}>
-          {trend > 0 ? `▲ +${trend}%` : trend < 0 ? `▼ ${trend}%` : "–"}
+          {displayTrend > 0 ? `▲ ${trendText}` : displayTrend < 0 ? `▼ ${trendText}` : trendText}
         </span>
       </div>
 

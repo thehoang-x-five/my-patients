@@ -9,6 +9,7 @@ import React, {
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
+import { toLocalYmd } from "../../utils/dateLocal.js";
 
 function Chip({ active, dot, children, ...rest }) {
   const base =
@@ -45,7 +46,7 @@ function Chip({ active, dot, children, ...rest }) {
   );
 }
 
-const ORDER_STATUS_SEG = ["Tất cả", "Đã kê", "Chờ phát", "Đã phát", "Đã hủy"];
+const ORDER_STATUS_SEG = ["Tất cả", "Chờ phát", "Đã phát", "Đã hủy"];
 
 const ORDER_RANGE_SEG = [
   { value: "all", label: "Tất cả" },
@@ -228,7 +229,7 @@ export default function PrescFilterPopover({
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const toStr = today.toISOString().slice(0, 10);
+    const toStr = toLocalYmd(today);
 
     if (value === "today") {
       setOrderFromDate(toStr);
@@ -236,12 +237,12 @@ export default function PrescFilterPopover({
     } else if (value === "7d") {
       const from = new Date(today);
       from.setDate(from.getDate() - 6);
-      setOrderFromDate(from.toISOString().slice(0, 10));
+      setOrderFromDate(toLocalYmd(from));
       setOrderToDate(toStr);
     } else if (value === "30d") {
       const from = new Date(today);
       from.setDate(from.getDate() - 29);
-      setOrderFromDate(from.toISOString().slice(0, 10));
+      setOrderFromDate(toLocalYmd(from));
       setOrderToDate(toStr);
     }
   };
@@ -325,9 +326,7 @@ export default function PrescFilterPopover({
                           active={orderStatus === s}
                           onClick={() => setOrderStatus(s)}
                           dot={
-                            s === "Đã kê"
-                              ? "sky"
-                              : s === "Chờ phát"
+                            s === "Chờ phát"
                               ? "amber"
                               : s === "Đã phát"
                               ? "emerald"

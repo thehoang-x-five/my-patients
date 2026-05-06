@@ -27,12 +27,12 @@ export default function KpiRail({ kpi, role = "default", services }) {
   const resultCounts = safe.results?.counts || {};
   const visibleExamTotal =
     (examCounts.pending ?? 0) +
+    (examCounts.inProgress ?? 0) +
     (examCounts.done ?? 0) +
     (examCounts.cancelled ?? 0);
+  const hasExamCounts = Object.keys(examCounts).length > 0;
   const displayExamValue =
-    examKpi?.counts && Object.keys(examCounts).length > 0
-      ? String(visibleExamTotal)
-      : examKpi?.value;
+    hasExamCounts ? String(visibleExamTotal) : examKpi?.value ?? "0";
 
   const patientTitle = isCls
     ? "Bệnh nhân CLS hôm nay"
@@ -41,8 +41,9 @@ export default function KpiRail({ kpi, role = "default", services }) {
       : "Bệnh nhân trong ngày";
 
   const examMeta = [
-    `${isCls ? "Chờ thực hiện" : "Chờ khám"}: ${examCounts.pending ?? 0}`,
-    `Hoàn tất: ${examCounts.done ?? 0}`,
+    `Chờ: ${examCounts.pending ?? 0}`,
+    `Đang: ${examCounts.inProgress ?? 0}`,
+    `Xong: ${examCounts.done ?? 0}`,
     `Hủy: ${examCounts.cancelled ?? 0}`,
   ].join(" · ");
 

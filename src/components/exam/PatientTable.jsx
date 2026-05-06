@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ConfirmModal from "../ui/ConfirmModal.jsx";
+import { toLocalYmd } from "../../utils/dateLocal.js";
+import { formatStatus } from "../../utils/textFormatters.js";
 
 // Resolve fields that may be PascalCase, camelCase, or nested (supports dotted paths)
 function fld(obj, ...paths) {
@@ -102,7 +104,7 @@ function Row({ i, children }) {
       exit={{ opacity: 0, y: -6 }}
       transition={{ delay: i * 0.02 }}
       whileHover={{ y: -2 }}
-      className="group relative odd:bg-teal-50/35 hover:bg-teal-100/45 focus-within:bg-teal-50/60 transition shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)] hover:z-30"
+      className="group relative odd:bg-teal-50/35 hover:bg-teal-100/45 focus-within:bg-teal-50/60 transition shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)] hover:z-[5]"
     >
       {children}
     </motion.tr>
@@ -132,21 +134,49 @@ const pillTone = {
   slate: { wrap: "bg-slate-50 text-slate-700 ring-slate-200", dot: "bg-slate-400" },
 };
 
+function normalizeQueueStatus(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_")
+    .replace(/\s+/g, "_");
+}
+
+function humanizeStatusFallback(status) {
+  const normalized = normalizeQueueStatus(status);
+  if (!normalized) return "Chờ gọi";
+  const formatted = formatStatus(normalized, "");
+  if (formatted) return formatted;
+  return normalized
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function StatusBadge({ item }) {
-  const status = item.TrangThai || item.trangThai || item.status || "";
-  const label =
-    status === "cho_goi"
-      ? "Đang chờ"
-      : status === "dang_thuc_hien" || status === "dang_kham"
-        ? "Đang thực hiện"
-        : status === "da_phuc_vu"
-          ? "Đã phục vụ"
-          : "Không rõ";
+  const status = normalizeQueueStatus(item.TrangThai || item.trangThai || item.status || "");
+  const label = {
+    cho_goi: "Đang chờ",
+    dang_cho: "Đang chờ",
+    dang_goi: "Đang gọi",
+    dang_phuc_vu: "Đang thực hiện",
+    dang_thuc_hien: "Đang thực hiện",
+    dang_kham: "Đang thực hiện",
+    cho_xu_ly: "Chờ xử lý",
+    cho_ket_qua: "Chờ kết quả",
+    da_phuc_vu: "Đã phục vụ",
+    hoan_tat: "Hoàn tất",
+    da_hoan_tat: "Đã hoàn tất",
+    da_huy: "Đã hủy",
+  }[status] || humanizeStatusFallback(status);
 
   let tone = pillTone.slate;
-  if (status === "cho_goi") tone = pillTone.amber;
+  if (status === "cho_goi" || status === "dang_cho" || status === "dang_goi") tone = pillTone.amber;
+  else if (status === "dang_phuc_vu") tone = pillTone.teal;
   else if (status === "dang_thuc_hien" || status === "dang_kham") tone = pillTone.teal;
-  else if (status === "da_phuc_vu") tone = pillTone.sky;
+  else if (status === "da_phuc_vu" || status === "hoan_tat" || status === "da_hoan_tat") tone = pillTone.sky;
+  else if (status === "da_huy") tone = pillTone.rose;
 
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${tone.wrap}`}>
@@ -221,7 +251,16 @@ function tone(item, active) {
   return "teal";
 }
 
-function ActionButton({ active, status, hasPendingCls, source, clinicalExamStatus, onClick }) {
+function ActionButton({
+  active,
+  status,
+  hasPendingCls,
+  source,
+  clinicalExamStatus,
+  roomBlocked = false,
+  blockingPatientName = "",
+  onClick,
+}) {
   // Ưu tiên BE status (TrangThai) trước, fallback về local inProgress
   const qs = (status || "").toLowerCase();
   const examStatus = (clinicalExamStatus || "").toLowerCase();
@@ -233,6 +272,22 @@ function ActionButton({ active, status, hasPendingCls, source, clinicalExamStatu
 
   // Đã hoàn tất → không hiện nút
   if (isDone) return null;
+
+  if (!isInProgress && roomBlocked) {
+    const title = blockingPatientName
+      ? `Phòng đang có ${blockingPatientName} đang khám. Hoàn tất hoặc hủy lượt hiện tại trước.`
+      : "Phòng đang có bệnh nhân đang khám. Hoàn tất hoặc hủy lượt hiện tại trước.";
+    return (
+      <motion.button
+        disabled
+        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-2 py-1.5 mt-0 text-sm font-semibold text-slate-500 shadow cursor-not-allowed"
+        aria-label="Phòng bận"
+        title={title}
+      >
+        Phòng bận
+      </motion.button>
+    );
+  }
 
   if (isAwaitingProcessing) {
     return (
@@ -292,6 +347,21 @@ function getKey(p) {
 
 export default function PatientTable({ items = [], onStart, onCancelVisit, onCancelWaitingClinical, onCancelClsOrder, inProgress = new Set(), stretch = false }) {
   const [confirmCancel, setConfirmCancel] = useState({ open: false, type: null, name: "", targetId: null });
+  const activeByRoom = useMemo(() => {
+    const map = new Map();
+    for (const row of items) {
+      const status = normalizeQueueStatus(row?.TrangThai || row?.trangThai || row?.status || "");
+      const rowKey = getKey(row);
+      const active = inProgress.has(rowKey) || status === "dang_thuc_hien" || status === "dang_kham" || status === "dang_phuc_vu";
+      const roomId = fld(row, "MaPhong", "maPhong", "roomId", "room.id");
+      if (!active || !roomId || map.has(roomId)) continue;
+      map.set(roomId, {
+        key: rowKey,
+        patientName: fld(row, "TenBenhNhan", "PhieuKhamLsFull.TenBenhNhan", "PhieuKhamClsFull.TenBenhNhan", "HoTen", "name") || "",
+      });
+    }
+    return map;
+  }, [items, inProgress]);
   const confirmTitle =
     confirmCancel.type === "visit"
       ? "Hủy lượt khám"
@@ -320,10 +390,10 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
               <col style={{ width: "8%" }} />
               <col style={{ width: "16%" }} />
               <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
               <col style={{ width: "8%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "10%" }} />
               <col style={{ width: "12%" }} />
               <col style={{ width: "9%" }} />
               <col style={{ width: "8%" }} />
@@ -451,7 +521,7 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                         const ngayLap = fld(p, "PhieuKhamLs.NgayLap", "PhieuKhamLsFull.NgayLap");
                         const gioLap = fld(p, "PhieuKhamLs.GioLap", "PhieuKhamLsFull.GioLap");
                         if (ngayLap && gioLap) {
-                          const datePart = new Date(ngayLap).toISOString().slice(0, 10);
+                          const datePart = toLocalYmd(new Date(ngayLap));
                           apptTimeRaw = `${datePart}T${gioLap}`;
                         } else if (ngayLap) {
                           apptTimeRaw = ngayLap;
@@ -479,6 +549,17 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
 
                     // ✅ Queue status for cancel button visibility
                     const queueStatus = (p.TrangThai || p.trangThai || p.status || "").toLowerCase();
+                    const roomId = fld(p, "MaPhong", "maPhong", "roomId", "room.id");
+                    const activeInRoom = roomId ? activeByRoom.get(roomId) : null;
+                    const isRowInProgress =
+                      active ||
+                      queueStatus === "dang_thuc_hien" ||
+                      queueStatus === "dang_kham" ||
+                      queueStatus === "dang_phuc_vu";
+                    const isRoomBlocked =
+                      !!activeInRoom &&
+                      !isRowInProgress &&
+                      String(activeInRoom.key ?? "") !== String(key ?? "");
                     const maLuotKham = fld(
                       p,
                       "MaLuotKham",
@@ -584,10 +665,10 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                                   <span className="text-[14px] font-bold leading-none">✕</span>
 
                                   {/* Custom Tooltip (Bong bóng) */}
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/x:block z-[100]">
+                                  <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover/x:block z-[100]">
                                     <div className="bg-slate-800 text-white text-[10px] px-2 py-1 rounded shadow-xl whitespace-nowrap relative border border-slate-700">
                                       Hủy
-                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800" />
+                                      <div className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-slate-800" />
                                     </div>
                                   </div>
                                 </motion.button>
@@ -648,6 +729,8 @@ export default function PatientTable({ items = [], onStart, onCancelVisit, onCan
                                 hasPendingCls={!isClsQueue && !!fld(p, "HasPendingCls", "hasPendingCls")}
                                 source={fld(p, "Nguon", "nguon", "source") || ""}
                                 clinicalExamStatus={fld(p, "PhieuKhamLs.TrangThai", "PhieuKhamLsFull.TrangThai") || ""}
+                                roomBlocked={isRoomBlocked}
+                                blockingPatientName={activeInRoom?.patientName || ""}
                                 onClick={() => onStart(p)}
                               />
                             ) : (

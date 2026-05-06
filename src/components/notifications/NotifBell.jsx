@@ -4,6 +4,7 @@ import { useNotificationsStore } from "../stores/appStore";
 import { useNotifications } from "../../api/notifications.js";
 import { useUI } from "../../context/UIContext.jsx";
 import { formatLocalizedMessage } from "../../utils/textFormatters.js";
+import { getNotificationTypeLabel } from "../../utils/notificationTypes.js";
 
 function BellIcon({ className = "" }) {
   return (
@@ -33,13 +34,7 @@ function BellIcon({ className = "" }) {
 }
 
 function getTypeLabel(type, lang) {
-  if (type === "lich_hen") return lang === "en" ? "Appointment" : "Lịch hẹn";
-  if (type === "reminder" || type === "tai_kham") return lang === "en" ? "Reminder" : "Nhắc nhở";
-  if (type === "result" || type === "ket_qua_cls") return lang === "en" ? "Result" : "Kết quả";
-  if (type === "thanh_toan") return lang === "en" ? "Payment" : "Thanh toán";
-  if (type === "benh_nhan") return lang === "en" ? "Patient" : "Bệnh nhân";
-  if (type === "phieu_kham") return lang === "en" ? "Clinical exam" : "Phiếu khám";
-  return lang === "en" ? "Notification" : "Thông báo";
+  return getNotificationTypeLabel(type, lang);
 }
 
 function getNotificationDetail(item, lang) {
@@ -110,22 +105,22 @@ export default function NotifBell() {
   const t =
     lang === "en"
       ? {
-          button: "Notifications",
-          title: "Recent notifications",
-          viewAll: "View all",
-          empty: "No notifications.",
-        }
+        button: "Notifications",
+        title: "Recent notifications",
+        viewAll: "View all",
+        empty: "No notifications.",
+      }
       : {
-          button: "Thông báo",
-          title: "Thông báo gần đây",
-          viewAll: "Xem tất cả",
-          empty: "Không có thông báo.",
-        };
+        button: "Thông báo",
+        title: "Thông báo gần đây",
+        viewAll: "Xem tất cả",
+        empty: "Không có thông báo.",
+      };
 
   const locale = lang === "en" ? "en-US" : "vi-VN";
 
   return (
-    <div className="relative" ref={rootRef}>
+    <div className="relative z-[100]" ref={rootRef}>
       <motion.button
         type="button"
         whileHover={{ y: -1, boxShadow: "0 8px 18px rgba(56,189,248,0.25)" }}
@@ -204,12 +199,12 @@ export default function NotifBell() {
                             {" • "}
                             {item.createdAt
                               ? new Date(item.createdAt).toLocaleTimeString(
-                                  locale,
-                                  {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  }
-                                )
+                                locale,
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )
                               : ""}
                           </p>
                         </div>

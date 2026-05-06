@@ -19,6 +19,7 @@ export default function UnpaidInvoiceDetailModal({
   onClose,
   onConfirm,
   onCancel,
+  canProcess = false,
   canCancel = false,
   isPending = false,
 }) {
@@ -257,13 +258,24 @@ export default function UnpaidInvoiceDetailModal({
                 </table>
               </div>
 
-              {!isReserved && !showCancelForm && (
+              {!isReserved && !showCancelForm && canProcess && (
                 <div className="mt-6 rounded-xl border border-emerald-200/80 bg-emerald-50/70 p-4">
                   <div className="text-sm font-semibold text-emerald-800">
                     Xử lý thanh toán
                   </div>
                   <p className="mt-1 text-sm text-emerald-700">
                     Hệ thống sẽ mở wizard thanh toán để chọn phương thức, xác nhận và hỗ trợ VietQR nếu cần.
+                  </p>
+                </div>
+              )}
+
+              {!isReserved && !showCancelForm && !canProcess && (
+                <div className="mt-6 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4">
+                  <div className="text-sm font-semibold text-slate-700">
+                    Chỉ xem công nợ
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Vai trò hiện tại không có quyền xử lý thanh toán hoặc hủy hóa đơn. Vui lòng chuyển cho y tá hành chính phụ trách thu ngân.
                   </p>
                 </div>
               )}
@@ -317,7 +329,7 @@ export default function UnpaidInvoiceDetailModal({
                     Hủy HĐ
                   </button>
                 ) : null}
-                {isReserved ? (
+                {isReserved || !canProcess ? (
                   <button
                     onClick={onClose}
                     className="rounded-xl bg-sky-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-sky-700"

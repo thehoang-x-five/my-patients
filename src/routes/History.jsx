@@ -96,6 +96,29 @@ function getTxnKind(row) {
   return "other";
 }
 
+function mapTxnTypeToBackend(value) {
+  switch (value) {
+    case "exam":
+      return "kham_lam_sang";
+    case "cls":
+      return "can_lam_sang";
+    case "drug":
+      return "thuoc";
+    default:
+      return null;
+  }
+}
+
+function readVisitStatusScopeParam(searchParams) {
+  const value = String(
+    searchParams.get("statusScope") || searchParams.get("visitStatusScope") || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  return ["medical", "cancelled", "all"].includes(value) ? value : "";
+}
+
 /* ====== main page ====== */
 export default function History() {
   const { search } = useLocation();
@@ -108,6 +131,7 @@ export default function History() {
   const initTab = sp.get("tab") || "visits";
   const initPid = sp.get("pid") || "";
   const initHighlight = sp.get("highlight") || null;
+  const initVisitStatusScope = readVisitStatusScopeParam(sp);
 
   const [tab, setTab] = useState(initTab); // visits | transactions
   const [scope, setScope] = useState(initPid ? "all" : "all"); // all | today
@@ -117,7 +141,7 @@ export default function History() {
   const [to, setTo] = useState("");
   const [kw, setKw] = useState(initPid);
   const [visitType, setVisitType] = useState("all"); // all | clinic | service
-  const [visitStatusScope, setVisitStatusScope] = useState("medical"); // medical | cancelled | all
+  const [visitStatusScope, setVisitStatusScope] = useState(initVisitStatusScope || "medical"); // medical | cancelled | all
   const [txnType, setTxnType] = useState("all"); // all | exam | cls | drug | other
   
   // ✅ Use UIStore for highlight (like Patients page)
@@ -163,6 +187,7 @@ export default function History() {
     const h = s.get("highlight");
     const p = s.get("pid");
     const t = s.get("tab");
+    const statusScopeParam = readVisitStatusScopeParam(s);
     
     if (h && h !== highlightHistoryId) {
       setHighlightHistoryId(h);
@@ -170,6 +195,10 @@ export default function History() {
     }
     if (p && p !== kw) { setKw(p); setScope("all"); }
     if (t && t !== tab) setTab(t);
+    if (statusScopeParam && statusScopeParam !== visitStatusScope) {
+      setVisitStatusScope(statusScopeParam);
+      setVisitPage(1);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
@@ -256,7 +285,7 @@ export default function History() {
       params.keyword = kw.trim();
     }
     if (txnType !== "all") {
-      params.loaiDotThu = txnType;
+      params.loaiDotThu = mapTxnTypeToBackend(txnType);
     }
 
     return params;

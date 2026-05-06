@@ -115,7 +115,7 @@ export const TRANG_THAI_DON_THUOC = {
 };
 
 export const TRANG_THAI_DON_THUOC_LABEL = {
-  [TRANG_THAI_DON_THUOC.DA_KE]: 'Đã kê',
+  [TRANG_THAI_DON_THUOC.DA_KE]: 'Chờ phát',
   [TRANG_THAI_DON_THUOC.CHO_PHAT]: 'Chờ phát',
   [TRANG_THAI_DON_THUOC.DA_PHAT]: 'Đã phát',
   [TRANG_THAI_DON_THUOC.DA_HUY]: 'Đã hủy',
@@ -128,6 +128,7 @@ export const TRANG_THAI_HOA_DON = {
   DA_THU: 'da_thu',
   DA_HUY: 'da_huy',
   BAO_LUU: 'bao_luu',
+  CONG_NO: 'cong_no',
 };
 
 export const TRANG_THAI_HOA_DON_LABEL = {
@@ -135,6 +136,7 @@ export const TRANG_THAI_HOA_DON_LABEL = {
   [TRANG_THAI_HOA_DON.DA_THU]: 'Đã thu',
   [TRANG_THAI_HOA_DON.DA_HUY]: 'Đã hủy',
   [TRANG_THAI_HOA_DON.BAO_LUU]: 'Bảo lưu',
+  [TRANG_THAI_HOA_DON.CONG_NO]: 'Công nợ',
 };
 
 export const PHUONG_THUC_THANH_TOAN = {

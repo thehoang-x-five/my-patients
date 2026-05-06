@@ -13,6 +13,10 @@ import {
   useLinkParents,
 } from "../../api/genealogy.js";
 import { usePatientsList } from "../../api/patients.js";
+import {
+  formatDisplayText,
+  formatLocalizedMessage,
+} from "../../utils/textFormatters.js";
 
 // Hook tìm kiếm
 function useDebounce(value, delay) {
@@ -44,6 +48,26 @@ const RELATION_TONES = {
   anh_chi_em: { tone: "amber", dot: "amber" },
   to_tien: { tone: "slate", dot: "slate" },
 };
+
+function formatGenealogyText(value, fallback = "—") {
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).trim();
+  if (!text) return fallback;
+
+  return text
+    .split(/[,;|]+/)
+    .map((part) => formatLocalizedMessage(part.trim(), part.trim()))
+    .filter(Boolean)
+    .join(", ");
+}
+
+function formatGenderText(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "—";
+  if (["nam", "male", "m"].includes(raw)) return "Nam";
+  if (["nu", "nữ", "female", "f"].includes(raw)) return "Nữ";
+  return formatDisplayText(value, value);
+}
 
 // --- COMBOBOX CHỌN BỆNH NHÂN CÓ TÌM KIẾM ---
 function PatientSelector({ value, onChange, placeholder, excludeId }) {
@@ -361,7 +385,7 @@ export default function PatientGenealogy({ patientId, allPatients = [] }) {
                       >
                         <div className="font-semibold text-sm text-slate-900">{m.HoTen}</div>
                         <div className="text-xs text-slate-500 mt-0.5">
-                          {m.MaBenhNhan} · {m.GioiTinh} ·{" "}
+                          {m.MaBenhNhan} · {formatGenderText(m.GioiTinh)} ·{" "}
                           {new Date(m.NgaySinh).toLocaleDateString("vi-VN")}
                         </div>
                         {m.NhomMau && (
@@ -371,7 +395,7 @@ export default function PatientGenealogy({ patientId, allPatients = [] }) {
                         )}
                         {m.BenhManTinh && (
                           <div className="text-xs text-amber-600 font-medium mt-1.5">
-                            Bệnh mạn tính: {m.BenhManTinh}
+                            Bệnh mạn tính: {formatGenealogyText(m.BenhManTinh)}
                           </div>
                         )}
                       </motion.div>
@@ -395,7 +419,7 @@ export default function PatientGenealogy({ patientId, allPatients = [] }) {
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(diseases.ThongKeBenhGiaDinh).map(([disease, count]) => (
                   <Chip key={disease} tone="amber" dot="amber" className="text-xs">
-                    {disease}: {count} người
+                    {formatGenealogyText(disease)}: {count} người
                   </Chip>
                 ))}
               </div>
@@ -417,10 +441,18 @@ export default function PatientGenealogy({ patientId, allPatients = [] }) {
                 {(diseases.ThanhVien || []).map((m) => (
                   <tr key={m.MaBenhNhan} className="hover:bg-slate-50/50 transition">
                     <td className="px-4 py-2.5 font-medium text-slate-800">{m.HoTen}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{RELATION_LABELS[m.QuanHe] || m.QuanHe}</td>
-                    <td className="px-4 py-2.5 text-amber-600 font-medium">{m.BenhManTinh || "—"}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{m.TieuSuBenh || "—"}</td>
-                    <td className="px-4 py-2.5 text-rose-600 font-medium">{m.DiUng || "—"}</td>
+                    <td className="px-4 py-2.5 text-slate-600">
+                      {RELATION_LABELS[m.QuanHe] || formatDisplayText(m.QuanHe, "—")}
+                    </td>
+                    <td className="px-4 py-2.5 text-amber-600 font-medium">
+                      {formatGenealogyText(m.BenhManTinh)}
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-600">
+                      {formatGenealogyText(m.TieuSuBenh)}
+                    </td>
+                    <td className="px-4 py-2.5 text-rose-600 font-medium">
+                      {formatGenealogyText(m.DiUng)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -18,10 +18,44 @@ import {
   useCreateDiagnosis,
   useCreateClsResult,
 } from "../../api/examination.js";
+import { toLocalYmd } from "../../utils/dateLocal.js";
 
 const MAX_NOTE_LEN = 200;
 const STATUS_DEFAULT = "Chưa có kết quả";
 const fadeIn = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 } };
+
+function getApiAssetOrigin() {
+  const apiBase = import.meta.env.VITE_API_BASE || "/api";
+  try {
+    const url = new URL(apiBase, window.location.origin);
+    return url.pathname.toLowerCase().endsWith("/api")
+      ? url.origin
+      : url.origin;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeAttachmentUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  if (/^[a-z]:\\/i.test(raw) || raw.startsWith("\\\\")) return "";
+
+  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+  if (!normalizedPath.toLowerCase().startsWith("/uploads/")) return "";
+
+  const origin = getApiAssetOrigin();
+  const encodedPath = encodeURI(normalizedPath);
+  return origin ? `${origin}${encodedPath}` : encodedPath;
+}
+
+function attachmentNameFrom(raw, fallback) {
+  const value = String(raw || "").trim();
+  if (!value) return fallback;
+  const path = value.split(/[?#]/)[0].replace(/\\/g, "/");
+  return path.split("/").filter(Boolean).pop() || fallback;
+}
 
 function emptyRow() {
   return {
@@ -39,22 +73,24 @@ function parseAttachmentValue(raw) {
     return raw
       .map((item, index) => {
         if (typeof item === "string") {
+          const url = normalizeAttachmentUrl(item);
           return {
             id: `file-${index + 1}`,
-            name: item,
-            url: "",
+            name: attachmentNameFrom(item, `Tệp ${index + 1}`),
+            url,
           };
         }
         if (item && typeof item === "object") {
+          const rawUrl = item.url || item.href || item.path || "";
+          const url = normalizeAttachmentUrl(rawUrl);
           return {
             id: item.id || item.name || item.fileName || `file-${index + 1}`,
             name:
               item.name ||
               item.fileName ||
               item.filename ||
-              item.url ||
-              `Tệp ${index + 1}`,
-            url: item.url || item.href || item.path || "",
+              attachmentNameFrom(rawUrl, `Tệp ${index + 1}`),
+            url,
           };
         }
         return null;
@@ -83,8 +119,8 @@ function parseAttachmentValue(raw) {
     return [
       {
         id: trimmed,
-        name: trimmed,
-        url: "",
+        name: attachmentNameFrom(trimmed, "Tệp 1"),
+        url: normalizeAttachmentUrl(trimmed),
       },
     ];
   }
@@ -276,7 +312,7 @@ const svcMap = useMemo(() => {
   };
   const canPrescribeTakeHome = allowPrescribe && !!dxFlags.choThuocVe;
   const minFollowupDate = useMemo(
-    () => new Date().toISOString().slice(0, 10),
+    () => toLocalYmd(new Date()),
     []
   );
 
@@ -1026,17 +1062,26 @@ const svcMap = useMemo(() => {
                                       className="break-all"
                                     >
                                       {f.url ? (
-                                        <a
-                                          href={f.url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="text-sky-700 underline underline-offset-2 hover:text-sky-800"
-                                        >
-                                          {f.name ||
-                                            f.fileName ||
-                                            f.filename ||
-                                            `Tệp ${i + 1}`}
-                                        </a>
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                          <a
+                                            href={f.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-sky-700 underline underline-offset-2 hover:text-sky-800"
+                                          >
+                                            {f.name ||
+                                              f.fileName ||
+                                              f.filename ||
+                                              `Tệp ${i + 1}`}
+                                          </a>
+                                          <a
+                                            href={f.url}
+                                            download={f.name || `tep-${i + 1}`}
+                                            className="text-[11px] font-semibold text-slate-500 hover:text-sky-700"
+                                          >
+                                            Tải
+                                          </a>
+                                        </div>
                                       ) : (
                                         <span>
                                           {f.name ||

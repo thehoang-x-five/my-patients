@@ -5,6 +5,86 @@ import { Link } from "react-router-dom";
 import Button from "../ui/Button.jsx";
 import { isServiceDept,useHistoryVisitDetail } from "../../api/history.js";
 
+function getApiAssetOrigin() {
+  const apiBase = import.meta.env.VITE_API_BASE || "/api";
+  try {
+    const url = new URL(apiBase, window.location.origin);
+    return url.pathname.toLowerCase().endsWith("/api") ? url.origin : url.origin;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeAttachmentUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  if (/^[a-z]:\\/i.test(raw) || raw.startsWith("\\\\")) return "";
+
+  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+  if (!normalizedPath.toLowerCase().startsWith("/uploads/")) return "";
+
+  const origin = getApiAssetOrigin();
+  const encodedPath = encodeURI(normalizedPath);
+  return origin ? `${origin}${encodedPath}` : encodedPath;
+}
+
+function attachmentNameFrom(raw, fallback) {
+  const value = String(raw || "").trim();
+  if (!value) return fallback;
+  const path = value.split(/[?#]/)[0].replace(/\\/g, "/");
+  return path.split("/").filter(Boolean).pop() || fallback;
+}
+
+function parseAttachmentValue(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item, index) => {
+        if (typeof item === "string") {
+          return {
+            id: item || `file-${index + 1}`,
+            name: attachmentNameFrom(item, `Tệp ${index + 1}`),
+            url: normalizeAttachmentUrl(item),
+          };
+        }
+        if (item && typeof item === "object") {
+          const rawUrl = item.url || item.href || item.path || "";
+          return {
+            id: item.id || item.name || item.fileName || `file-${index + 1}`,
+            name:
+              item.name ||
+              item.fileName ||
+              item.filename ||
+              attachmentNameFrom(rawUrl, `Tệp ${index + 1}`),
+            url: normalizeAttachmentUrl(rawUrl),
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        return parseAttachmentValue(JSON.parse(trimmed));
+      } catch {
+        return [{ id: trimmed, name: trimmed, url: "" }];
+      }
+    }
+    return [
+      {
+        id: trimmed,
+        name: attachmentNameFrom(trimmed, "Tệp 1"),
+        url: normalizeAttachmentUrl(trimmed),
+      },
+    ];
+  }
+  return [];
+}
+
 export default function HistoryDetailModal({ open, type, row, onClose }) {
   
 
@@ -59,7 +139,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
     data.MaBenhNhan ||
     null;
 
-  const shellSize = isVisit ? "max-w-4xl" : "max-w-xl";
+  const shellSize = isVisit ? "max-w-5xl" : "max-w-xl";
 
   return (
     <AnimatePresence>
@@ -71,7 +151,13 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
           exit={{ opacity: 0 }}
           role="dialog"
           aria-modal="true"
-          aria-label={isVisit ? "Chi tiết khám bệnh" : "Chi tiết giao dịch"}
+          aria-label={
+            isVisit
+              ? isServiceVisit
+                ? "Chi tiết cận lâm sàng"
+                : "Chi tiết khám bệnh"
+              : "Chi tiết giao dịch"
+          }
         >
           <motion.div
             className={`w-full ${shellSize} rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200/80 overflow-hidden`}
@@ -84,7 +170,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
             <header className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-gradient-to-r from-sky-50 via-cyan-50 to-sky-50">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-sky-600">
-                  {isVisit ? "Khám bệnh" : "Giao dịch"}
+                  {isVisit ? (isServiceVisit ? "Cận lâm sàng" : "Khám bệnh") : "Giao dịch"}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <h2 className="text-sm font-bold text-slate-900">
@@ -119,8 +205,8 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
             </header>
 
             {/* Body */}
-            <div className="px-5 py-4 max-h-[70vh] overflow-y-auto scrollbar-none">
-              <div className="grid gap-5 text-sm">
+            <div className="px-5 py-4 max-h-[70vh] overflow-x-hidden overflow-y-auto scrollbar-none">
+              <div className="grid gap-4 text-sm">
                 {/* 1) Thông tin BN / Giao dịch */}
                 <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                   <div className="grid lg:grid-cols-2 gap-4">
@@ -144,17 +230,17 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     {isVisit ? (
                       <>
                         <Field label="Khoa/Phòng" value={data.dept || "—"} />
-                        <Field label="Bác sĩ" value={data.doctor || "—"} />
+                        <Field label="BS/KTV" value={data.doctor || data.technician || "—"} />
                         <Field
                           label="Loại lượt"
                           value={
                             isServiceVisit ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-200">
-                                Khám dịch vụ
+                                Cận lâm sàng
                               </span>
                             ) : (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 ring-1 ring-sky-200">
-                                Khám thường
+                                Khám lâm sàng
                               </span>
                             )
                           }
@@ -185,10 +271,10 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                 {isVisit ? (
                   <>
                     {/* 2) Kết quả khám */}
-                    {(data.note ||
+                    {!isServiceVisit && (data.note ||
                       (data.examRows && data.examRows.length) ||
                       (isVisit && loadingDetail)) && (
-                      <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
+                      <section className="rounded-xl ring-1 ring-slate-200/70 p-3">
                         <b className="block mb-2">Kết quả khám</b>
                         
                         {data.note && (
@@ -198,15 +284,20 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                           </div>
                         )}
                         {(data.examRows || []).length > 0 && (
-                          <div className="overflow-x-auto scrollbar-none rounded-lg ring-1 ring-slate-200/70">
-                            <table className="min-w-full text-sm">
+                          <div className="overflow-x-hidden rounded-lg ring-1 ring-slate-200/70">
+                            <table className="w-full table-fixed text-sm">
+                              <colgroup>
+                                <col className="w-[8%]" />
+                                <col className="w-[24%]" />
+                                <col className="w-[68%]" />
+                              </colgroup>
                               <thead className="text-left text-slate-500 bg-slate-50">
                                 <tr>
-                                  <th className="px-3 py-2 w-12">#</th>
-                                  <th className="px-3 py-2 w-56">
+                                  <th className="px-2 py-2">#</th>
+                                  <th className="px-2 py-2">
                                     Mục khám
                                   </th>
-                                  <th className="px-3 py-2">Kết quả</th>
+                                  <th className="px-2 py-2">Kết quả</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -215,11 +306,11 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                                     key={i}
                                     className="odd:bg-slate-50/40 hover:bg-slate-100"
                                   >
-                                    <td className="px-3 py-2">{i + 1}</td>
-                                    <td className="px-3 py-2 font-semibold">
+                                    <td className="px-2 py-2">{i + 1}</td>
+                                    <td className="px-2 py-2 font-semibold whitespace-normal break-words">
                                       {r.label || "-"}
                                     </td>
-                                    <td className="px-3 py-2">
+                                    <td className="px-2 py-2 whitespace-pre-wrap break-words">
                                       {r.value || "-"}
                                     </td>
                                   </tr>
@@ -232,7 +323,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     )}
 
                     {/* 3) Chẩn đoán & kế hoạch */}
-                    {data.diagnosis && (
+                    {!isServiceVisit && data.diagnosis && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
                         <b className="block mb-2">
                           Chẩn đoán & Kế hoạch điều trị
@@ -269,16 +360,27 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     {/* 4) Dịch vụ thực hiện */}
                     {(data.services || []).length > 0 && (
                       <section className="rounded-xl ring-1 ring-slate-200/70 p-4">
-                        <b className="block mb-2">Dịch vụ thực hiện</b>
-                        <div className="overflow-x-auto scrollbar-none rounded-lg ring-1 ring-slate-200/70">
-                          <table className="min-w-full text-sm">
+                        <b className="block mb-2">
+                          {isServiceVisit ? "Kết quả cận lâm sàng" : "Dịch vụ thực hiện"}
+                        </b>
+                        <div className="overflow-x-hidden rounded-lg ring-1 ring-slate-200/70">
+                          <table className="w-full table-fixed text-sm">
+                            <colgroup>
+                              <col className="w-[9%]" />
+                              <col className="w-[20%]" />
+                              <col className="w-[25%]" />
+                              <col className="w-[18%]" />
+                              <col className="w-[17%]" />
+                              <col className="w-[11%]" />
+                            </colgroup>
                             <thead className="text-left text-slate-500 bg-slate-50">
                               <tr>
-                                <th className="px-3 py-2 w-16">Mã</th>
-                                <th className="px-3 py-2">Tên dịch vụ</th>
-                                <th className="px-3 py-2 text-right">
-                                  Giá
-                                </th>
+                                <th className="px-2 py-2">Mã</th>
+                                <th className="px-2 py-2">Tên dịch vụ</th>
+                                <th className="px-2 py-2">Kết quả</th>
+                                <th className="px-2 py-2">Ghi chú</th>
+                                <th className="px-2 py-2">Tệp</th>
+                                <th className="px-2 py-2 text-right">Giá</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -287,13 +389,22 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                                   key={s.code || i}
                                   className="odd:bg-slate-50/40 hover:bg-slate-100"
                                 >
-                                  <td className="px-3 py-2 font-mono text-xs">
+                                  <td className="px-2 py-2 font-mono text-xs whitespace-normal break-words">
                                     {s.code || "-"}
                                   </td>
-                                  <td className="px-3 py-2">
+                                  <td className="px-2 py-2 whitespace-normal break-words">
                                     {s.name || "-"}
                                   </td>
-                                  <td className="px-3 py-2 text-right">
+                                  <td className="px-2 py-2 whitespace-pre-wrap break-words">
+                                    {s.result || "-"}
+                                  </td>
+                                  <td className="px-2 py-2 whitespace-pre-wrap break-words">
+                                    {s.note || "-"}
+                                  </td>
+                                  <td className="px-2 py-2 min-w-0">
+                                    <AttachmentLinks files={s.attachments} />
+                                  </td>
+                                  <td className="px-2 py-2 text-right whitespace-nowrap">
                                     {Number(
                                       s.price ?? 0
                                     ).toLocaleString("vi-VN")}{" "}
@@ -308,11 +419,7 @@ export default function HistoryDetailModal({ open, type, row, onClose }) {
                     )}
 
                     {/* 5) Đơn thuốc */}
-                    {isServiceVisit ? (
-                      <section className="rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 text-amber-800">
-                        Lần khám dịch vụ không phát sinh đơn thuốc.
-                      </section>
-                    ) : data.prescriptionId || data.rxId ? (
+                    {!isServiceVisit && (data.prescriptionId || data.rxId) ? (
                       <section className="rounded-xl ring-1 ring-sky-200 bg-sky-50 p-3 text-sm">
                         Có đơn thuốc:{" "}
                         <Underlined
@@ -484,6 +591,45 @@ function renderMethodChip(method) {
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-50 text-slate-600 ring-1 ring-slate-200">
       {method}
     </span>
+  );
+}
+
+function AttachmentLinks({ files }) {
+  const normalized = parseAttachmentValue(files);
+  if (!normalized.length) return <span className="text-slate-400">—</span>;
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      {normalized.map((file, index) => {
+        const label = file.name || `Tệp ${index + 1}`;
+        if (!file.url) {
+          return (
+            <span key={file.id || index} className="break-words text-slate-500">
+              {label}
+            </span>
+          );
+        }
+        return (
+          <span key={file.id || file.url || index} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <a
+              href={file.url}
+              target="_blank"
+              rel="noreferrer"
+              className="min-w-0 break-words underline underline-offset-2 text-sky-700 hover:text-sky-800"
+            >
+              {label}
+            </a>
+            <a
+              href={file.url}
+              download={label}
+              className="text-xs text-slate-500 hover:text-slate-700"
+            >
+              Tải
+            </a>
+          </span>
+        );
+      })}
+    </div>
   );
 }
 

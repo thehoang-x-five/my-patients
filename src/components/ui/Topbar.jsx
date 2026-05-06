@@ -52,9 +52,9 @@ export default function Topbar() {
 
   const scopeLabel = !hasGlobalScope(user)
     ? formatDepartmentLabel(
-        user?.TenKhoa || user?.tenKhoa || user?.MaKhoa || user?.maKhoa || null,
-        lang
-      )
+      user?.TenKhoa || user?.tenKhoa || user?.MaKhoa || user?.maKhoa || null,
+      lang
+    )
     : null;
 
   const canViewAppt = canViewAppointment(user);
@@ -96,15 +96,15 @@ export default function Topbar() {
   const actions = [
     canViewAppt
       ? {
-          to: "/appointments",
-          icon: "📅",
-          title: canCreateAppt
-            ? tr("quickCreateAppointment")
-            : tr("quickViewAppointments"),
-          desc: canCreateAppt
-            ? tr("quickAppointmentDescCreate")
-            : tr("quickAppointmentDescView"),
-        }
+        to: "/appointments",
+        icon: "📅",
+        title: canCreateAppt
+          ? tr("quickCreateAppointment")
+          : tr("quickViewAppointments"),
+        desc: canCreateAppt
+          ? tr("quickAppointmentDescCreate")
+          : tr("quickAppointmentDescView"),
+      }
       : null,
     {
       to: "/patients",

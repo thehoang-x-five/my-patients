@@ -379,6 +379,11 @@ export const useUiStore = create(
       density: state.density,
       accent: state.accent,
       showTips: state.showTips,
+      highlightPid: state.highlightPid,
+      highlightSource: state.highlightSource,
+      patientPrefill: state.patientPrefill,
+      flashAddAt: state.flashAddAt,
+      flashAddNotified: state.flashAddNotified,
     }),
   })
 );

@@ -45,6 +45,7 @@ import {
   canDispenseMedicine,
   canEditStock,
 } from "../utils/permissions.js";
+import { endOfLocalDayParam, startOfLocalDayParam } from "../utils/dateLocal.js";
 
 const NEAR_EXPIRY_DAYS = 30;
 const LOW_STOCK_QTY = 10;
@@ -158,6 +159,7 @@ export default function Prescriptions() {
   const qOrdersDef = useDeferredValue(qOrders);
   const qStockDef = useDeferredValue(qStock);
   const qc = useQueryClient();
+  const highlightOrderId = (searchParams.get("highlight") || "").trim();
 
   // ✅ Pagination
   const [orderPage, setOrderPage] = useState(1);
@@ -173,9 +175,21 @@ export default function Prescriptions() {
     setStockStatus("all");
   }, [setQStock, setUnit, setStockStatus]);
 
+  useEffect(() => {
+    const tabParam = (searchParams.get("tab") || "").toLowerCase();
+    if (tabParam === "orders" || highlightOrderId) {
+      setTab("orders");
+    }
+
+    if (highlightOrderId) {
+      setQOrders(highlightOrderId);
+      setOrderPage(1);
+    }
+  }, [highlightOrderId, searchParams, setQOrders, setTab]);
+
   // ✅ Date range: dùng orderFromDate/orderToDate trực tiếp (popover quản lý)
-  const fromDate = orderFromDate ? new Date(orderFromDate + "T00:00:00").toISOString() : null;
-  const toDate = orderToDate ? new Date(orderToDate + "T23:59:59").toISOString() : null;
+  const fromDate = orderFromDate ? startOfLocalDayParam(`${orderFromDate}T00:00:00`) : null;
+  const toDate = orderToDate ? endOfLocalDayParam(`${orderToDate}T00:00:00`) : null;
 
   // ✅ Dùng searchRxOrders với filtering và pagination
   const ordersQuery = useSearchRxOrders({
@@ -361,25 +375,15 @@ export default function Prescriptions() {
   // ===== Stats đơn thuốc + kho thuốc =====
 const ordersCount = filteredOrders.length;
 
-const ordersCreatedCount = useMemo(
-  () =>
-    filteredOrders.filter((o) => {
-      const raw = (o.rawStatus || "").toLowerCase();
-      if (raw) return raw === "da_ke";
-      const st = (o.status || "").toLowerCase();
-      return st === "da_ke";
-    }).length,
-  [filteredOrders]
-);
-
 const ordersPendingCount = useMemo(
   () =>
     filteredOrders.filter((o) => {
       const raw = (o.rawStatus || "").toLowerCase();
       const st = (o.status || "").toLowerCase();
       return (
+        raw === "da_ke" ||
         raw === "cho_phat" ||
-        (!raw && (st === "pending" || st === "cho_phat"))
+        (!raw && (st === "pending" || st === "da_ke" || st === "cho_phat"))
       );
     }).length,
   [filteredOrders]
@@ -501,7 +505,6 @@ const stockNearOutCount = filteredStock.filter((r) => {
             setTab={setTab}
             // thống kê đơn
             ordersCount={ordersCount}             
-            ordersCreatedCount={ordersCreatedCount}
             ordersPendingCount={ordersPendingCount}
             ordersDoneCount={ordersDoneCount}
             // thống kê kho
@@ -547,6 +550,7 @@ const stockNearOutCount = filteredStock.filter((r) => {
                       <OrdersTable
                         items={filteredOrders}
                         loading={loadingOrders}
+                        highlightId={highlightOrderId}
                         canCancel={allowCancel}
                         canDispense={allowDispense}
                         onView={(order) =>

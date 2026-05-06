@@ -1,6 +1,7 @@
 // src/api/billing.js
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "./http.js";
+import { on } from "./realtime.js";
 import { PHUONG_THUC_THANH_TOAN } from "../constants/enums.js";
 
 /**
@@ -26,6 +27,7 @@ export async function createInvoice(payload = {}) {
     SoTien: payload.SoTien ?? payload.soTien ?? payload.amount ?? 0,
     PhuongThucThanhToan: payload.PhuongThucThanhToan ?? payload.phuongThucThanhToan ?? payload.paymentMethod ?? PHUONG_THUC_THANH_TOAN.TIEN_MAT,
     NoiDung: payload.NoiDung ?? payload.noiDung ?? payload.content ?? payload.item ?? "",
+    TrangThai: payload.TrangThai ?? payload.trangThai ?? payload.status ?? null,
     
     // Các trường optional 
     MaPhieuKham: payload.MaPhieuKham ?? payload.maPhieuKham ?? null,
@@ -91,9 +93,11 @@ export async function findDrugInvoiceByPrescription(maBenhNhan, maDonThuoc) {
 
 // Cập nhật trạng thái hóa đơn (Hủy, Hoàn tác...)
 // PUT /api/billing/invoices/{maHoaDon}/status
-export async function updateInvoiceStatus({ id, status }) {
+export async function updateInvoiceStatus({ id, status, soTien, noiDung }) {
   if (!id || !status) throw new Error("Thiếu id hoặc status");
   const body = { TrangThai: status }; // InvoiceStatusUpdateRequest 
+  if (soTien != null) body.SoTien = soTien;
+  if (noiDung != null) body.NoiDung = noiDung;
   const res = await http.put(`${BASE}/invoices/${id}/status`, body);
   return res.data;
 }
@@ -251,3 +255,43 @@ export function useGenerateVietQR(options = {}) {
   });
 }
 
+/* =========================================================
+ * 6. REALTIME — Subscribe to Invoice changes (SignalR)
+ * Backend broadcasts: InvoiceChanged(InvoiceDto)
+ * Sent to: admin nurses + admin role groups
+ * =======================================================*/
+
+/**
+ * Subscribe to realtime invoice changes from SignalR.
+ * Invalidates and refetches the invoice query cache when an invoice is
+ * created, updated, cancelled, or confirmed on the backend.
+ *
+ * @param {import("@tanstack/react-query").QueryClient} queryClient
+ * @returns {() => void} unsubscribe function
+ */
+export function subscribeBillingRealtime(queryClient) {
+  const handler = async (dto) => {
+    console.log("[BILLING-RT] 📋 InvoiceChanged:", dto?.MaHoaDon ?? dto?.maHoaDon, dto?.TrangThai ?? dto?.trangThai);
+
+    if (queryClient && typeof queryClient.invalidateQueries === "function") {
+      // Invalidate all invoice search queries (công nợ + bảo lưu tabs)
+      await queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      // Refetch only the actively mounted queries
+      await queryClient.refetchQueries?.({ queryKey: ["invoices"], type: "active" });
+
+      // Also invalidate history/transactions if needed
+      const pid = dto?.MaBenhNhan ?? dto?.maBenhNhan;
+      if (pid) {
+        await queryClient.invalidateQueries({ queryKey: ["transactions", pid] });
+        await queryClient.invalidateQueries({ queryKey: ["patient", pid] });
+      }
+    }
+  };
+
+  // Backend event name: InvoiceChanged (defined in IRealtimeClient.cs)
+  const offInvoiceChanged = on("InvoiceChanged", handler);
+
+  return () => {
+    offInvoiceChanged?.();
+  };
+}

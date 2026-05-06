@@ -41,6 +41,9 @@ export default function PatientExamMode({
   clsResults = [],
   currentUser,
   serviceNoteReadOnly = false,
+  deferredInvoices = [],
+  loadingDeferred = false,
+  totalDeferredAmount = 0,
 }) {
   // ====== 1. Mã lịch hẹn + loại hẹn + hình thức tiếp nhận ======
   const apptCode =
@@ -154,6 +157,30 @@ export default function PatientExamMode({
 
   return (
     <motion.div {...ANIMATION_CONFIG} className="space-y-3">
+      {/* === BANNER BẢO LƯU === */}
+      {deferredInvoices.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl p-3.5 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 ring-1 ring-amber-300 shadow-sm"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">💰</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-sm text-amber-900">
+                BN có {deferredInvoices.length} hóa đơn bảo lưu —{" "}
+                <span className="text-emerald-700">
+                  {totalDeferredAmount.toLocaleString("vi-VN")}đ
+                </span>
+              </div>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Tiền BN đã đóng từ lần trước nhưng chưa sử dụng. Sẽ được hỏi khi lập phiếu khám.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       <motion.section
         whileHover={{ y: -2 }}
         className="rounded-2xl p-2 mt-2 mb-0 ring-1 ring-emerald-200/50 bg-white shadow-sm"
@@ -594,10 +621,10 @@ export default function PatientExamMode({
               type="button"
               whileHover={{ scale: 1.02, y: -1 }}
               whileTap={{ scale: 0.98 }}
-              onClick={handleFollowupExam}
+              onClick={handleDirectExam}
               className="px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition"
             >
-              Lập phiếu khám sau CLS (Miễn phí)
+              Lập phiếu khám (Miễn phí)
             </motion.button>
           ) : (
             <motion.button

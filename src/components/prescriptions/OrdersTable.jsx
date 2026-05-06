@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 
@@ -9,8 +9,8 @@ function StatusBadge({ s }) {
   let label = s || "—";
 
   if (raw === "da_ke" || /đã kê|da ke/.test(raw)) {
-    type = "created";
-    label = "Đã kê";
+    type = "pending";
+    label = "Chờ phát";
   } else if (raw === "cho_phat" || /chờ phát|cho phat|pending|đang chờ/.test(raw)) {
     type = "pending";
     label = "Chờ phát";
@@ -71,18 +71,22 @@ const Th = ({ children, first, last, right }) => (
   </th>
 );
 
-const Row = ({ i, children, ...rest }) => (
+const Row = React.forwardRef(({ i, children, className = "", ...rest }, ref) => (
   <motion.tr
     {...rest}
+    ref={ref}
     initial={{ opacity: 0, y: 6 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay: i * 0.015 }}
     whileHover={{ y: -2 }}
-    className="group odd:bg-slate-50/40 shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)] transition hover:bg-indigo-100/50"
+    className={[
+      "group odd:bg-slate-50/40 shadow-[inset_0_-1px_0_0_rgba(15,23,42,.06)] transition hover:bg-indigo-100/50",
+      className,
+    ].join(" ")}
   >
     {children}
   </motion.tr>
-);
+));
 
 const Td = ({ children, first, last, right, classNameOverride = "" }) => (
   <td
@@ -106,7 +110,20 @@ export default function OrdersTable({
   canCancel = false,
   canDispense = false,
   loading = false,
+  highlightId = null,
 }) {
+  const rowRefs = useRef({});
+  const highlightKey = String(highlightId || "").trim().toLowerCase();
+
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    const key = String(highlightId).trim().toLowerCase();
+    const row = rowRefs.current[key];
+    if (!row) return;
+
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightId, loading, items]);
+
   return (
     <section
       className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl bg-white pt-2 shadow-soft"
@@ -187,8 +204,21 @@ export default function OrdersTable({
                 const needsDrugPayment =
                   total > 0 && invoiceStatus !== "da_thu";
 
+                const orderCode = String(o.id || o.code || "").trim();
+                const orderKey = orderCode.toLowerCase();
+                const isHighlight = !!highlightKey && orderKey === highlightKey;
+
                 return (
-                  <Row key={o.id || o.code || i} i={i}>
+                  <Row
+                    key={o.id || o.code || i}
+                    i={i}
+                    ref={(node) => {
+                      if (orderKey) rowRefs.current[orderKey] = node;
+                    }}
+                    data-highlight-id={orderCode || undefined}
+                    data-order-id={orderCode || undefined}
+                    className={isHighlight ? "flash-emerald-once z-10" : ""}
+                  >
                     <Td
                       first
                       classNameOverride="overflow-hidden text-ellipsis whitespace-nowrap font-mono font-semibold"

@@ -15,7 +15,6 @@ export default function PrescToolbar({
 
   // thống kê đơn
   ordersCount,
-  ordersCreatedCount = 0,
   ordersPendingCount = 0,
   ordersDoneCount = 0,
 
@@ -46,10 +45,6 @@ export default function PrescToolbar({
         <>
           <Chip dot="slate">
             Tổng đơn:&nbsp;<b>{ordersCount}</b>
-          </Chip>
-          <Chip dot="sky">
-            Đã kê:&nbsp;
-            <b>{ordersCreatedCount}</b>
           </Chip>
           <Chip dot="amber">
             Chờ phát:&nbsp;<b>{ordersPendingCount}</b>

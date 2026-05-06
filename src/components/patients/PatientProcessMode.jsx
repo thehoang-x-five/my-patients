@@ -1,7 +1,38 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { ANIMATION_CONFIG, R } from "./Shared.jsx";
 import { formatVietnameseText } from "../../utils/textFormatters.js";
+
+function getApiAssetOrigin() {
+  const apiBase = import.meta.env.VITE_API_BASE || "/api";
+  try {
+    const url = new URL(apiBase, window.location.origin);
+    return url.origin;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeAttachmentUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  if (/^[a-z]:\\/i.test(raw) || raw.startsWith("\\\\")) return "";
+
+  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+  if (!normalizedPath.toLowerCase().startsWith("/uploads/")) return "";
+
+  const origin = getApiAssetOrigin();
+  return origin ? `${origin}${normalizedPath}` : normalizedPath;
+}
+
+function attachmentNameFrom(raw, fallback) {
+  const value = String(raw || "").trim();
+  if (!value) return fallback;
+  const path = value.split(/[?#]/)[0].replace(/\\/g, "/");
+  return path.split("/").filter(Boolean).pop() || fallback;
+}
 
 function normalizeAttachments(raw) {
   if (!raw) return [];
@@ -10,23 +41,25 @@ function normalizeAttachments(raw) {
     return raw
       .map((item, index) => {
         if (typeof item === "string") {
+          const url = normalizeAttachmentUrl(item);
           return {
             id: `file-${index + 1}`,
-            name: item,
-            url: "",
+            name: attachmentNameFrom(item, `Tệp ${index + 1}`),
+            url,
           };
         }
 
         if (item && typeof item === "object") {
+          const rawUrl = item.url || item.href || item.path || "";
+          const url = normalizeAttachmentUrl(rawUrl);
           return {
             id: item.id || item.name || item.fileName || `file-${index + 1}`,
             name:
               item.name ||
               item.fileName ||
               item.filename ||
-              item.url ||
-              `Tệp ${index + 1}`,
-            url: item.url || item.href || item.path || "",
+              attachmentNameFrom(rawUrl, `Tệp ${index + 1}`),
+            url,
           };
         }
 
@@ -56,8 +89,8 @@ function normalizeAttachments(raw) {
     return [
       {
         id: trimmed,
-        name: trimmed,
-        url: "",
+        name: attachmentNameFrom(trimmed, "Tệp 1"),
+        url: normalizeAttachmentUrl(trimmed),
       },
     ];
   }
@@ -93,6 +126,8 @@ export default function PatientProcessMode({
   pendingExamFeeAmount = 0,
   finishBlockedByPayment = false,
 }) {
+  const navigate = useNavigate();
+
   const serviceRows = React.useMemo(() => {
     if (!Array.isArray(svcResults) || !svcResults.length) return [];
     return svcResults.map((row, idx) => ({
@@ -255,14 +290,23 @@ export default function PatientProcessMode({
                                     className="break-all"
                                   >
                                     {file.url ? (
-                                      <a
-                                        href={file.url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="underline underline-offset-2 hover:text-cyan-800"
-                                      >
-                                        {file.name || `Tệp ${index + 1}`}
-                                      </a>
+                                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <a
+                                          href={file.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="underline underline-offset-2 hover:text-cyan-800"
+                                        >
+                                          {file.name || `Tệp ${index + 1}`}
+                                        </a>
+                                        <a
+                                          href={file.url}
+                                          download={file.name || `tep-${index + 1}`}
+                                          className="text-[11px] font-semibold text-slate-500 hover:text-cyan-800"
+                                        >
+                                          Tải
+                                        </a>
+                                      </div>
                                     ) : (
                                       <span>{file.name || `Tệp ${index + 1}`}</span>
                                     )}
@@ -563,7 +607,7 @@ export default function PatientProcessMode({
           </div>
 
           {rx.length > 0 && prescriptionCode ? (
-            <div className="mt-3 rounded-xl px-3 py-2.5 ring-1 ring-slate-200/80 bg-white/90 text-[12px] text-slate-600">
+            <div className="relative mt-3 rounded-xl px-3 py-2.5 pr-40 ring-1 ring-slate-200/80 bg-white/90 text-[12px] text-slate-600">
               Trạng thái đơn:{" "}
               <b className="text-slate-800">
                 {rxIsDispensed
@@ -574,6 +618,17 @@ export default function PatientProcessMode({
                       ? "Đã kê / chờ nhà thuốc xử lý"
                       : prescriptionOrderStatus || "—"}
               </b>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/prescriptions?tab=orders&highlight=${encodeURIComponent(prescriptionCode)}`
+                  )
+                }
+                className="absolute right-3 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-sm font-bold text-white shadow-md transition hover:-translate-y-[52%] hover:shadow-lg"
+              >
+                Mở đơn thuốc
+              </button>
               <div className="mt-1 text-slate-500">
                 Phí thuốc và phát thuốc được xử lý tại trang Đơn thuốc.
               </div>

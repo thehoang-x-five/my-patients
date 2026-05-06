@@ -39,6 +39,10 @@ const HUB_URL = `${BASE_NORM}/hubs/realtime`;
 
 let _conn = null;
 let _startPromise = null;
+const _eventHandlers = new Map();
+const _joinedRoles = new Set();
+const _joinedUsers = new Set();
+const _joinedRooms = new Set();
 
 export function getConnection() {
   return _conn;
@@ -58,14 +62,44 @@ export function createConnection(options = {}) {
     .configureLogging(signalR.LogLevel.Information)
     .build();
 
+  for (const [event, handlers] of _eventHandlers.entries()) {
+    for (const handler of handlers) {
+      _conn.on(event, handler);
+    }
+  }
+
   _conn.onreconnected(() => {
-    // console.info("SignalR reconnected");
+    rejoinKnownGroups().catch((err) => {
+      console.error("SignalR rejoin groups error", err);
+    });
   });
   _conn.onclose(() => {
     // console.info("SignalR closed");
   });
 
   return _conn;
+}
+
+async function rejoinKnownGroups() {
+  const conn = getConnection();
+  if (!conn || conn.state !== signalR.HubConnectionState.Connected) return;
+
+  for (const role of _joinedRoles) {
+    await conn.invoke("JoinRoleAsync", role);
+  }
+
+  for (const userKey of _joinedUsers) {
+    const [loaiNguoiNhan, maNguoiNhan] = userKey.split("::");
+    if (loaiNguoiNhan && maNguoiNhan) {
+      await conn.invoke("JoinUserAsync", loaiNguoiNhan, maNguoiNhan);
+    }
+  }
+
+  for (const maPhong of _joinedRooms) {
+    if (maPhong) {
+      await conn.invoke("JoinRoomAsync", maPhong);
+    }
+  }
 }
 
 async function waitForConnectionState(conn, allowedStates, timeoutMs = 5000) {
@@ -222,6 +256,7 @@ async function restartConnection(conn) {
   const freshConn = createConnection();
   if (freshConn.state === signalR.HubConnectionState.Disconnected) {
     await freshConn.start();
+    await rejoinKnownGroups();
   }
 }
 
@@ -259,15 +294,31 @@ async function invokeSafe(method, ...args) {
 
 export async function stop() {
   _startPromise = null;
+  _joinedRoles.clear();
+  _joinedUsers.clear();
+  _joinedRooms.clear();
   if (_conn) await _conn.stop();
+  _conn = null;
 }
 
 export function on(event, handler) {
   const conn = createConnection();
+  if (!_eventHandlers.has(event)) {
+    _eventHandlers.set(event, new Set());
+  }
+  _eventHandlers.get(event).add(handler);
   conn.on(event, handler);
   return () => off(event, handler);
 }
 export function off(event, handler) {
+  const handlers = _eventHandlers.get(event);
+  if (handlers) {
+    handlers.delete(handler);
+    if (handlers.size === 0) {
+      _eventHandlers.delete(event);
+    }
+  }
+
   const conn = getConnection();
   if (conn) conn.off(event, handler);
 }
@@ -291,6 +342,34 @@ export async function invoke(method, ...args) {
 //   - Role: "bac_si" hoặc "y_ta" (tùy loại nhân sự)
 //   - User: "nhan_vien_y_te:{maNhanVien}"  (nếu cần) "bac_si:{maNhanVien}"
 //   - NurseType: "hanhchinh" | "phong_kham" | "can_lam_sang" (chỉ y tá)
+function normalizeStaffRole(value) {
+  const role =
+    value == null
+      ? ""
+      : String(value)
+          .trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/đ/g, "d")
+          .replace(/[\s-]+/g, "_");
+
+  if (["ky_thuat_vien", "kythuatvien", "ktv", "technician"].includes(role)) {
+    return "ky_thuat_vien";
+  }
+  if (["bac_si", "bacsi", "doctor"].includes(role)) {
+    return "bac_si";
+  }
+  if (["y_ta", "yta", "nurse"].includes(role)) {
+    return "y_ta";
+  }
+  if (["admin", "quan_tri_vien", "quantrivien"].includes(role)) {
+    return "admin";
+  }
+
+  return role;
+}
+
 export async function initStaffRealtime({
     staffId,
     rooms = [],
@@ -298,15 +377,23 @@ export async function initStaffRealtime({
     nurseType, // "hanhchinh" | "phong_kham" | "can_lam_sang" (chỉ y tá)
   } = {}) {
   try {
+    const normalizedStaffRole = normalizeStaffRole(staffRole);
+
       // ===== JOIN ROLE GROUPS =====
     // Dashboard / KPI & nhiều realtime khác đang bắn cho:
     //   - role:bac_si
     //   - role:y_ta
-    if (staffRole === "bac_si") {
+    if (normalizedStaffRole === "bac_si") {
+      _joinedRoles.add("bac_si");
       await invokeSafe("JoinRoleAsync", "bac_si");
-    } else if (staffRole === "ky_thuat_vien" || staffRole === "ktv") {
+    } else if (normalizedStaffRole === "ky_thuat_vien") {
+      _joinedRoles.add("ky_thuat_vien");
       await invokeSafe("JoinRoleAsync", "ky_thuat_vien");
-    } else if (staffRole === "y_ta") {
+    } else if (normalizedStaffRole === "admin") {
+      _joinedRoles.add("admin");
+      await invokeSafe("JoinRoleAsync", "admin");
+    } else if (normalizedStaffRole === "y_ta") {
+      _joinedRoles.add("y_ta");
       await invokeSafe("JoinRoleAsync", "y_ta");
 
       // ===== JOIN NURSE TYPE GROUP (CHỈ Y TÁ) =====
@@ -320,18 +407,33 @@ export async function initStaffRealtime({
       // Nếu FE chưa phân loại được nhân sự, join cả hai để đảm bảo nhận đủ realtime
       await invokeSafe("JoinRoleAsync", "bac_si");
       await invokeSafe("JoinRoleAsync", "y_ta");
+      await invokeSafe("JoinRoleAsync", "ky_thuat_vien");
+      await invokeSafe("JoinRoleAsync", "admin");
+      _joinedRoles.add("bac_si");
+      _joinedRoles.add("y_ta");
+      _joinedRoles.add("ky_thuat_vien");
+      _joinedRoles.add("admin");
     }
 
     // ===== JOIN USER GROUPS =====
     // NotificationService dùng loaiNguoiNhan "nhan_vien_y_te"  (tuỳ lúc) "bac_si"
     if (staffId) {
+      _joinedUsers.add(`nhan_vien_y_te::${staffId}`);
+      _joinedUsers.add(`bac_si::${staffId}`);
+      _joinedUsers.add(`y_ta::${staffId}`);
+      _joinedUsers.add(`ky_thuat_vien::${staffId}`);
+      _joinedUsers.add(`admin::${staffId}`);
       await invokeSafe("JoinUserAsync", "nhan_vien_y_te", staffId);
       await invokeSafe("JoinUserAsync", "bac_si", staffId);
+      await invokeSafe("JoinUserAsync", "y_ta", staffId);
+      await invokeSafe("JoinUserAsync", "ky_thuat_vien", staffId);
+      await invokeSafe("JoinUserAsync", "admin", staffId);
     }
 
     // nếu truyền kèm danh sách phòng, join luôn hàng đợi các phòng đó
     for (const maPhong of rooms) {
       if (maPhong) {
+        _joinedRooms.add(maPhong);
         await invokeSafe("JoinRoomAsync", maPhong);
       }
     }
@@ -344,11 +446,13 @@ export async function initStaffRealtime({
 // Join / Leave một phòng (Queue, Clinical, CLS...)
 export async function joinRoom(maPhong) {
   if (!maPhong) return;
+  _joinedRooms.add(maPhong);
   return invokeSafe("JoinRoomAsync", maPhong);
 }
 
 export async function leaveRoom(maPhong) {
   if (!maPhong) return;
+  _joinedRooms.delete(maPhong);
   return invokeSafe("LeaveRoomAsync", maPhong);
 }
 

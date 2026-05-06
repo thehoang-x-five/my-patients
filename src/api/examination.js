@@ -1,6 +1,7 @@
 // src/api/examination.js
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { http } from "./http.js";
+import { toLocalHms, toLocalYmd } from "../utils/dateLocal.js";
 
 /**
  * Lưu ý:
@@ -146,11 +147,11 @@ export async function createClinicalExam(payload = {}) {
 
   const now = new Date();
   const ngayLap =
-    examDate || payload.NgayLap || now.toISOString().slice(0, 10);
+    examDate || payload.NgayLap || toLocalYmd(now);
   const gioLap =
     examTime ||
     payload.GioLap ||
-    now.toISOString().slice(11, 19);
+    toLocalHms(now);
 
   const body = {
     // Bắt buộc

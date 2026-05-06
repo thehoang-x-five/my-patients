@@ -1,6 +1,7 @@
 // src/components/reports/ReportFilterPopover.jsx
 import React from "react";
 import FilterPopoverFooter from "../ui/FilterPopoverFooter.jsx";
+import { toLocalYmd } from "../../utils/dateLocal.js";
 
 const PERIODS = [
   { value: "mtd", label: "Tháng này" },
@@ -35,8 +36,8 @@ function computeRangeForPeriod(value) {
   }
 
   return {
-    from: from.toISOString().slice(0, 10),
-    to: today.toISOString().slice(0, 10),
+    from: toLocalYmd(from),
+    to: toLocalYmd(today),
   };
 }
 

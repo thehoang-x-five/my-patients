@@ -1,6 +1,7 @@
 // /src/components/notifications/NotificationDetailModal.jsx
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { getNotificationTypeLabel } from "../../utils/notificationTypes.js";
 
 export default function NotificationDetailModal({ open, item, onClose }) {
   if (!open || !item) return null;
@@ -19,6 +20,7 @@ export default function NotificationDetailModal({ open, item, onClose }) {
 
   // Sử dụng khai báo links từ File 1 để chuẩn hóa
   const links = Array.isArray(item.links) ? item.links : [];
+  const typeLabel = getNotificationTypeLabel(item.type);
 
   return (
     <AnimatePresence>
@@ -44,7 +46,7 @@ export default function NotificationDetailModal({ open, item, onClose }) {
             <header className="flex items-center justify-between border-b border-violet-100 bg-gradient-to-r from-violet-50 via-fuchsia-50 to-rose-50 px-5 py-3">
               <div className="space-y-0.5">
                 <div className="text-xs font-semibold uppercase tracking-wide text-violet-600">
-                  Thông báo / {item.type || "khác"}
+                  Thông báo / {typeLabel}
                 </div>
                 <h2 className="text-sm font-bold text-slate-900">
                   {item.title || "(Không có tiêu đề)"}

@@ -4,9 +4,14 @@ import { motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 
 export default function HistoryTable({ tab, rows, onEye, stretch = true, highlightId }) {
+  const highlightKey = String(highlightId || "").trim().toLowerCase();
+  const matchesHighlight = (...values) =>
+    !!highlightKey &&
+    values.some((value) => String(value || "").trim().toLowerCase() === highlightKey);
+
   const wrapperCls = stretch
-    ? "flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-none p-4 pt-0 pb-0 mt-2"
-    : "overflow-x-auto overflow-y-auto scrollbar-none p-4";
+    ? "flex-1 min-h-0 overflow-x-hidden overflow-y-auto scrollbar-none p-4 pt-0 pb-0 mt-2"
+    : "overflow-x-hidden overflow-y-auto scrollbar-none p-4";
 
   const Thead = ({ children }) => (
     <thead
@@ -23,9 +28,8 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
 
   const Th = ({ children, first, last }) => (
     <th
-      className={`px-3 py-2 whitespace-nowrap ${
-        first ? "rounded-tl-xl" : ""
-      } ${last ? "rounded-tr-xl text-right" : ""}`}
+      className={`px-3 py-2 whitespace-nowrap ${first ? "rounded-tl-xl" : ""
+        } ${last ? "rounded-tr-xl text-right" : ""}`}
     >
       {children}
     </th>
@@ -33,11 +37,9 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
 
   const Td = ({ children, first, last, right }) => (
     <td
-      className={`px-3 py-2 align-top text-[13px] text-slate-700 group-hover:bg-white/60 ${
-        first ? "whitespace-nowrap" : ""
-      } ${last ? "text-right whitespace-nowrap" : ""} ${
-        right ? "text-right" : ""
-      }`}
+      className={`px-3 py-2 align-top text-[13px] text-slate-700 group-hover:bg-white/60 ${first ? "whitespace-nowrap" : ""
+        } ${last ? "text-right whitespace-nowrap" : ""} ${right ? "text-right" : ""
+        }`}
     >
       {children}
     </td>
@@ -215,11 +217,42 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
     r.maBenhNhan ||
     r.MaBenhNhan ||
     "—";
+  const VisitColGroup = () => (
+    <colgroup>
+      <col className="w-[7%]" />
+      <col className="w-[5%]" />
+      <col className="w-[10%]" />
+      <col className="w-[10%]" />
+      <col className="w-[9%]" />
+      <col className="w-[9%]" />
+      <col className="w-[8%]" />
+      <col className="w-[8%]" />
+      <col className="w-[10%]" />
+      <col className="w-[16%]" />
+      <col className="w-[8%]" />
+    </colgroup>
+  );
+
+  const TxnColGroup = () => (
+    <colgroup>
+      <col className="w-[7%]" />
+      <col className="w-[5%]" />
+      <col className="w-[9%]" />
+      <col className="w-[14%]" />
+      <col className="w-[10%]" />
+      <col className="w-[22%]" />
+      <col className="w-[9%]" />
+      <col className="w-[9%]" />
+      <col className="w-[9%]" />
+      <col className="w-[6%]" />
+    </colgroup>
+  );
 
   return (
     <div className={wrapperCls}>
       {tab === "visits" ? (
-        <table className="min-w-full ">
+        <table className="w-full table-fixed">
+          <VisitColGroup />
           <Thead>
             <tr>
               <Th first>Ngày</Th>
@@ -230,7 +263,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
               <Th>Khoa/Phòng</Th>
               <Th>Loại lượt</Th>
               <Th>Trạng thái</Th>
-              <Th>Bác sĩ</Th>
+              <Th>BS/KTV</Th>
               <Th>Ghi chú</Th>
               <Th last>Chi tiết</Th>
             </tr>
@@ -238,42 +271,53 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
           <tbody>
             {rows.map((r, i) => {
               const visitCode = getVisitCode(r);
-              const isHighlight = highlightId && (visitCode === highlightId || r.id === highlightId);
+              const isHighlight = matchesHighlight(
+                visitCode,
+                r.id,
+                r.examId,
+                r.clsId,
+                r.rxId,
+                r.finalDiagnosisId
+              );
               return (
-              <Row
-                key={`${visitCode}-${i}`}
-                i={i}
-                isHighlighted={isHighlight}
-                dataHighlightId={visitCode}
-              >
-                <Td first>
-                  <span className="inline-flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shadow-[0_0_0_3px_rgba(56,189,248,.25)]" />
-                    {formatDate(r.date)}
-                  </span>
-                </Td>
-                <Td>{formatTime(r.date)}</Td>
-                <Td>{getVisitCode(r)}</Td>
-                <Td>{getPatientCode(r)}</Td>
-                <Td>{r.name || r.ptName || "—"}</Td>
-                <Td>{r.dept || "—"}</Td>
-                <Td>{renderVisitTypeChip(r)}</Td>
-                <Td>{renderVisitStatusChip(r)}</Td>
-                <Td>{r.doctor || "—"}</Td>
-                <Td>
-                  <span className="text-slate-600">{r.note || "—"}</span>
-                </Td>
-                <Td last>
-                  <Button
-                    className="!px-2 hover:-translate-y-px transition"
-                    aria-label="Chi tiết"
-                    onClick={() => onEye(r, "visit")}
-                    title="Xem chi tiết"
-                  >
-                    👁
-                  </Button>
-                </Td>
-              </Row>
+                <Row
+                  key={`${visitCode}-${i}`}
+                  i={i}
+                  isHighlighted={isHighlight}
+                  dataHighlightId={isHighlight ? highlightId : visitCode}
+                >
+                  <Td first>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shadow-[0_0_0_3px_rgba(56,189,248,.25)]" />
+                      {formatDate(r.date)}
+                    </span>
+                  </Td>
+                  <Td>{formatTime(r.date)}</Td>
+                  <Td>{getVisitCode(r)}</Td>
+                  <Td>{getPatientCode(r)}</Td>
+                  <Td>{r.name || r.ptName || "—"}</Td>
+                  <Td>{r.dept || "—"}</Td>
+                  <Td>{renderVisitTypeChip(r)}</Td>
+                  <Td>{renderVisitStatusChip(r)}</Td>
+                  <Td>{r.doctor || r.technician || "—"}</Td>
+                  <Td>
+                    <span className="block whitespace-normal break-words text-slate-600" title={r.note || ""}>
+                      {r.note || "—"}
+                    </span>
+                  </Td>
+                  <Td last>
+                    <div className="flex justify-end">
+                      <Button
+                        className="!px-2 hover:-translate-y-px transition"
+                        aria-label="Chi tiết"
+                        onClick={() => onEye(r, "visit")}
+                        title="Xem chi tiết"
+                      >
+                        👁
+                      </Button>
+                    </div>
+                  </Td>
+                </Row>
               );
             })}
             {!rows.length && (
@@ -289,7 +333,9 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
           </tbody>
         </table>
       ) : (
-        <table className="min-w-full">
+
+        <table className="w-full table-fixed">
+          <TxnColGroup />
           <Thead>
             <tr>
               <Th first>Ngày</Th>
@@ -307,45 +353,55 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
           <tbody>
             {rows.map((r, i) => {
               const txnCode = r.invoiceId || r.id;
-              const isHighlight = highlightId && txnCode === highlightId;
+              const isHighlight = matchesHighlight(
+                txnCode,
+                r.id,
+                r.examId,
+                r.clsId,
+                r.rxId
+              );
               return (
-              <Row
-                key={`${txnCode}-${i}`}
-                i={i}
-                isHighlighted={isHighlight}
-                dataHighlightId={txnCode}
-              >
-                <Td first>
-                  <span className="inline-flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_0_3px_rgba(6,182,212,.25)]" />
-                    {formatDate(r.date)}
-                  </span>
-                </Td>
-                <Td>{formatTime(r.date)}</Td>
-                <Td>{r.id || r.ptId || "—"}</Td>
-                <Td>{r.name || r.ptName || "—"}</Td>
-                <Td>{renderKindChip(r.kind || r.type)}</Td>
-                <Td>
-                  <span className="text-slate-600 max-w-[250px] break-words line-clamp-2">{r.content || "—"}</span>
-                </Td>
-                <Td right>
-                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
-                    {Number(r.amount ?? r.money ?? 0).toLocaleString("vi-VN")}đ
-                  </span>
-                </Td>
-                <Td>{renderStatusChip(r.status)}</Td>
-                <Td>{r.invoiceId || "—"}</Td>
-                <Td last>
-                  <Button
-                    className="!px-2 hover:-translate-y-px transition"
-                    aria-label="Chi tiết"
-                    onClick={() => onEye(r, "txn")}
-                    title="Xem chi tiết"
-                  >
-                    👁
-                  </Button>
-                </Td>
-              </Row>
+                <Row
+                  key={`${txnCode}-${i}`}
+                  i={i}
+                  isHighlighted={isHighlight}
+                  dataHighlightId={isHighlight ? highlightId : txnCode}
+                >
+                  <Td first>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_0_3px_rgba(6,182,212,.25)]" />
+                      {formatDate(r.date)}
+                    </span>
+                  </Td>
+                  <Td>{formatTime(r.date)}</Td>
+                  <Td>{r.id || r.ptId || "—"}</Td>
+                  <Td>{r.name || r.ptName || "—"}</Td>
+                  <Td>{renderKindChip(r.kind || r.type)}</Td>
+                  <Td>
+                    <span className="block whitespace-normal break-words text-slate-600" title={r.content || ""}>
+                      {r.content || "—"}
+                    </span>
+                  </Td>
+                  <Td right>
+                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                      {Number(r.amount ?? r.money ?? 0).toLocaleString("vi-VN")}đ
+                    </span>
+                  </Td>
+                  <Td>{renderStatusChip(r.status)}</Td>
+                  <Td>{r.invoiceId || "—"}</Td>
+                  <Td last>
+                    <div className="flex justify-end">
+                      <Button
+                        className="!px-2 hover:-translate-y-px transition"
+                        aria-label="Chi tiết"
+                        onClick={() => onEye(r, "txn")}
+                        title="Xem chi tiết"
+                      >
+                        👁
+                      </Button>
+                    </div>
+                  </Td>
+                </Row>
               );
             })}
             {!rows.length && (
@@ -354,7 +410,7 @@ export default function HistoryTable({ tab, rows, onEye, stretch = true, highlig
                   colSpan={10}
                   className="px-3 py-10 text-center text-slate-500"
                 >
-                 Không có bản ghi phù hợp.
+                  Không có bản ghi phù hợp.
                 </td>
               </tr>
             )}

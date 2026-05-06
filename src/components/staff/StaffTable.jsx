@@ -56,6 +56,23 @@ function getDisplayNurseType(value) {
   return formatNurseTypeLabel(value, "—");
 }
 
+function getWorkStatusCode(item = {}) {
+  const raw = String(item.trangThaiCongTac || item.TrangThaiCongTac || "").trim();
+  if (raw) return raw;
+
+  const presence = String(item.status || "").trim().toLowerCase();
+  if (presence === "online") return "dang_cong_tac";
+  if (presence === "pause") return "tam_nghi";
+  if (presence === "offline") return "nghi_viec";
+  return presence || "dang_cong_tac";
+}
+
+const WORK_STATUS_ACTIONS = [
+  { value: "dang_cong_tac", label: "Đang công tác", className: "text-emerald-700 hover:bg-emerald-50" },
+  { value: "tam_nghi", label: "Tạm nghỉ", className: "text-amber-700 hover:bg-amber-50" },
+  { value: "nghi_viec", label: "Nghỉ việc", className: "text-red-700 hover:bg-red-50" },
+];
+
 function ActionMenu({
   item,
   onEdit,
@@ -64,12 +81,16 @@ function ActionMenu({
   onResetPw,
   onDetail,
   onSchedule,
+  onWorkStatusChange,
 }) {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const buttonRef = useRef(null);
   const isLocked =
-    item.trangThai === "khoa" || item.trangThaiTaiKhoan === "khoa";
+    item.trangThai === "khoa" ||
+    item.trangThaiTaiKhoan === "khoa" ||
+    item.statusAccount === "khoa";
+  const currentWorkStatus = getWorkStatusCode(item);
 
   const updateMenuPosition = () => {
     const rect = buttonRef.current?.getBoundingClientRect();
@@ -83,7 +104,7 @@ function ActionMenu({
 
     setMenuPos({
       left: Math.max(12, Math.min(desiredLeft, viewportWidth - menuWidth - 12)),
-      top: Math.max(12, Math.min(desiredTop, viewportHeight - 12 - 244)),
+      top: Math.max(12, Math.min(desiredTop, viewportHeight - 12 - 340)),
     });
   };
 
@@ -159,6 +180,26 @@ function ActionMenu({
               <span>Lịch làm</span>
             </button>
           ) : null}
+          {onWorkStatusChange ? (
+            <div className="my-1 border-t border-slate-100 pt-1">
+              <div className="px-3 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Trạng thái làm việc
+              </div>
+              {WORK_STATUS_ACTIONS.filter((action) => action.value !== currentWorkStatus).map((action) => (
+                <button
+                  key={action.value}
+                  type="button"
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] ${action.className}`}
+                  onClick={() => {
+                    onWorkStatusChange?.(item, action.value);
+                    setOpen(false);
+                  }}
+                >
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           {isLocked ? (
             <button
               type="button"
@@ -226,6 +267,7 @@ export default function StaffTable({
   onUnlock,
   onResetPw,
   onSchedule,
+  onWorkStatusChange,
 }) {
   if (!items.length) {
     return (
@@ -268,7 +310,7 @@ export default function StaffTable({
               </>
             )}
             <th className="px-3 py-2.5 font-semibold">
-              {showAdminAccountColumns ? "Trạng thái hồ sơ" : "TT công tác"}
+              TT công tác
             </th>
             {showAuth && <th className="w-12 px-3 py-2.5 font-semibold" />}
           </tr>
@@ -374,6 +416,7 @@ export default function StaffTable({
                     onLock={onLock}
                     onUnlock={onUnlock}
                     onResetPw={onResetPw}
+                    onWorkStatusChange={onWorkStatusChange}
                   />
                 </td>
               )}

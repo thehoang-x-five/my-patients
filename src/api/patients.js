@@ -370,15 +370,37 @@ function normalizePatientDetail(dto) {
     date: v.Date || v.date || null,
     dateLabel: v.Date || v.date || null,
     dept: capitalizeWords(v.Dept || v.dept || ""),
-    doctor: capitalizeWords(v.Doctor || v.doctor || ""),
+    doctor: capitalizeWords(
+      v.Doctor ||
+        v.doctor ||
+        v.TenKyThuatVienThucHien ||
+        v.tenKyThuatVienThucHien ||
+        v.TenKTVPhuTrach ||
+        v.tenKTVPhuTrach ||
+        ""
+    ),
+    technician: capitalizeWords(
+      v.TenKyThuatVienThucHien ||
+        v.tenKyThuatVienThucHien ||
+        v.TenKTVPhuTrach ||
+        v.tenKTVPhuTrach ||
+        ""
+    ),
     note: v.Note || v.note || "",
     type: v.Type || v.type || "",
     status: v.TrangThai || v.trangThai || "",
     typeLabel: mapVisitTypeLabel(v.Type || v.type || v.TypeName || v.typeName),
-    by: v.By || v.by || "",
+    by:
+      v.By ||
+      v.by ||
+      v.TenKyThuatVienThucHien ||
+      v.tenKyThuatVienThucHien ||
+      "",
     ref: v.Ref || v.ref || "",
     maLuotKham: v.MaLuotKham || v.maLuotKham || "",
     maPhieuKham: v.MaPhieuKham || v.maPhieuKham || "",
+    maKyThuatVienThucHien:
+      v.MaKyThuatVienThucHien || v.maKyThuatVienThucHien || "",
   }));
 
   const transactions = transactionsRaw.map((t) => ({

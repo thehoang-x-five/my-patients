@@ -10,6 +10,7 @@ import ClinicalAnalytics from "../components/reports/ClinicalAnalytics.jsx";
 import { useReportsOverview } from "../api/reports.js";
 import { useAuthStore } from "../components/stores/appStore.js";
 import { canViewRevenueReport } from "../utils/permissions.js";
+import { toLocalYmd } from "../utils/dateLocal.js";
 import useViewportVH from "../hooks/useViewportVH";
 import useMediaQuery from "../hooks/useMediaQuery";
 
@@ -83,7 +84,7 @@ export default function Reports() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `reports_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `reports_${toLocalYmd(new Date())}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }

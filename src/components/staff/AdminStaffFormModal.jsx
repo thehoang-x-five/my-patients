@@ -63,7 +63,14 @@ function normalizeForm(initial, isEdit) {
   if (!initial) return EMPTY_FORM;
 
   return {
-    tenDangNhap: initial.tenDangNhap || initial.username || "",
+    tenDangNhap:
+      initial.tenDangNhap ||
+      initial.username ||
+      initial.raw?.TenDangNhap ||
+      initial.raw?.tenDangNhap ||
+      initial._raw?.TenDangNhap ||
+      initial._raw?.tenDangNhap ||
+      "",
     matKhau: "",
     hoTen: initial.hoTen || initial.name || "",
     vaiTro: String(initial.vaiTro || initial.role || "y_ta").toLowerCase(),
@@ -76,12 +83,12 @@ function normalizeForm(initial, isEdit) {
     soNamKinhNghiem:
       Number(initial.soNamKinhNghiem ?? initial.experience ?? 0) || 0,
     maKhoa: initial.maKhoa || initial.departmentId || "",
-    ...(isEdit ? {} : { tenDangNhap: initial.tenDangNhap || "" }),
   };
 }
 
 function submitShape(form, isEdit) {
   const base = {
+    TenDangNhap: form.tenDangNhap.trim(),
     HoTen: form.hoTen.trim(),
     VaiTro: form.vaiTro,
     ChucVu: (form.chucVu || form.vaiTro).trim(),
@@ -96,11 +103,7 @@ function submitShape(form, isEdit) {
 
   if (isEdit) return base;
 
-  return {
-    ...base,
-    TenDangNhap: form.tenDangNhap.trim(),
-    MatKhau: form.matKhau,
-  };
+  return { ...base, MatKhau: form.matKhau };
 }
 
 export default function AdminStaffFormModal({
@@ -203,17 +206,17 @@ export default function AdminStaffFormModal({
             </div>
 
             <div className="space-y-4 px-6 py-5">
-              {!isEdit && (
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Field label="Tên đăng nhập" required>
-                    <input
-                      required
-                      className="input"
-                      value={form.tenDangNhap}
-                      onChange={(e) => updateField("tenDangNhap", e.target.value)}
-                      placeholder="vd: nguyenvana"
-                    />
-                  </Field>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Tên đăng nhập" required>
+                  <input
+                    required
+                    className="input"
+                    value={form.tenDangNhap}
+                    onChange={(e) => updateField("tenDangNhap", e.target.value)}
+                    placeholder="vd: nguyenvana"
+                  />
+                </Field>
+                {!isEdit ? (
                   <Field label="Mật khẩu" required>
                     <input
                       required
@@ -224,8 +227,12 @@ export default function AdminStaffFormModal({
                       placeholder="Tối thiểu 6 ký tự"
                     />
                   </Field>
-                </div>
-              )}
+                ) : (
+                  <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500 ring-1 ring-slate-200">
+                    Mật khẩu đổi bằng chức năng reset riêng.
+                  </div>
+                )}
+              </div>
 
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Họ tên" required>

@@ -5,7 +5,7 @@ import { useUI } from "../../context/UIContext.jsx";
 
 const EMPTY_FORM = {
   type: "he_thong",
-  priority: "thuong",
+  priority: "normal",
   target: "nhan_vien_y_te",
   title: "",
   message: "",
@@ -88,7 +88,7 @@ export default function AdminNotificationComposeModal({
   const priorityOptions = useMemo(
     () => [
       {
-        value: "thuong",
+        value: "normal",
         label: lang === "en" ? "Normal" : "Thường",
       },
       {

@@ -50,11 +50,26 @@ function normalizeAppt(raw) {
   if (!raw) return null;
 
   const id = raw.ma_lich_hen || raw.MaLichHen || raw.id;
+  const patientCode =
+    raw.ma_benh_nhan ||
+    raw.MaBenhNhan ||
+    raw.maBenhNhan ||
+    raw.patientCode ||
+    raw.PatientCode ||
+    raw.patientId ||
+    raw.PatientId ||
+    raw.maBN ||
+    raw.MaBN ||
+    raw.ma_bn ||
+    raw.patient_code ||
+    raw.code ||
+    null;
 
   const date = toYMD(raw.ngay_hen || raw.NgayHen || raw.date);
   const time = toHM(raw.gio_hen || raw.GioHen || raw.time || raw.gio);
 
   return {
+    _raw: raw,
     id,
     // Ngày & giờ (đã chuẩn hoá)
     date,
@@ -69,13 +84,9 @@ function normalizeAppt(raw) {
         : 30,
 
     // Bệnh nhân
-    patientCode:
-      raw.ma_benh_nhan ||
-      raw.MaBenhNhan ||
-      raw.patientCode ||
-      raw.code ||
-      raw.patient_code ||
-      null,
+    patientCode,
+    MaBenhNhan: patientCode,
+    maBenhNhan: patientCode,
     patientName:
       raw.ten_benh_nhan ||
       raw.TenBenhNhan ||
@@ -83,7 +94,14 @@ function normalizeAppt(raw) {
       raw.patient ||
       raw.patient_name ||
       "",
-    phone: raw.so_dien_thoai || raw.SoDienThoai || raw.phone || "",
+    phone:
+      raw.so_dien_thoai ||
+      raw.SoDienThoai ||
+      raw.soDienThoai ||
+      raw.DienThoai ||
+      raw.dienThoai ||
+      raw.phone ||
+      "",
 
     // Loại hẹn
     apptType: raw.loai_hen || raw.LoaiHen || raw.apptType || raw.type || "Khám mới",

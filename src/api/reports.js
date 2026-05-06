@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { http } from "./http.js";
+import { toLocalYmd } from "../utils/dateLocal.js";
 
 const EMPTY = {
   kpi: {
@@ -138,7 +139,7 @@ function normalizeOverviewDto(dto) {
         const rawDate = i.Ngay || i.ngay || i.date;
         let date = "";
         if (rawDate instanceof Date) {
-          date = rawDate.toISOString().slice(0, 10);
+          date = toLocalYmd(rawDate);
         } else if (typeof rawDate === "string") {
           date = rawDate.slice(0, 10);
         }
@@ -202,8 +203,8 @@ function buildDateRange({ period, from, to }) {
   fromDate.setHours(0, 0, 0, 0);
   toDate.setHours(0, 0, 0, 0);
 
-  const fromStr = fromDate.toISOString().slice(0, 10);
-  const toStr = toDate.toISOString().slice(0, 10);
+  const fromStr = toLocalYmd(fromDate);
+  const toStr = toLocalYmd(toDate);
 
   const days =
     (toDate.getTime() - fromDate.getTime()) / 86_400_000 + 1 || 1;

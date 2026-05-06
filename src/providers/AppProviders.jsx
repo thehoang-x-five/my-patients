@@ -34,6 +34,8 @@ const GLOBAL_REALTIME_EVENTS = [
   "InvoiceChanged",
   "PrescriptionCreated",
   "PrescriptionStatusUpdated",
+  "NotificationCreated",
+  "NotificationUpdated",
 ];
 
 const GLOBAL_QUERY_KEYS = [
@@ -48,6 +50,8 @@ const GLOBAL_QUERY_KEYS = [
   ["medical-history"],
   ["invoices"],
   ["pharmacy", "rxOrders"],
+  ["notifications"],
+  ["notification-search"],
   ["departments"],
   ["department-rooms"],
   ["dashboard"],
@@ -61,6 +65,22 @@ function refreshRealtimeCaches() {
       refetchType: "active",
     });
   }
+
+  queryClient.refetchQueries({
+    queryKey: ["queue"],
+    exact: false,
+    type: "active",
+  });
+  queryClient.refetchQueries({
+    queryKey: ["patients"],
+    exact: false,
+    type: "active",
+  });
+  queryClient.refetchQueries({
+    queryKey: ["patient"],
+    exact: false,
+    type: "active",
+  });
 }
 
 export default function AppProviders({ children }) {

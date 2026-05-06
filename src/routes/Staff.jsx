@@ -48,6 +48,7 @@ import {
   useAdminUsers,
   useCreateUser,
   useUpdateUser,
+  useUpdateUserStatus,
   useLockUnlockAccount,
   useResetPassword,
 } from "../api/admin.js";
@@ -59,6 +60,12 @@ import {
   canResetStaffPassword,
   isAdmin as checkIsAdmin,
 } from "../utils/permissions.js";
+
+const WORK_STATUS_LABELS = {
+  dang_cong_tac: "đang công tác",
+  tam_nghi: "tạm nghỉ",
+  nghi_viec: "nghỉ việc",
+};
 
 export default function Staff() {
   const TABLE_PAGE_SIZE = 15;
@@ -119,6 +126,7 @@ export default function Staff() {
   const [showForm, setShowForm] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [lockTarget, setLockTarget] = useState(null);
+  const [workStatusTarget, setWorkStatusTarget] = useState(null);
   const [resetPasswordTarget, setResetPasswordTarget] = useState(null);
 
   const openDetail = (item) => {
@@ -361,6 +369,7 @@ export default function Staff() {
   // ====== ADMIN ACTIONS (mutations) ======
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
+  const updateUserStatus = useUpdateUserStatus();
   const lockUnlock = useLockUnlockAccount();
   const resetPw = useResetPassword();
   const updateStaffDutyWeek = useUpdateStaffDutyWeek();
@@ -439,6 +448,31 @@ export default function Staff() {
     },
     [lockUnlock]
   );
+
+  const handleWorkStatusChange = useCallback((item, nextStatus) => {
+    if (!item || !nextStatus) return;
+    setWorkStatusTarget({ item, nextStatus });
+  }, []);
+
+  const confirmWorkStatusChange = useCallback(() => {
+    const item = workStatusTarget?.item;
+    const nextStatus = workStatusTarget?.nextStatus;
+    if (!item || !nextStatus) return;
+
+    updateUserStatus.mutate(
+      {
+        id: item.id || item.maNhanVien,
+        data: { TrangThaiCongTac: nextStatus },
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Đã chuyển trạng thái làm việc sang ${WORK_STATUS_LABELS[nextStatus] || nextStatus}`);
+          setWorkStatusTarget(null);
+        },
+        onError: (error) => toast.error(error?.message || "Không thể cập nhật trạng thái làm việc"),
+      }
+    );
+  }, [updateUserStatus, workStatusTarget]);
 
   const handleResetPw = useCallback(
     (item) => {
@@ -603,6 +637,9 @@ export default function Staff() {
                     onUnlock={
                       canLockUnlockStaff(user) ? handleUnlock : undefined
                     }
+                    onWorkStatusChange={
+                      userIsAdmin ? handleWorkStatusChange : undefined
+                    }
                     onResetPw={
                       canResetStaffPassword(user) ? handleResetPw : undefined
                     }
@@ -696,6 +733,22 @@ export default function Staff() {
         onSubmit={editUser ? handleEdit : handleCreate}
         isPending={createUser.isPending || updateUser.isPending}
         departments={departments}
+      />
+
+      <ConfirmModal
+        open={!!workStatusTarget}
+        onClose={() => setWorkStatusTarget(null)}
+        onConfirm={confirmWorkStatusChange}
+        title="Cập nhật trạng thái làm việc"
+        message={
+          workStatusTarget
+            ? `Chuyển "${workStatusTarget.item?.name || workStatusTarget.item?.hoTen || workStatusTarget.item?.username}" sang trạng thái ${WORK_STATUS_LABELS[workStatusTarget.nextStatus] || workStatusTarget.nextStatus}?`
+            : "Cập nhật trạng thái làm việc?"
+        }
+        confirmText="Cập nhật"
+        cancelText="Hủy"
+        tone={workStatusTarget?.nextStatus === "nghi_viec" ? "danger" : "warning"}
+        isPending={updateUserStatus.isPending}
       />
 
       <ConfirmModal

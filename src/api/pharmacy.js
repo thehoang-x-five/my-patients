@@ -4,6 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { get, post, put } from "./http.js";
 import { on } from "./realtime.js";
+import { toLocalYmd } from "../utils/dateLocal.js";
 
 /** ================== HELPERS ================== */
 
@@ -18,7 +19,7 @@ function toNumber(...vals) {
 
 function toDateOnly(raw) {
   if (!raw) return "";
-  if (raw instanceof Date) return raw.toISOString().slice(0, 10);
+  if (raw instanceof Date) return toLocalYmd(raw);
 
   const s = String(raw);
   // Chuẩn ISO hoặc yyyy-MM-dd → cắt 10 ký tự đầu
@@ -323,7 +324,6 @@ export async function searchRxOrders({ keyword, status, fromDate, toDate, page =
   if (keyword) params.append("keyword", keyword);
   if (status && status !== "all" && status !== "Tất cả") {
     const statusMap = {
-      "Đã kê": "da_ke",
       "Chờ phát": "cho_phat",
       "Đã phát": "da_phat",
       "Đã hủy": "da_huy",

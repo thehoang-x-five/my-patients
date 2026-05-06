@@ -25,6 +25,7 @@ import React, {
   } from "../api/notifications.js";
   import { useAuthStore } from "../components/stores/appStore.js";
   import { isAdmin as checkIsAdmin } from "../utils/permissions.js";
+  import { getPrimaryBackendTypeForFilterGroup } from "../utils/notificationTypes.js";
   
   import useViewportVH from "../hooks/useViewportVH";
   import useMediaQuery from "../hooks/useMediaQuery";
@@ -44,6 +45,8 @@ export default function Notifications() {
     const v = (p || "").toLowerCase().trim();
     if (v === "high" || v === "hight" || v === "cao") return "high";    // ưu tiên cao
     if (v === "normal" || v === "thuong") return "normal";              // ưu tiên thường
+    if (["trung_binh", "thong_thuong", "medium"].includes(v)) return "normal";
+    if (["uu_tien"].includes(v)) return "high";
     return "other";
   };
   // -------- URL state (tab + keyword) --------
@@ -79,23 +82,14 @@ export default function Notifications() {
   // Map frontend filter values sang backend values
   const mapTypeToBackend = (type) => {
     if (type === "all") return null;
-    const map = {
-      appointment: "lich_hen",
-      patient: "benh_nhan",
-      pharmacy: "nha_thuoc",
-      system: "he_thong",
-      result: "result",
-      reminder: "reminder",
-      billing: "thanh_toan",
-    };
-    return map[type] || null;
+    return getPrimaryBackendTypeForFilterGroup(type) || type;
   };
 
   const mapPriorityToBackend = (priority) => {
     if (priority === "all") return null;
     const map = {
       high: "cao",
-      normal: "thuong",
+      normal: "normal",
     };
     return map[priority] || null;
   };
@@ -117,8 +111,7 @@ export default function Notifications() {
       keyword: deferredKeyword || undefined,
       type: mapTypeToBackend(filters.type) || undefined,
       priority: mapPriorityToBackend(filters.priority) || undefined,
-      sortBy: "MucDoUuTien", // Sort by priority first
-      sortDirection: "asc", // High priority first (cao = 0, thuong = 1)
+      sortDirection: "desc",
     },
   });
   const systemQuery = useNotificationSearch(

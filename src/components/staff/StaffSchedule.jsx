@@ -1,10 +1,14 @@
-import React from "react";
+﻿import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import {
   formatDisplayText,
   formatRoleLabel,
 } from "../../utils/textFormatters.js";
+import {
+  ADMIN_NURSE_POSITION,
+  isAdministrativeNurseStaff,
+} from "../../utils/staffRoleUtils.js";
 
 const Backdrop = ({ open, onClick, children }) => (
   <AnimatePresence>
@@ -45,9 +49,9 @@ const normalizeShiftLabel = (shift) => {
   if (!shift) return null;
   const s = String(shift).trim();
   const lower = s.toLowerCase();
-  if (lower === "sang" || lower === "sáng") return "Sáng";
-  if (lower === "chieu" || lower === "chiều") return "Chiều";
-  if (lower === "toi" || lower === "tối") return "Tối";
+  if (lower === "sang" || lower === "sáng" || lower === "sÃ¡ng") return "Sáng";
+  if (lower === "chieu" || lower === "chiều" || lower === "chiá»u") return "Chiều";
+  if (lower === "toi" || lower === "tối" || lower === "tá»‘i") return "Tối";
   if (lower === "nghi" || lower === "nghỉ") return "Nghỉ";
   return s;
 };
@@ -85,15 +89,20 @@ export default function StaffSchedule({
   const isDoctor = rawRole === "bac_si" || rawRole === "doctor";
   const isTechnician =
     rawRole === "ky_thuat_vien" || rawRole === "technician";
+  const isAdminNurse = isAdministrativeNurseStaff(item, rawRole);
   const thirdColumnHeader = (isDoctor || isTechnician)
     ? "Trạng thái"
-    : "Phòng/Bàn";
+    : isAdminNurse
+      ? "Vị trí"
+      : "Phòng/Bàn";
 
   const modalTitle = isTechnician
     ? "Lịch làm CLS"
     : isDoctor
       ? "Lịch phòng khám"
-      : "Lịch làm & phòng trực";
+      : isAdminNurse
+        ? "Lịch làm tiếp nhận"
+        : "Lịch làm & phòng trực";
 
   const dutyByDay = {};
   if (Array.isArray(dutyRooms)) {
@@ -112,6 +121,17 @@ export default function StaffSchedule({
 
   const getDayData = (day) => {
     const duty = dutyByDay[day] || {};
+    const shiftRows = Array.isArray(duty.shifts)
+      ? duty.shifts.filter((s) => s?.shift || s?.caTruc)
+      : Array.isArray(duty.CaTrongNgay)
+        ? duty.CaTrongNgay.map((s) => ({
+          shift: s.CaTruc ?? s.caTruc,
+          gioBatDau: s.GioBatDau ?? s.gioBatDau,
+          gioKetThuc: s.GioKetThuc ?? s.gioKetThuc,
+          maPhong: s.MaPhong ?? s.maPhong,
+          tenPhong: s.TenPhong ?? s.tenPhong,
+        }))
+        : [];
     const shiftRaw =
       (schedule && schedule[day]) ??
       duty.shift ??
@@ -120,17 +140,47 @@ export default function StaffSchedule({
       duty.ca_truc ??
       null;
 
+    if (shiftRows.length > 0) {
+      const shiftDisplay = shiftRows
+        .map((row) =>
+          formatShift(
+            row.shift ?? row.caTruc,
+            row.gioBatDau ?? row.GioBatDau,
+            row.gioKetThuc ?? row.GioKetThuc
+          )
+        )
+        .filter(Boolean)
+        .join(" · ");
+      const roomNames = shiftRows
+        .map((row) => row.tenPhong ?? row.TenPhong ?? row.maPhong ?? row.MaPhong)
+        .filter(Boolean);
+
+      return {
+        shiftDisplay: shiftDisplay || "Nghỉ",
+        roomText: isAdminNurse
+          ? ADMIN_NURSE_POSITION
+          : (isDoctor || isTechnician)
+            ? "Làm việc"
+            : (Array.from(new Set(roomNames)).join(" · ") || "—"),
+      };
+    }
+
     const shiftDisplay = formatShift(
       shiftRaw,
       duty.gioBatDau ?? duty.GioBatDau,
       duty.gioKetThuc ?? duty.GioKetThuc
     );
 
-    if (isDoctor || isTechnician) {
+    if (isDoctor || isTechnician || isAdminNurse) {
       const label = normalizeShiftLabel(shiftRaw);
+      const displayShift = label ? shiftDisplay : "Nghỉ";
       return {
-        shiftDisplay,
-        roomText: !label || label === "Nghỉ" ? "Nghỉ" : "Làm việc",
+        shiftDisplay: displayShift,
+        roomText: isAdminNurse
+          ? ADMIN_NURSE_POSITION
+          : !label || label === "Nghỉ"
+            ? "Nghỉ"
+            : "Làm việc",
       };
     }
 
@@ -138,9 +188,9 @@ export default function StaffSchedule({
       shiftDisplay,
       roomText: formatDisplayText(
         duty.tenPhong ??
-          duty.tenPhongHoacBanHomNay ??
-          duty.TenPhong ??
-          duty.maPhong,
+        duty.tenPhongHoacBanHomNay ??
+        duty.TenPhong ??
+        duty.maPhong,
         "—"
       ),
     };

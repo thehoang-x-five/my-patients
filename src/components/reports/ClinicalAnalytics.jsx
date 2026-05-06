@@ -1,7 +1,7 @@
 // src/components/reports/ClinicalAnalytics.jsx
 // Tab "Phân tích Y khoa" — MongoDB Aggregation visualization
 // Tone: Teal/Cyan — đồng bộ với Reports (cyan) nhưng dùng teal nhấn mạnh
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -36,6 +36,38 @@ const PIE_COLORS = [
 ];
 
 /* ===================== CHART TOOLTIP ===================== */
+function formatAnalyticsLabel(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return "Không xác định";
+  return text
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^./, (ch) => ch.toLocaleUpperCase("vi-VN"));
+}
+
+function compactLabel(value = "", max = 26) {
+  const text = formatAnalyticsLabel(value);
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function DiseaseAxisTick({ x, y, payload }) {
+  const label = formatAnalyticsLabel(payload?.value);
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <title>{label}</title>
+      <text
+        x={-10}
+        y={0}
+        dy={4}
+        textAnchor="end"
+        className="fill-slate-600 text-[11px]"
+      >
+        {compactLabel(label, 24)}
+      </text>
+    </g>
+  );
+}
+
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
@@ -110,6 +142,27 @@ export default function ClinicalAnalytics({ period, from, to }) {
   const diseaseItems = Array.isArray(diseases) ? diseases : diseases?.items || [];
   const drugItems = Array.isArray(drugs) ? drugs : drugs?.items || [];
   const vitalItems = Array.isArray(vitals) ? vitals : vitals?.items || [];
+  const vitalSummary = useMemo(
+    () =>
+      vitalItems
+        .map((item) => {
+          const details = item.details ?? item.Details ?? [];
+          const displayDetails = Array.isArray(details)
+            ? details.map(formatAnalyticsLabel).filter(Boolean)
+            : [];
+          return {
+            name: formatAnalyticsLabel(
+              item.name ?? item.date ?? item.TestType ?? item.testType
+            ),
+            count: Number(item.count ?? item.Count ?? 0) || 0,
+            percentage: Number(item.percentage ?? item.Percentage ?? 0) || 0,
+            details: displayDetails,
+          };
+        })
+        .filter((item) => item.count > 0)
+        .sort((a, b) => b.count - a.count),
+    [vitalItems]
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -120,16 +173,18 @@ export default function ClinicalAnalytics({ period, from, to }) {
           {loadDiseases || !diseaseItems.length ? (
             <ChartPlaceholder loading={loadDiseases} message="Chưa có dữ liệu bệnh lý" />
           ) : (
-            <div className="w-full h-full min-h-[200px]">
+            <div className="w-full h-full min-h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={diseaseItems} layout="vertical" margin={{ left: 80, right: 16, top: 8, bottom: 8 }}>
+                <BarChart data={diseaseItems} layout="vertical" margin={{ left: 16, right: 16, top: 8, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis type="number" tick={{ fontSize: 11, fill: "#94a3b8" }} />
                   <YAxis
                     dataKey="name"
                     type="category"
-                    tick={{ fontSize: 11, fill: "#475569" }}
-                    width={75}
+                    tick={<DiseaseAxisTick />}
+                    tickLine={false}
+                    axisLine={{ stroke: "#cbd5e1" }}
+                    width={150}
                   />
                   <Tooltip content={<ChartTooltip />} />
                   <Bar dataKey="count" name="Số ca" barSize={18} radius={[0, 6, 6, 0]}>
@@ -187,9 +242,10 @@ export default function ClinicalAnalytics({ period, from, to }) {
           {loadVitals || !vitalItems.length ? (
             <ChartPlaceholder loading={loadVitals} message="Chưa có dữ liệu sinh hiệu" />
           ) : (
-            <div className="w-full h-full min-h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={vitalItems} margin={{ left: 8, right: 16, top: 8, bottom: 8 }}>
+            <div className="flex h-full min-h-[260px] flex-col gap-3">
+              <div className="min-h-[180px] flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={vitalItems} margin={{ left: 8, right: 16, top: 8, bottom: 8 }}>
                   <defs>
                     <linearGradient id="gVital" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#0d9488" stopOpacity={0.3} />
@@ -210,8 +266,40 @@ export default function ClinicalAnalytics({ period, from, to }) {
                     dot={{ r: 3, fill: "#0d9488" }}
                     activeDot={{ r: 5, strokeWidth: 2, stroke: "#fff" }}
                   />
-                </AreaChart>
-              </ResponsiveContainer>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {vitalSummary.map((item, index) => (
+                  <div
+                    key={`${item.name}-${index}`}
+                    className="rounded-lg border border-teal-100 bg-teal-50/70 px-3 py-2"
+                    title={item.name}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-semibold text-slate-700">
+                        {item.name}
+                      </p>
+                      <p className="shrink-0 text-sm font-bold tabular-nums text-teal-700">
+                        {item.count.toLocaleString("vi-VN")} ca
+                      </p>
+                    </div>
+                    {item.details.length ? (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {item.details.slice(0, 3).map((detail) => (
+                          <span
+                            key={detail}
+                            className="max-w-full truncate rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-teal-100"
+                            title={detail}
+                          >
+                            {detail}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </SectionCard>

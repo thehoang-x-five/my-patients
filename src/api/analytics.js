@@ -4,6 +4,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { get } from "./http.js";
+import { toLocalYmd } from "../utils/dateLocal.js";
 
 /** ===== API CALLS ===== */
 
@@ -15,7 +16,7 @@ function formatDate(value) {
   }
 
   try {
-    return new Date(value).toISOString().slice(0, 10);
+    return toLocalYmd(value);
   } catch {
     return undefined;
   }
@@ -107,12 +108,14 @@ function normalizeAbnormalStats(data = {}) {
     ? source.map((item) => {
         const name = item.TestType ?? item.testType ?? "khong_xac_dinh";
         const count = Number(item.Count ?? item.count ?? 0) || 0;
+        const details = item.Details ?? item.details ?? [];
 
         return {
           name,
           date: name,
           count,
           percentage: Number(item.Percentage ?? item.percentage ?? 0) || 0,
+          details: Array.isArray(details) ? details : [],
         };
       })
     : [];
@@ -128,6 +131,13 @@ function normalizeAbnormalStats(data = {}) {
 // BE: GET /api/analytics/abnormal-stats?fromDate=&toDate=
 export const fetchAbnormalStats = (params = {}) =>
   get("/analytics/abnormal-stats", { params: buildAnalyticsParams(params) }).then(
+    normalizeAbnormalStats
+  );
+
+// Sinh hiệu bất thường theo ngày
+// BE: GET /api/analytics/vital-anomalies?fromDate=&toDate=
+export const fetchVitalAnomalies = (params = {}) =>
+  get("/analytics/vital-anomalies", { params: buildAnalyticsParams(params) }).then(
     normalizeAbnormalStats
   );
 
@@ -151,6 +161,16 @@ export function useAbnormalStats(params = {}, options = {}) {
   return useQuery({
     queryKey: ["analytics", "abnormal-stats", params],
     queryFn: () => fetchAbnormalStats(params),
+    staleTime: 5 * 60_000,
+    retry: 1,
+    ...options,
+  });
+}
+
+export function useVitalAnomalies(params = {}, options = {}) {
+  return useQuery({
+    queryKey: ["analytics", "vital-anomalies", params],
+    queryFn: () => fetchVitalAnomalies(params),
     staleTime: 5 * 60_000,
     retry: 1,
     ...options,
@@ -182,4 +202,3 @@ export function usePopularDrugs(params = {}, options = {}) {
 
 export const useTopDiseases = useDiseaseTrends;
 export const useTopDrugs = usePopularDrugs;
-export const useVitalAnomalies = useAbnormalStats;

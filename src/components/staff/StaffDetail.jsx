@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Button from "../ui/Button.jsx";
 import Avatar from "../ui/Avatar.jsx";
 import { useStaffDetailQuery } from "../../api/staff.js";
+import { useAdminUser } from "../../api/admin.js";
 import {
   formatDisplayText,
   formatPresenceStatusLabel,
@@ -10,6 +11,10 @@ import {
   formatVietnameseText,
 } from "../../utils/textFormatters.js";
 import { getDemoPublicImage } from "../../utils/demoPublicImages.js";
+import {
+  ADMIN_NURSE_POSITION,
+  isAdministrativeNurseStaff,
+} from "../../utils/staffRoleUtils.js";
 
 const NURSE_WORK_ROLE_LABEL = {
   lam_sang: "Y tá lâm sàng",
@@ -135,8 +140,11 @@ export default function StaffDetail({
   const { data: detail } = useStaffDetailQuery(staffId, {
     enabled: open && !!staffId && !isAdminUser,
   });
+  const { data: adminDetail } = useAdminUser(staffId, {
+    enabled: open && !!staffId && isAdminUser,
+  });
 
-  const view = detail || item;
+  const view = adminDetail || detail || item;
   if (!open || !view) return null;
 
   const rawRole =
@@ -145,6 +153,7 @@ export default function StaffDetail({
   const isNurse = rawRole === "nurse" || rawRole === "y_ta";
   const isTechnician =
     rawRole === "technician" || rawRole === "ky_thuat_vien";
+  const isAdminNurse = isAdministrativeNurseStaff(view, rawRole);
   const roleLabel = formatRoleLabel(rawRole, "Nhân sự y tế");
 
   const statusView = getStatusVisual(view.status);
@@ -168,8 +177,13 @@ export default function StaffDetail({
     view.roomToday ||
     null;
 
-  const fixedRoomText =
-    view.tenPhongPhuTrach || view.clsRoom || view.doctorRoom || null;
+  const fixedRoomText = isAdminNurse
+    ? ADMIN_NURSE_POSITION
+    : view.tenPhongPhuTrach || view.clsRoom || view.doctorRoom || null;
+
+  if (isAdminNurse) {
+    roomTodayText = ADMIN_NURSE_POSITION;
+  }
 
   const appointmentCount =
     view?.apptCount ??
@@ -214,6 +228,15 @@ export default function StaffDetail({
     view.trangThai ||
     view.statusAccount ||
     "hoat_dong";
+  const adminUsername =
+    view.username ||
+    view.tenDangNhap ||
+    view.TenDangNhap ||
+    view.raw?.TenDangNhap ||
+    view.raw?.tenDangNhap ||
+    view._raw?.TenDangNhap ||
+    view._raw?.tenDangNhap ||
+    "";
 
   if (isAdminUser) {
     return (
@@ -251,7 +274,7 @@ export default function StaffDetail({
                           {formatDisplayText(view.name, view.name || "—")}
                         </h2>
                         <p className="truncate text-[13px] text-slate-500">
-                          {formatDisplayText(view.username || view.tenDangNhap, "Admin")}
+                          {formatDisplayText(adminUsername, "Admin")}
                         </p>
                       </div>
                       <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
@@ -287,7 +310,7 @@ export default function StaffDetail({
                           />
                           <Tile
                             label="Tên đăng nhập"
-                            value={view.username || view.tenDangNhap || "—"}
+                            value={adminUsername || "—"}
                           />
                           <Tile
                             label="Vai trò hệ thống"
@@ -542,16 +565,22 @@ export default function StaffDetail({
                           ? "Phòng khám phụ trách"
                           : isTechnician
                             ? "Phòng CLS phụ trách"
-                            : "Phòng / bàn hôm nay"}
+                            : isAdminNurse
+                              ? "Vị trí"
+                              : "Phòng / bàn hôm nay"}
                       </h3>
                       <div className="flex flex-wrap gap-1.5 text-[13px] text-slate-700">
-                        {fixedRoomText ? (
+                        {isAdminNurse ? (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition">
+                            {ADMIN_NURSE_POSITION}
+                          </span>
+                        ) : fixedRoomText ? (
                           <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-teal-50 text-teal-700 hover:bg-teal-100 hover:ring-teal-300 transition">
                             {isTechnician ? "CLS phụ trách" : "Phụ trách"}:{" "}
                             {fixedRoomText}
                           </span>
                         ) : null}
-                        {roomTodayText && roomTodayText !== fixedRoomText ? (
+                        {!isAdminNurse && roomTodayText && roomTodayText !== fixedRoomText ? (
                           <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:ring-sky-300 transition">
                             Hôm nay: {roomTodayText}
                           </span>
@@ -573,4 +602,3 @@ export default function StaffDetail({
     </AnimatePresence>
   );
 }
-

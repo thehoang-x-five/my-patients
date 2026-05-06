@@ -118,6 +118,7 @@ export default function UnpaidInvoicesTable({
   loading = false,
   mode = "unpaid",
   onView,
+  canProcess = false,
   stretch = false,
 }) {
   const isReserved = mode === "reserved";
@@ -249,7 +250,7 @@ export default function UnpaidInvoicesTable({
                         : "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
                     }`}
                   >
-                    {isReserved ? "Xem giữ tiền" : "Xử lý"}
+                    {isReserved ? "Xem giữ tiền" : canProcess ? "Xử lý" : "Xem"}
                   </button>
                 </td>
               </motion.tr>

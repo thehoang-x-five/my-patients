@@ -9,6 +9,10 @@ import {
   formatVietnameseText,
 } from "../../utils/textFormatters.js";
 import { getDemoPublicImage } from "../../utils/demoPublicImages.js";
+import {
+  ADMIN_NURSE_POSITION,
+  isAdministrativeNurseStaff,
+} from "../../utils/staffRoleUtils.js";
 
 const NURSE_WORK_ROLE_LABEL = {
   lam_sang: "Y tá lâm sàng",
@@ -106,20 +110,46 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
 
   const roomToday = getRoomToday(item);
   const effectiveRole = role || item.role || item.vaiTro || "";
-  const isAdminNurse =
-    (effectiveRole === "nurse" || effectiveRole === "y_ta") &&
-    item.roleType === "administrative";
-  const isDoctor = effectiveRole === "doctor" || effectiveRole === "bac_si";
-  const isNurse = effectiveRole === "nurse" || effectiveRole === "y_ta";
+  const normalizedRole = String(effectiveRole || "").trim().toLowerCase();
+  const isAdmin =
+    normalizedRole === "admin" ||
+    normalizedRole === "adminrole" ||
+    normalizedRole === "quan_tri_vien";
+  const isAdminNurse = isAdministrativeNurseStaff(item, effectiveRole);
+  const adminNursePosition = ADMIN_NURSE_POSITION;
+  const isDoctor = normalizedRole === "doctor" || normalizedRole === "bac_si";
+  const isNurse = normalizedRole === "nurse" || normalizedRole === "y_ta";
   const isTechnician =
-    effectiveRole === "technician" || effectiveRole === "ky_thuat_vien";
+    normalizedRole === "technician" || normalizedRole === "ky_thuat_vien";
+  const username =
+    item.username ||
+    item.tenDangNhap ||
+    item.TenDangNhap ||
+    item.raw?.TenDangNhap ||
+    item.raw?.tenDangNhap ||
+    item._raw?.TenDangNhap ||
+    item._raw?.tenDangNhap ||
+    item.maNhanVien ||
+    item.id ||
+    "";
+  const accountStatus =
+    item.trangThaiTaiKhoan ||
+    item.statusAccount ||
+    item.accountStatus ||
+    "hoat_dong";
+  const adminSubtitle = username ? `Tài khoản: ${username}` : "Tài khoản quản trị";
 
   let primaryLabel;
   let primaryValue;
   let secondaryLabel;
   let secondaryValue;
 
-  if (isDoctor) {
+  if (isAdmin) {
+    primaryLabel = "Loại tài khoản";
+    primaryValue = "Quản trị hệ thống";
+    secondaryLabel = "Trạng thái tài khoản";
+    secondaryValue = accountStatus === "hoat_dong" ? "Hoạt động" : accountStatus;
+  } else if (isDoctor) {
     primaryLabel = "Phòng phụ trách";
     primaryValue = item.doctorRoom || roomToday || "—";
     secondaryLabel = "Lịch hẹn hôm nay";
@@ -132,8 +162,8 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
   } else if (isAdminNurse) {
     primaryLabel = "Vai trò công tác";
     primaryValue = getNurseWorkRole(item);
-    secondaryLabel = "Bàn hôm nay";
-    secondaryValue = roomToday;
+    secondaryLabel = "Vị trí";
+    secondaryValue = adminNursePosition;
   } else if (isNurse) {
     primaryLabel = "Vai trò công tác";
     primaryValue = getNurseWorkRole(item);
@@ -146,15 +176,22 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
     secondaryValue = apptCount;
   }
 
-  const todayChipLabel = isDoctor
-    ? "Phòng phụ trách"
-    : isTechnician
+  const todayChipLabel = isAdmin
+    ? "Quyền"
+    : isDoctor
+      ? "Phòng phụ trách"
+      : isTechnician
       ? "Phòng CLS hôm nay"
       : isAdminNurse
-        ? "Bàn hôm nay"
+        ? "Vị trí"
         : isNurse
           ? "Phòng hôm nay"
           : "Phòng";
+  const todayChipValue = isAdmin
+    ? "Admin"
+    : isAdminNurse
+      ? adminNursePosition
+      : roomToday;
 
   return (
     <motion.article
@@ -173,7 +210,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
           className="px-2 py-0.5 rounded-full text-[11px] font-bold ring-1 bg-teal-50 text-teal-600 ring-teal-200/50 whitespace-nowrap"
           title={todayChipLabel}
         >
-          📍 {roomToday}
+          {isAdmin ? "🔐" : "📍"} {todayChipValue}
         </span>
       </div>
 
@@ -191,8 +228,12 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
             )}
           </div>
           <p className="mt-0.5 text-[13px] text-slate-600 flex items-center gap-1">
-            <span>{formatDisplayText(item.dept, "Chưa gán khoa")}</span>
-            {item.specialties?.length ? (
+            <span>
+              {isAdmin
+                ? adminSubtitle
+                : formatDisplayText(item.dept, "Chưa gán khoa")}
+            </span>
+            {!isAdmin && item.specialties?.length ? (
               <>
                 <span className="text-slate-400">•</span>
                 <span className="truncate text-slate-500">
@@ -262,6 +303,7 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
           Chi tiết
         </Button>
 
+        {!isAdmin ? (
         <div className="flex items-center gap-1.5">
           {item.phone && (
             <a
@@ -279,6 +321,11 @@ export default function StaffCard({ item, role, onDetail, onSchedule }) {
             Lịch làm
           </button>
         </div>
+        ) : (
+          <div className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-[13px] font-medium text-slate-600 ring-1 ring-slate-200">
+            Không dùng lịch làm
+          </div>
+        )}
       </footer>
     </motion.article>
   );

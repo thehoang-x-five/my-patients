@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "./http.js";
 import { ensureStarted, on } from "./realtime.js";
 import { formatStatus } from "../utils/textFormatters.js";
+import { toLocalYmd } from "../utils/dateLocal.js";
 
 /* ========= Helpers chung ========= */
 
@@ -94,7 +95,7 @@ function buildAt(at) {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
 
-  const defaultNgay = now.toISOString().slice(0, 10); // yyyy-MM-dd
+  const defaultNgay = toLocalYmd(now); // yyyy-MM-dd
   const defaultGio = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(
     now.getSeconds()
   )}`;
@@ -1281,12 +1282,26 @@ export async function subscribeDepartments(qc) {
   const off3 = on("departments.duty.updated", () => {
     qc.invalidateQueries({ queryKey: ["duty"] });
   });
+  const off4 = on("NotificationCreated", (notification = {}) => {
+    const source =
+      notification.NguonLienQuan ??
+      notification.nguonLienQuan ??
+      notification.source ??
+      null;
+    if (source !== "lich_lam_viec") return;
+
+    qc.invalidateQueries({ queryKey: ["duty"] });
+    qc.invalidateQueries({ queryKey: ["room-duty-week"] });
+    qc.invalidateQueries({ queryKey: ["department-rooms"] });
+    qc.invalidateQueries({ queryKey: ["departments"] });
+  });
 
   return () => {
     try {
       off1?.();
       off2?.();
       off3?.();
+      off4?.();
     } catch {
       // ignore
     }
